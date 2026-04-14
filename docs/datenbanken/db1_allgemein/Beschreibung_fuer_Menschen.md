@@ -1,19 +1,17 @@
-# DB1 – Beschreibung für Menschen
+# Beschreibung DB1 für Menschen
 
-DB1 ist die allgemeine Grundlagen-Datenbank von Kabinenfieber. Sie beschreibt nicht einen laufenden Spielstand, sondern die gemeinsame Weltbasis.
+DB1 ist die allgemeine Referenzdatenbank des Spiels. Sie enthält keine fertigen Vereine oder Kader, sondern das Material, mit dem der Karrierestart arbeitet.
 
-## Wofür DB1 gebraucht wird
-- Liga-Niveau festlegen
-- Nationalitäten je Liga gewichten
-- Spielern passende Vor- und Nachnamen geben
-- Nationengruppen bestimmen
-- Charaktere und Spielertypen definieren
+## Inhalt
+- Ligareferenzen für 24 Ligen
+- Nationalitätenverteilungen
+- Nationengruppen
+- 1578 Vornamen
+- 3655 Nachnamen
+- 12 Charakterdefinitionen
+- 15 Spielertypdefinitionen
 
-## Typische Fragen, die DB1 beantwortet
-- Wie stark ist ein Standardspieler in Deutschland 1?
-- Welche Nationalitäten kommen in England 2 häufig vor?
-- Welche Namen sind für eine bestimmte Nationalität typisch?
-- Welche Charaktere und Spielertypen gibt es überhaupt?
-
-## Wichtig
-DB1 enthält keine echten Kader und keine konkreten Karriere-Spielstände. Dafür sind andere Datenbanken zuständig.
+## Wichtige Regeln
+- Prozentanteile pro Liga müssen 100 ergeben
+- jede Nationalität braucht genau eine Nationengruppe
+- `leagueKey` muss überall konsistent bleiben

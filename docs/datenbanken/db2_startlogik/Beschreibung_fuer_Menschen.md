@@ -1,13 +1,10 @@
-# DB2 – Beschreibung für Menschen
+# Beschreibung DB2 für Menschen
 
-DB2 ist die Datenbankgruppe für den Karrierestart. Wenn du im Spiel auf „Neue Karriere“ klickst, läuft inhaltlich DB2.
+DB2 ist die Startlogik des Spiels. Hier entsteht aus den allgemeinen Referenzen, den Vereinen, den Spielerformeln und den Taktikdaten der erste spielbare Karrierestand.
 
-## Was DB2 macht
-- nimmt die Weltregeln aus den anderen Datenbanken
-- baut daraus Vereine und Kader für den Start
-- verteilt Spieler auf die Vereine
-- setzt eine erste Aufstellung
-- bereitet den Spielstand so vor, dass die Menüs direkt funktionieren
-
-## Wichtig
-DB2 ist nicht das spätere Hauptspiel. Es erstellt nur den Anfangszustand.
+## Typische Aufgaben
+- neuer Karriere-Spielstand
+- Startkader
+- erste Marktwerte und Gehälter
+- Vereinsauswahl
+- Vereinsübernahme und Bürostart

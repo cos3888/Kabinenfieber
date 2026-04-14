@@ -1,13 +1,10 @@
-# DB3 – Beschreibung für Menschen
+# Beschreibung DB3 für Menschen
 
-DB3 ist die Vereinsdatenbank. Hier sind die Vereine selbst beschrieben.
+DB3 enthält die feste Vereinswelt des Spiels. Hier stehen Name, Stadt, Farben, Budgets, Wappenpfade und Vergleichswerte der Vereine.
 
-## Wofür sie da ist
-- Welcher Verein existiert?
-- In welcher Liga spielt er?
-- Welche Identität hat er?
-- Wie hoch sind Prestige, Fanbase und Budget?
-- Welche Farben und Assetpfade gehören zu ihm?
-
-## Wichtig
-DB3 ist nicht der laufende Kaderzustand. Sie beschreibt zuerst einmal den Verein als festen Teil der Spielwelt.
+## Inhalt
+- 432 Vereine in 8 Ländern und 24 Ligen
+- Vereinsbeschreibung und Clubeigenschaften
+- Transferbudget und Gehaltsbudget
+- Fanbasis, Prestige, Finanzkraft, Ambition und Saisonziel
+- Wappen- und Trikotpfade
