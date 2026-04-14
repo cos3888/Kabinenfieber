@@ -1,0 +1,29 @@
+{
+  "package": "kabinenfieber_db5_taktik_v1",
+  "source_excel": "Positionsraster_Standard-Formationen.xlsx",
+  "normalizedPositions": [
+    "TW",
+    "LV",
+    "IV",
+    "RV",
+    "LM",
+    "DM",
+    "ZM",
+    "OM",
+    "RM",
+    "LF",
+    "ST",
+    "HS",
+    "RF"
+  ],
+  "files": [
+    "README.md",
+    "src/db5_positions.js",
+    "src/db5_grid.js",
+    "src/db5_formations.js",
+    "src/db5_rules.js",
+    "src/db5_state.example.js",
+    "docs/DB5_Beschreibung_fuer_dich.md",
+    "docs/DB5_Beschreibung_fuer_ChatGPT.md"
+  ]
+}

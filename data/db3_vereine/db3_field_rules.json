@@ -1,0 +1,287 @@
+{
+  "meta": {
+    "database": "DB3 Vereine",
+    "version": "2026-04-08",
+    "clubCount": 432,
+    "countryCount": 8,
+    "leagueCount": 24,
+    "sourceWorkbook": "Vereine_v3_budgetlogik.xlsx",
+    "includedColumns": "B:AL",
+    "excludedColumns": "AM:BC",
+    "initializationNotes": [
+      "countryName und leagueLevel werden beim Export aus leagueKey abgeleitet.",
+      "clubId wird deterministisch aus Land, Ligastufe und Vereinsname erzeugt.",
+      "crestAsset, homeKitAsset und awayKitAsset werden als standardisierte Asset-Pfade erzeugt.",
+      "successScoreRaw, successScore, squadStrength, squadCount, leaguePosition und squadMarketValue starten mit 0, weil noch keine Historie bzw. Spielerdatenbank zugeordnet ist.",
+      "clubWealth, financialPower, prestige, ambition und seasonTarget werden auf Basis der aktuellen Startwerte initialisiert und später im Spiel neu fortgeschrieben."
+    ],
+    "seasonTargetBucketsPerLeague": {
+      "5": "Rang 1 intern = Meister",
+      "4": "Ränge 2-5 intern = Top 5",
+      "3": "Ränge 6-10 intern = oberes Mittelfeld",
+      "2": "Ränge 11-14 intern = unteres Mittelfeld",
+      "1": "Ränge 15-18 intern = Klassenerhalt"
+    }
+  },
+  "fieldRules": {
+    "leagueKey": {
+      "purpose": "Verknüpfung DB1",
+      "mode": "derivedStored",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": "Auf- bzw Abstieg"
+    },
+    "countryName": {
+      "purpose": "Ländername",
+      "mode": "derivedDynamic",
+      "source": "Ableitung-DB1",
+      "formula": null,
+      "updateTrigger": "Saisonstart"
+    },
+    "leagueLevel": {
+      "purpose": "Ligastufe im Land",
+      "mode": "derivedDynamic",
+      "source": "Ableitung-DB1",
+      "formula": null,
+      "updateTrigger": "Saisonstart"
+    },
+    "clubId": {
+      "purpose": "eindeutige Vereins-ID",
+      "mode": "fixed",
+      "source": "DB-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "clubName": {
+      "purpose": "offizieller Vereinsname",
+      "mode": "fixed",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "clubTrait1": {
+      "purpose": "Clubeigenschaft1",
+      "mode": "fixed",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "clubTrait2": {
+      "purpose": "Clubeigenschaft2",
+      "mode": "fixed",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "clubTrait3": {
+      "purpose": "Clubeigenschaft3",
+      "mode": "fixed",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "clubDescription": {
+      "purpose": "Beschreibung passend zu Stadt/Umfeld",
+      "mode": "fixed",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "clubColor1": {
+      "purpose": "Vereinsfarbe1",
+      "mode": "fixed",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "clubColor2": {
+      "purpose": "Vereinsfarbe2",
+      "mode": "fixed",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "clubColor3": {
+      "purpose": "Vereinsfarbe3",
+      "mode": "fixed",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "city": {
+      "purpose": "Stadt des Vereins",
+      "mode": "fixed",
+      "source": "Excel-Vorgabe",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "population": {
+      "purpose": "Einwohnerzahl",
+      "mode": "fixed",
+      "source": "Excel-Recherche",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "populationScore": {
+      "purpose": "normierter Stadtgrößenwert 1–10",
+      "mode": "fixed",
+      "source": "Excel-Formel",
+      "formula": "1: > 0\n2: > 50.000\n3: > 100.000\n4: > 250.000\n5: > 500.000\n6: > 1.000.000\n7: > 2.000.000\n8: > 5.000.000\n9: > 7.500.000\n10: > 10.000.000",
+      "updateTrigger": null
+    },
+    "latitude": {
+      "purpose": "geogr. Breite",
+      "mode": "fixed",
+      "source": "Excel-Recherche",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "longitude": {
+      "purpose": "geogr. Länge",
+      "mode": "fixed",
+      "source": "Excel-Recherche",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "catchmentArea": {
+      "purpose": "Einzugsgebiet 1–10",
+      "mode": "fixed",
+      "source": "Excel-Formel",
+      "formula": "relative Bewertung 1-10 (inverse, linear)\nBezug: competitionRaw300\nRegel: Summe MAX(0;1-Distanz/300) für Vereine im selben Land",
+      "updateTrigger": null
+    },
+    "sponsoringPower": {
+      "purpose": "Industrie-/Sponsoringkraft 1–10",
+      "mode": "fixed",
+      "source": "Excel-Formel + Hilfswerte",
+      "formula": "gerundeter Mischwert 1-10\n0,55*cityEconomyScore + 0,20*countryEconomyScore + 0,25*catchmentArea",
+      "updateTrigger": null
+    },
+    "crestAsset": {
+      "purpose": "Pfad Wappen-PNG",
+      "mode": "fixed",
+      "source": "DB-Assetpfad",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "homeKitAsset": {
+      "purpose": "Pfad Heimtrikot-PNG",
+      "mode": "fixed",
+      "source": "DB-Assetpfad",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "awayKitAsset": {
+      "purpose": "Pfad Auswärtstrikot-PNG",
+      "mode": "fixed",
+      "source": "DB-Assetpfad",
+      "formula": null,
+      "updateTrigger": null
+    },
+    "transferBudget": {
+      "purpose": "Transferbudget zum Saisonstart",
+      "mode": "derivedStored",
+      "source": "DB1-Ligareferenz + Sponsoring-Staffel",
+      "formula": "averagePlayerMarketValue * 2,1 * transferFactorStart\ntransferFactorStart nach sponsoringPower-Staffel",
+      "updateTrigger": "Verändert sich später über Transfers"
+    },
+    "salaryBudget": {
+      "purpose": "Gehaltsbudget zum Saisonstart",
+      "mode": "derivedStored",
+      "source": "DB1-Ligareferenz + Sponsoring-Staffel",
+      "formula": "standardSalarySeason * 25 * salaryFactorStart\nsalaryFactorStart nach sponsoringPower-Staffel",
+      "updateTrigger": "Verändert sich durch Spieler unter Vertrag"
+    },
+    "fanbase": {
+      "purpose": "Fanbasis 1–10",
+      "mode": "derivedStored",
+      "source": "DB-Formel",
+      "formula": "populationScore * 0.25 + catchmentArea * 0.40 + leaguePrestige * 0.15 + successScore * 0.20",
+      "updateTrigger": "Saisonstart"
+    },
+    "prestigeRaw": {
+      "purpose": "interner Rohwert für Prestige",
+      "mode": "derivedDynamic",
+      "source": "DB-Formel",
+      "formula": "successScore * 0.35 + leaguePrestige * 0.25 + financialPower * 0.22 + fanbase * 0.18",
+      "updateTrigger": "Saisonstart"
+    },
+    "prestige": {
+      "purpose": "Prestige 1–10",
+      "mode": "derivedStored",
+      "source": "aus prestigeRaw relativ",
+      "formula": "relative Bewertung 1-10\nBezug: prestigeRaw\nFilter: ohne",
+      "updateTrigger": "Saisonstart"
+    },
+    "clubWealth": {
+      "purpose": "interner Vermögenswert",
+      "mode": "derivedDynamic",
+      "source": "Formel",
+      "formula": "squadMarketValue * 0.50 + transferBudget * 0.25 + salaryBudget * 0.25",
+      "updateTrigger": "ständig"
+    },
+    "financialPower": {
+      "purpose": "Finanzkraft 1–10",
+      "mode": "derivedStored",
+      "source": "aus clubWealth relativ",
+      "formula": "relative Bewertung 1-10\nBezug: clubWealth\nFilter: ohne",
+      "updateTrigger": "Saisonstart"
+    },
+    "ambition": {
+      "purpose": "sportlicher Anspruch 1–10",
+      "mode": "derivedDynamic",
+      "source": "Formel",
+      "formula": "squadStrength * 0.40 + financialPower * 0.30 + successScore * 0.20 + leaguePrestige * 0.10",
+      "updateTrigger": "Saisonstart"
+    },
+    "seasonTarget": {
+      "purpose": "Saisonziel 1-5",
+      "mode": "derivedStored",
+      "source": "aus ambition + Kontext",
+      "formula": "relative Bewertung 1-5\nBezug: clubWealth\nFilter: Liga\nErgebnis in Kontext:\n1-Klassenerhalt\n2-unteren Mittelfeld\n3-oberes Mittelfeld\n4-Top 5\n5-Meister",
+      "updateTrigger": "Saisonstart"
+    },
+    "successScoreRaw": {
+      "purpose": "interner Rohwert für Erfolgswert Verein",
+      "mode": "derivedDynamic",
+      "source": "aus Statistik (Ewige Tabelle)",
+      "formula": "Summe: Punkte ewige Tabelle",
+      "updateTrigger": "Saisonstart"
+    },
+    "successScore": {
+      "purpose": " Erfolgswert Verein 1-10",
+      "mode": "derivedStored",
+      "source": "aus successScoreRaw relativ",
+      "formula": "relative Bewertung 1-10\nBezug: successScoreRaw\nFilter: ohne",
+      "updateTrigger": "Saisonstart"
+    },
+    "squadStrength": {
+      "purpose": "aktuelle Kaderstärke",
+      "mode": "derivedDynamic",
+      "source": "aus Kader",
+      "formula": "Summe: aktuelle Gesamtstärken aller Spieler im Kader",
+      "updateTrigger": "ständig"
+    },
+    "squadCount": {
+      "purpose": "aktuell belegte Kaderplätze",
+      "mode": "derivedDynamic",
+      "source": "aus Spielerzuordnung",
+      "formula": "Zählen der akutellen Spieler im Team (max. 30)",
+      "updateTrigger": "ständig"
+    },
+    "leaguePosition": {
+      "purpose": "aktueller Tabellenplatz",
+      "mode": "derivedDynamic",
+      "source": "aus Tabelle (aktuelle Saisontabelle Liga)",
+      "formula": null,
+      "updateTrigger": "ständig"
+    },
+    "squadMarketValue": {
+      "purpose": "Marktwert aller Kaderspieler",
+      "mode": "derivedDynamic",
+      "source": "aus Spieler-Marktwerten",
+      "formula": "Summe: Marktwerte aller aktuellen Spieler im Kader",
+      "updateTrigger": "ständig"
+    }
+  }
+}
