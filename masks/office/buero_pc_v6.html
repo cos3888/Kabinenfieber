@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kabinenfieber – Büro PC v6</title>
+  <style>
+    :root{
+      --bg:#0f1823;--bg2:#162333;--panel:#1b2836;--panel2:#14202b;
+      --line:rgba(255,255,255,.08);--text:#edf3fa;--muted:#9fb0c2;
+      --gold:#d6b154;--gold2:#c79b31;--btn:#223446;--btn2:#182432;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;font-family:Arial,Helvetica,sans-serif;background:linear-gradient(180deg,var(--bg2),var(--bg));color:var(--text);overflow:hidden}
+    button{font:inherit}
+    .app{height:100vh;display:grid;grid-template-rows:64px 1fr}
+    .topbar{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:10px 16px;background:rgba(9,14,22,.94);border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:center;gap:12px;min-width:0}
+    .crest{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(180deg,#15355B,#F2F2F2);border:1px solid rgba(255,255,255,.12);font-size:14px;letter-spacing:.04em;cursor:pointer}
+    .brand h1{margin:0;font-size:18px;white-space:nowrap}
+    .status{text-align:center;color:var(--muted);font-size:12px;line-height:1.3}
+    .head-actions{display:flex;gap:10px;align-items:center}
+    .btn{height:38px;padding:0 12px;border:none;border-radius:12px;background:linear-gradient(180deg,var(--btn),var(--btn2));color:var(--text);border:1px solid rgba(255,255,255,.1);font-weight:700}
+    .main{padding:14px;overflow:hidden}
+    .frame{height:100%;border-radius:24px;border:1px solid var(--line);overflow:hidden;background:linear-gradient(180deg,#162332,#101923);box-shadow:0 18px 42px rgba(0,0,0,.25)}
+    .office{height:100%;display:grid;grid-template-columns:1.55fr .95fr;gap:14px;padding:14px}
+    .modules{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:14px;min-height:0}
+    .module,.sidebar-card,.mail-card{border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2))}
+    .module{position:relative;overflow:hidden;cursor:pointer}
+    .module::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 82% 18%, rgba(214,177,84,.12), transparent 20%),linear-gradient(180deg, rgba(255,255,255,.04), transparent 42%);pointer-events:none}
+    .module-inner{position:relative;z-index:1;height:100%;display:grid;grid-template-rows:auto 1fr auto;padding:14px}
+    .module-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+    .module-tag{padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(12,18,26,.34);font-size:11px;color:var(--gold);font-weight:700}
+    .module-icon{width:48px;height:48px;border-radius:13px;display:grid;place-items:center;background:rgba(12,18,26,.36);border:1px solid rgba(255,255,255,.08)}
+    .module h2{margin:12px 0 6px;font-size:24px;line-height:1.05}
+    .module p{margin:0;color:var(--muted);line-height:1.35;font-size:13px}
+    .module-foot{font-size:11px;color:var(--muted)}
+    .art{position:absolute;inset:0;opacity:.45}
+    .disabled{opacity:.7}
+    .right{display:grid;grid-template-rows:1fr 1fr;gap:14px;min-height:0}
+    .sidebar-card,.mail-card{display:grid;grid-template-rows:auto auto 1fr;overflow:hidden;min-height:0}
+    .card-head{padding:14px 16px;border-bottom:1px solid var(--line)}
+    .card-head h3{margin:0;font-size:18px}
+    .tabs{display:flex;gap:8px;padding:12px 14px 0;flex-wrap:wrap}
+    .tab{padding:8px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(12,18,26,.34);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer}
+    .tab.active{background:linear-gradient(180deg,#233243,#182532);color:var(--text)}
+    .card-body{padding:14px;overflow:auto;min-height:0}
+    .info-grid{display:grid;gap:10px}
+    .info-row,.mail-row{display:grid;align-items:center;padding:10px 12px;border-radius:14px;background:rgba(12,18,26,.34);border:1px solid rgba(255,255,255,.08);margin-bottom:10px}
+    .info-row span{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+    .info-row strong{display:block;font-size:16px}
+    .fixture-list,.table-list{display:grid;gap:8px}
+    .fixture-row{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;padding:8px 10px;border-radius:12px;background:rgba(12,18,26,.34);border:1px solid rgba(255,255,255,.08);font-size:12px}
+    .fixture-row .mid{color:var(--gold);font-weight:700;font-size:11px}
+    .fixture-row .home{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .fixture-row .away{text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .table-head,.table-row{display:grid;grid-template-columns:30px 1fr 44px 44px 44px;gap:8px;align-items:center}
+    .table-head{padding:0 10px 6px;color:var(--gold);font-size:11px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:8px}
+    .table-row{padding:7px 10px;border-radius:12px;background:rgba(12,18,26,.34);border:1px solid rgba(255,255,255,.08);font-size:12px}
+    .table-row .pos{color:var(--gold);font-weight:700}
+    .table-row .club{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mail-row{grid-template-columns:92px 1fr;gap:12px}
+    .mail-type{font-size:11px;color:var(--gold);font-weight:700}
+    .mail-copy strong{display:block;font-size:14px}
+    .mail-copy small{display:block;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.35}
+    svg{width:100%;height:100%;display:block}
+  </style>
+</head>
+<body data-page="office">
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="crest" title="Vereinsprofil öffnen" id="officeClubCrest">EL</div>
+      <h1>FC Elbtor</h1>
+    </div>
+    <div class="status">
+      <div>Liga 1 · Saison 1 · Spieltag 1</div>
+      <div>Büro · Hauptzentrale des Vereins</div>
+    </div>
+    <div class="head-actions">
+      <button class="btn">Optionen</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="frame">
+      <div class="office">
+        <section class="modules">
+          <article class="module" title="Aufstellung öffnen" id="officeLineupModule">
+            <div class="art" style="background-image:url(../../assets/tiles/tile_lineup_bg.png);background-size:cover;background-position:center"></div><div class="module-inner">
+              <div class="module-top"><div class="module-tag">Aktiv</div><div class="module-icon"><img src="../../assets/icons/icon_lineup.png" alt="Aufstellung" style="width:28px;height:28px;object-fit:contain"></div></div>
+              <div><h2>Aufstellung</h2><p>Formation, Taktik und Feldstruktur bearbeiten.</p></div>
+              <div class="module-foot">Startelf, Bank und Kader direkt erreichbar</div>
+            </div>
+          </article>
+
+          <article class="module" title="Kader öffnen" id="officeSquadModule">
+            <div class="art" style="background-image:url(../../assets/tiles/tile_squad_bg.png);background-size:cover;background-position:center"></div><div class="module-inner">
+              <div class="module-top"><div class="module-tag">Aktiv</div><div class="module-icon"><img src="../../assets/icons/icon_squad.png" alt="Kader" style="width:28px;height:28px;object-fit:contain"></div></div>
+              <div><h2>Kader</h2><p>Spieler vergleichen, sortieren und Profile öffnen.</p></div>
+              <div class="module-foot">Alle Spielerwerte und Profile im Überblick</div>
+            </div>
+          </article>
+
+          <article class="module disabled"><div class="module-inner"><div class="module-top"><div class="module-tag">Später</div><div class="module-icon">⚙</div></div><div><h2>Taktik</h2><p>Feinsteuerung von Teamstil, Rollen und Anweisungen.</p></div><div class="module-foot">Noch nicht aktiv</div></div></article>
+          <article class="module disabled"><div class="module-inner"><div class="module-top"><div class="module-tag">Später</div><div class="module-icon">🏟</div></div><div><h2>Verein</h2><p>Infrastruktur, Umfeld und langfristige Vereinsentwicklung.</p></div><div class="module-foot">Noch nicht aktiv</div></div></article>
+          <article class="module disabled"><div class="module-inner"><div class="module-top"><div class="module-tag">Später</div><div class="module-icon">€</div></div><div><h2>Finanzen</h2><p>Budgets, Kosten und wirtschaftliche Planungsübersicht.</p></div><div class="module-foot">Noch nicht aktiv</div></div></article>
+          <article class="module disabled"><div class="module-inner"><div class="module-top"><div class="module-tag">Später</div><div class="module-icon">↔</div></div><div><h2>Transfers</h2><p>Scouting, Wechselziele und Kaderumbau im Saisonverlauf.</p></div><div class="module-foot">Noch nicht aktiv</div></div></article>
+        </section>
+
+        <aside class="right">
+          <section class="sidebar-card">
+            <div class="card-head"><h3>Vereinsbereich</h3></div>
+            <div class="tabs">
+              <button class="tab active" onclick="setOfficeTab('aktuell', this)">Aktuell</button>
+              <button class="tab" onclick="setOfficeTab('verein', this)">Verein</button>
+              <button class="tab" onclick="setOfficeTab('spieltag', this)">Nächster Spieltag</button>
+              <button class="tab" onclick="setOfficeTab('tabelle', this)">Tabelle</button>
+            </div>
+            <div id="officeTabBody" class="card-body"></div>
+          </section>
+
+          <section class="mail-card">
+            <div class="card-head"><h3>Postfach</h3></div>
+            <div class="tabs">
+              <button class="tab active">Neu</button>
+              <button class="tab">Archiv</button>
+            </div>
+            <div class="card-body">
+              <div class="mail-row"><div class="mail-type">Ligaleitung</div><div class="mail-copy"><strong>Saisonstart bestätigt</strong><small>Der 1. Spieltag ist terminiert. Bitte Kader und Aufstellung rechtzeitig prüfen.</small></div></div>
+              <div class="mail-row"><div class="mail-type">Co-Trainer</div><div class="mail-copy"><strong>Erste Analyse bereit</strong><small>Die aktuelle Balance zwischen Startelf und Bank wurde aktualisiert.</small></div></div>
+              <div class="mail-row"><div class="mail-type">Vorstand</div><div class="mail-copy"><strong>Saisonziel hinterlegt</strong><small>Obere Tabellenhälfte bleibt das offizielle Ziel für diese Spielzeit.</small></div></div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="kf-modal-host"></div>
+<script src="../../src/core/app.js"></script>
+</body>
+</html>

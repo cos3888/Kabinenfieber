@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kabinenfieber – Vereinsprofil PC v6</title>
+  <style>
+    :root{
+      --bg:#0f1823; --bg2:#162333; --panel:#1b2836; --panel2:#14202b;
+      --line:rgba(255,255,255,.08); --text:#edf3fa; --muted:#9fb0c2;
+      --gold:#d6b154; --btn:#223446; --btn2:#182432;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;font-family:Arial,Helvetica,sans-serif;background:linear-gradient(180deg,var(--bg2),var(--bg));color:var(--text);overflow:hidden}
+    button{font:inherit}
+    .app{height:100vh;display:grid;grid-template-rows:64px 1fr}
+    .topbar{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:10px 16px;background:rgba(9,14,22,.94);border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:center;gap:12px;min-width:0}
+    .brand-badge{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(180deg,#15355B,#F2F2F2);border:1px solid rgba(255,255,255,.12);font-size:14px}
+    .brand h1{margin:0;font-size:18px;white-space:nowrap}
+    .status{text-align:center;color:var(--muted);font-size:12px;line-height:1.3}
+    .btn{height:38px;padding:0 12px;border:none;border-radius:12px;background:linear-gradient(180deg,var(--btn),var(--btn2));color:var(--text);border:1px solid rgba(255,255,255,.1);font-weight:700;cursor:pointer}
+    .main{padding:14px;overflow:hidden}
+    .frame{height:100%;border-radius:24px;border:1px solid var(--line);overflow:hidden;background:linear-gradient(180deg,#162332,#101923);box-shadow:0 18px 42px rgba(0,0,0,.25)}
+    .overlay-stage{height:100%;display:grid;place-items:center;padding:10px;background:radial-gradient(circle at 20% 20%, rgba(214,177,84,.05), transparent 26%)}
+    .overlay-box{width:94%;height:93%;display:grid;grid-template-rows:54px 1fr;border-radius:22px;border:1px solid var(--line);background:linear-gradient(180deg,#162332,#101923);overflow:hidden;padding-bottom:10px}
+    .overlay-top{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:8px 12px;border-bottom:1px solid var(--line)}
+    .overlay-top h1{margin:0;font-size:20px}
+    .nav{display:flex;gap:8px}
+    .icon-btn{width:38px;height:38px;border-radius:11px;border:1px solid rgba(255,255,255,.1);display:grid;place-items:center;cursor:pointer;background:linear-gradient(180deg,#223446,#182432);color:#f1f5fb;font-weight:800;font-size:18px}
+    .compact-squad .table-head,.compact-squad .table-row{grid-template-columns:110px 44px 1.4fr 58px 86px 52px 52px 52px}
+    .compact-squad .table-head{cursor:default}
+    .compact-squad .th{cursor:pointer;user-select:none}
+    .layout{display:grid;grid-template-columns:.9fr 1.1fr;grid-template-rows:190px minmax(0,1fr);gap:12px;padding:12px;height:calc(100% - 4px)}
+    .panel{border-radius:16px;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2));overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0}
+    .panel-head{padding:12px 14px;border-bottom:1px solid var(--line)}
+    .panel-head h2{margin:0;font-size:16px}
+    .panel-body{padding:12px;overflow:auto;min-height:0}
+    .hero{display:grid;grid-template-columns:92px 1fr;gap:12px;align-items:start;height:100%}
+    .bigcrest{width:92px;height:92px;border-radius:18px;display:grid;place-items:center;font-size:24px;font-weight:800;color:#fff;background:linear-gradient(180deg,#15355B,#F2F2F2);border:1px solid rgba(255,255,255,.12)}
+    .hero-main h2{margin:0 0 2px;font-size:26px;line-height:1.03}
+    .hero-main h3{margin:0 0 8px;font-size:12px;font-weight:400;color:var(--muted)}
+    .hero-main p{margin:0;font-size:12px;line-height:1.38;max-width:520px}
+    .left-bottom-wrap{display:grid;grid-template-rows:auto 1fr;min-height:0}
+    .section-block{padding:0 0 10px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:10px}
+    .section-block:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+    .section-title{font-size:11px;color:var(--gold);font-weight:700;letter-spacing:.03em;text-transform:uppercase;margin:0 0 5px}
+    .identity-grid{display:grid;gap:0}
+    .identity-line{display:grid;grid-template-columns:138px 1fr;gap:10px;align-items:start;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+    .identity-line:last-child{border-bottom:none}
+    .identity-line span{font-size:11px;color:var(--muted)}
+    .identity-line strong{font-size:12px;line-height:1.28}
+    .compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+    .compare-card{padding:7px 9px;border-radius:11px;background:rgba(12,18,26,.34);border:1px solid rgba(255,255,255,.08);display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center}
+    .compare-card span{font-size:11px}
+    .badge{min-width:50px;padding:4px 7px;border-radius:999px;background:linear-gradient(180deg, rgba(214,177,84,.24), rgba(214,177,84,.12));border:1px solid rgba(214,177,84,.2);text-align:center;font-weight:800;font-size:11px}
+    .budget-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+    .budget-row{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:7px 9px;border-radius:11px;background:rgba(12,18,26,.34);border:1px solid rgba(255,255,255,.08)}
+    .budget-row span{font-size:11px;color:var(--muted)}
+    .budget-row strong{font-size:12px}
+    .right-full{grid-column:2;grid-row:1 / span 2;min-height:0}
+    .tabs{display:flex;gap:8px;padding:10px 12px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    .tab{padding:8px 12px;border-radius:12px 12px 0 0;border:1px solid rgba(255,255,255,.08);border-bottom:none;background:rgba(12,18,26,.34);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer}
+    .tab.active{background:linear-gradient(180deg,#233243,#182532);color:var(--text)}
+    .tab-body{padding:12px;overflow:auto;min-height:0}
+    .info-box{padding:12px 14px;border-radius:14px;background:rgba(12,18,26,.26);border:1px solid rgba(255,255,255,.08);margin-bottom:12px}
+    .info-box p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
+    .kit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .kit-card{height:300px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#243548,#172433);position:relative;overflow:hidden}
+    .kit-card .label{position:absolute;left:12px;top:12px;padding:6px 10px;border-radius:999px;background:rgba(14,22,32,.56);font-size:11px;color:var(--gold);border:1px solid rgba(255,255,255,.08)}
+    .kit-art{position:absolute;inset:42px 18px 18px 18px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));display:grid;place-items:center}
+    .shirt{position:relative;width:120px;height:142px;border-radius:26px 26px 18px 18px}
+    .shirt.home{background:linear-gradient(180deg,#17355a,#244c7d)}
+    .shirt.away{background:linear-gradient(180deg,#f3efe6,#d9d3c7)}
+    .shirt:before,.shirt:after{content:"";position:absolute;top:10px;width:36px;height:48px;border-radius:13px;background:inherit}
+    .shirt:before{left:-19px;transform:rotate(28deg)}
+    .shirt:after{right:-19px;transform:rotate(-28deg)}
+    .crest-mini{position:absolute;left:18px;top:24px;width:16px;height:16px;border-radius:5px;border:1px solid rgba(255,255,255,.55);background:linear-gradient(180deg,#2b4870,#18324c)}
+    .shirt.home .trim{position:absolute;left:0;right:0;top:74px;height:12px;background:linear-gradient(180deg,#8fc4ff,#3178d5);opacity:.9}
+    .shirt.home .trim2{position:absolute;left:0;right:0;top:84px;height:36px;background:linear-gradient(135deg,transparent 5%, rgba(109,189,255,.9) 18%, rgba(37,113,218,.9) 34%, transparent 48%, transparent 55%, rgba(109,189,255,.95) 67%, rgba(37,113,218,.95) 82%, transparent 96%)}
+    .shirt.away .trim{position:absolute;left:0;right:0;top:0;height:30px;background:#1c2c3a;border-radius:20px 20px 0 0}
+    .shirt.away .trim2{position:absolute;left:14px;right:14px;top:72px;height:10px;background:#3b8cff;border-radius:999px}
+    .table-list{display:grid;gap:8px}
+    .table-head,.table-row{display:grid;grid-template-columns:30px 1fr 44px 44px 44px;gap:8px;align-items:center}
+    .table-head{padding:0 8px 6px;color:var(--gold);font-size:11px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:8px}
+    .table-row{padding:7px 8px;border-radius:12px;background:rgba(12,18,26,.34);border:1px solid rgba(255,255,255,.08);font-size:12px}
+    .table-row .pos{color:var(--gold);font-weight:700}
+    .table-row .club{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .numcell{display:flex;justify-content:center}
+    .mini-nr{display:inline-block;min-width:16px;padding:0 2px;color:#fff;font-size:10px;font-weight:800;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+    .mini-nr:hover,.name-link:hover{color:#efe6c8}
+    .stats-list{display:grid;gap:8px}
+    .stats-card{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px 12px;border-radius:12px;background:rgba(12,18,26,.34);border:1px solid rgba(255,255,255,.08);font-size:12px}
+  </style>
+</head>
+<body data-page="club-profile">
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-badge">EL</div>
+      <h1>FC Elbtor</h1>
+    </div>
+    <div class="status">
+      <div>Büro im Hintergrund · Overlay</div>
+      <div>Vereinsprofil · PC-Ansicht</div>
+    </div>
+    <button id="profileBackBtn" class="btn">Zurück</button>
+  </header>
+
+  <main class="main">
+    <section class="frame overlay-stage">
+      <div class="overlay-box">
+        <div class="overlay-top">
+          <div class="nav"><button class="icon-btn">‹</button><button class="icon-btn">›</button></div>
+          <div class="title-wrap"><h1>Vereinsprofil</h1></div>
+          <button class="icon-btn">×</button>
+        </div>
+
+        <div class="layout">
+          <section class="panel">
+            <div class="panel-body">
+              <div class="hero">
+                <div class="bigcrest">EL</div>
+                <div class="hero-main">
+                  <h2>FC ELBTOR</h2>
+                  <h3>HAMBURG</h3>
+                  <p>Der große Club von der Elbe. Hanseatisch, leidenschaftlich und immer für eine besondere Fußballnacht gut.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel left-bottom-wrap" style="overflow:hidden;">
+            <div class="panel-head"><h2>Vereinsinfos</h2></div>
+            <div class="panel-body" style="overflow:hidden;">
+              <div class="section-block">
+                <p class="section-title">Identität</p>
+                <div class="identity-grid">
+                  <div class="identity-line"><span>Region</span><strong>Norddeutschland</strong></div>
+                  <div class="identity-line"><span>Mentalität</span><strong>robust · selbstbewusst</strong></div>
+                  <div class="identity-line"><span>Anspruch</span><strong>obere Tabellenhälfte</strong></div>
+                  <div class="identity-line"><span>Vereinscharakter</span><strong>hanseatisch · traditionsbewusst</strong></div>
+                  <div class="identity-line"><span>Gründungsjahr</span><strong>1923</strong></div>
+                </div>
+              </div>
+
+              <div class="section-block">
+                <p class="section-title">Vergleichswerte</p>
+                <div class="compare-grid">
+                  <div class="compare-card"><span>Prestige</span><div class="badge">8.7</div></div>
+                  <div class="compare-card"><span>Fanbase</span><div class="badge">8.9</div></div>
+                  <div class="compare-card"><span>Kaderstärke</span><div class="badge">79.5</div></div>
+                  <div class="compare-card"><span>Finanzkraft</span><div class="badge">8.6</div></div>
+                </div>
+              </div>
+
+              <div>
+                <p class="section-title">Kerninfos</p>
+                <div class="budget-grid">
+                  <div class="budget-row"><span>Transferbudget</span><strong>24,5 Mio.</strong></div>
+                  <div class="budget-row"><span>Gehaltsbudget</span><strong>41,0 Mio.</strong></div>
+                  <div class="budget-row"><span>Kaderplätze</span><strong>27 / 30</strong></div>
+                  <div class="budget-row"><span>Saisonziel</span><strong>Top 8</strong></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel right-full">
+            <div class="tabs">
+              <button class="tab active" onclick="setClubTab('verein', this)">Verein</button>
+              <button class="tab" onclick="setClubTab('kader', this)">Kader</button>
+              <button class="tab" onclick="setClubTab('statistik', this)">Statistik</button>
+            </div>
+            <div id="clubTabBody" class="tab-body"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="kf-modal-host"></div>
+<script src="../../src/core/app.js"></script>
+</body>
+</html>

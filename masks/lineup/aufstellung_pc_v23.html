@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kabinenfieber – Aufstellung PC v20</title>
+  <style>
+    :root{
+      --bg:#0f1823; --bg2:#162333; --panel:#1b2836; --panel2:#14202b;
+      --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.05);
+      --text:#edf3fa; --muted:#9fb0c2; --gold:#d6b154;
+      --good:#71d38f; --warn:#d6b154; --bad:#d96b6b;
+      --btn:#223446; --btn2:#182432; --card:#13253b; --card2:#0d1a2b;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;font-family:Arial,Helvetica,sans-serif;background:linear-gradient(180deg,var(--bg2),var(--bg));color:var(--text);overflow:hidden}
+    button,select{font:inherit}
+    .app{height:100vh;display:grid;grid-template-rows:64px 1fr}
+    .topbar{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:10px 16px;background:rgba(9,14,22,.94);border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:center;gap:12px;min-width:0}
+    .brand-badge{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(180deg,#15355B,#F2F2F2);border:1px solid rgba(255,255,255,.12);font-size:14px}
+    .brand h1{margin:0;font-size:18px;white-space:nowrap}
+    .status{text-align:center;color:var(--muted);font-size:12px;line-height:1.3}
+    .btn{height:38px;padding:0 12px;border:none;border-radius:12px;background:linear-gradient(180deg,var(--btn),var(--btn2));color:var(--text);border:1px solid rgba(255,255,255,.1);font-weight:700;cursor:pointer}
+    .main{padding:14px;overflow:hidden}
+    .frame{height:100%;border-radius:24px;border:1px solid var(--line);overflow:hidden;background:linear-gradient(180deg,#162332,#101923);box-shadow:0 18px 42px rgba(0,0,0,.25)}
+    .layout{display:grid;grid-template-columns:1.02fr 148px .98fr;gap:12px;padding:12px;height:100%}
+
+    .field-panel,.bench-panel,.squad-panel{border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2));overflow:hidden;min-height:0}
+    .field-panel{position:relative;padding:12px}
+    .field-topbar{
+      position:absolute;left:20px;right:20px;top:18px;height:38px;z-index:6;
+      display:grid;grid-template-columns:160px 1fr 90px 110px 110px 110px;gap:8px;align-items:center;
+      padding:0 10px;border-radius:12px;background:rgba(10,17,28,.76);border:1px solid rgba(255,255,255,.1)
+    }
+    .formation-select{height:30px;padding:0 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);color:var(--text);background:rgba(18,28,42,.9)}
+    .metric{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted)}
+    .metric strong{color:var(--text)}
+
+    .pitch{
+      position:absolute;left:12px;right:12px;top:62px;bottom:12px;border-radius:16px;overflow:hidden;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 14%),
+        url('../../assets/ui/lineup/field_background.png') center/cover no-repeat,
+        linear-gradient(180deg, #356346 0%, #2f5a40 45%, #2a523b 100%);
+    }
+    .pitch:before{content:'';position:absolute;inset:18px;border:2px solid rgba(240,240,240,.26);border-radius:12px}
+    .pitch:after{content:'';position:absolute;left:18px;right:18px;top:51%;height:2px;background:rgba(240,240,240,.22)}
+    .center-circle{position:absolute;left:50%;top:51%;transform:translate(-50%,-50%);width:92px;height:92px;border-radius:50%;border:2px solid rgba(240,240,240,.22)}
+    .box.top,.box.bottom,.goalbox.top,.goalbox.bottom,.spot.top,.spot.bottom,.arc.top,.arc.bottom{position:absolute;left:50%;transform:translateX(-50%)}
+    .box.top,.box.bottom{width:min(52%, 390px);height:min(20%, 152px);border:2px solid rgba(240,240,240,.22)}
+    .goalbox.top,.goalbox.bottom{width:min(26%, 190px);height:min(9%, 66px);border:2px solid rgba(240,240,240,.22)}
+    .box.top{top:2.8%}.box.bottom{bottom:2.8%}
+    .goalbox.top{top:2.8%}.goalbox.bottom{bottom:2.8%}
+    .spot.top,.spot.bottom{width:6px;height:6px;border-radius:50%;background:rgba(240,240,240,.4)}
+    .spot.top{top:14.5%}.spot.bottom{bottom:14.5%}
+    .arc.top,.arc.bottom{display:none}
+
+    .field-slot{
+      position:absolute;transform:translate(-50%,-50%);
+      width:84px;height:72px;border-radius:12px;border:1px dashed rgba(255,255,255,0);
+      background:rgba(7,13,20,0);display:grid;place-items:center;padding:4px;z-index:3;
+      transition:background .15s ease, outline .15s ease, border-color .15s ease, opacity .15s ease;
+    }
+    .field-slot.empty{
+      border-color:rgba(255,255,255,.16);
+      background:rgba(10,16,23,.10);
+    }
+    .field-slot.hide-empty{
+      border-color:rgba(255,255,255,0);
+      background:rgba(10,16,23,0);
+    }
+    .field-slot.hide-empty .slot-label{opacity:0}
+    .field-slot.drag-over,.bench-slot.drag-over,.reserve-drop.drag-over,.table-row.drag-over{
+      outline:2px solid rgba(214,177,84,.65);background:rgba(214,177,84,.10);border-color:rgba(214,177,84,.3)
+    }
+    .field-slot.hide-empty.drag-over .slot-label{opacity:1}
+    .slot-label{font-size:10px;color:rgba(255,255,255,.72);text-align:center;line-height:1.15}
+
+    .player-card{
+      width:76px;height:66px;border-radius:10px;cursor:grab;border:1px solid rgba(255,255,255,.12);
+      background:linear-gradient(180deg,var(--card),var(--card2));box-shadow:0 4px 10px rgba(0,0,0,.22);
+      display:grid;grid-template-rows:12px 14px 13px 13px 14px;overflow:hidden;text-align:center
+    }
+    .player-card.dragging,.table-row.dragging{opacity:.45}
+    .pc-row{display:flex;align-items:center;justify-content:center;padding:0 6px}
+    .pc-r1{color:#efe6c8;font-size:8px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.07)}
+    .pc-r2{color:#efe6c8;font-size:11px;font-weight:800;padding-top:1px}.pc-number-badge{padding:0;border:none;background:transparent;color:#fff;font-size:10px;font-weight:800;cursor:pointer;text-decoration:underline;text-underline-offset:2px}.pc-number-badge:hover{color:#efe6c8}
+    .pc-r3{color:#eef3fa;font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pc-r4{color:#efe6c8;font-size:12px;font-weight:800;border-top:1px solid rgba(255,255,255,.07);padding-top:1px}
+    .pc-r5{color:var(--muted);font-size:8px;margin-top:2px;gap:8px}
+    .fit-good{color:var(--good)} .fit-mid{color:var(--warn)} .fit-bad{color:var(--bad)}
+
+    .bench-panel{display:grid;grid-template-rows:40px 1fr;padding:8px}
+    .bench-head{display:flex;align-items:center;justify-content:center;color:var(--gold);font-weight:700;font-size:13px;padding-top:2px}
+    .bench-col{display:grid;grid-template-rows:repeat(9,1fr);gap:2px;min-height:0}
+    .bench-slot{border-radius:12px;border:1px dashed rgba(255,255,255,.18);background:rgba(7,13,20,.14);display:grid;place-items:center;padding:2px}
+
+    .squad-panel{display:grid;grid-template-rows:52px 44px 34px 1fr;min-height:0}
+    .panel-head{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+    .panel-head h2{margin:0;font-size:18px}
+    .hint{font-size:11px;color:var(--muted)}
+    .reserve-drop{margin:8px 10px 0;padding:8px 10px;border-radius:12px;border:1px dashed rgba(255,255,255,.18);background:rgba(7,13,20,.14);font-size:11px;color:var(--muted)}
+    .table-head,.table-row{display:grid;grid-template-columns:110px 44px 1.2fr 58px 68px 52px 52px 52px;align-items:center;padding:0 10px}
+    .table-head{border-bottom:1px solid var(--line);color:var(--gold);font-weight:700;font-size:11px}
+    .th{cursor:pointer;user-select:none}
+    .table-scroll{overflow:auto}
+    .table-row{padding:8px 10px;border-bottom:1px solid var(--line2);font-size:11px;cursor:grab}
+    .table-row:hover{background:rgba(255,255,255,.02)}
+    .numcell{display:flex;justify-content:center}
+    .mini-nr{
+      display:inline-block;min-width:16px;padding:0 2px;color:#fff;font-size:10px;font-weight:800;
+      text-decoration:underline;text-underline-offset:2px;cursor:pointer;
+    }
+    .mini-nr.linklike:hover,.mini-nr:hover{color:#efe6c8}
+    .state-start{color:var(--good);font-weight:700}.state-bank{color:var(--gold);font-weight:700}.state-reserve{color:var(--muted)}
+  </style>
+</head>
+<body data-page="lineup">
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><div class="brand-badge">EL</div><h1>FC Elbtor</h1></div>
+    <div class="status"><div>Aufstellung · gleichmäßige Reihenverteilung</div><div>Individuell blendet leere Slots aus</div></div>
+    <div class="head-actions"><button class="btn">Zurück ins Büro</button></div>
+  </header>
+
+  <main class="main">
+    <section class="frame">
+      <div class="layout">
+        <section class="field-panel">
+          <div class="field-topbar">
+            <select id="formationSelect" class="formation-select"></select>
+            <div></div>
+            <div class="metric"><span>Platz</span><strong id="mCount">0/11</strong></div>
+            <div class="metric"><span>Startelf</span><strong id="mStrength">0</strong></div>
+            <div class="metric"><span>Fitness</span><strong id="mFit">0</strong></div>
+            <div class="metric"><span>Form</span><strong id="mForm">0</strong></div>
+          </div>
+
+          <div class="pitch">
+            <div class="center-circle"></div><div class="box top"></div><div class="box bottom"></div>
+            <div class="goalbox top"></div><div class="goalbox bottom"></div>
+            <div class="spot top"></div><div class="spot bottom"></div>
+            <div class="arc top"></div><div class="arc bottom"></div>
+            <div id="fieldSlots"></div>
+          </div>
+        </section>
+
+        <section class="bench-panel">
+          <div class="bench-head">Bank</div>
+          <div id="benchSlots" class="bench-col"></div>
+        </section>
+
+        <section class="squad-panel">
+          <div class="panel-head"><h2>Kader</h2><span class="hint">Nummer öffnet später Spielerprofil</span></div>
+          <div id="reserveDrop" class="reserve-drop">Hierhin ziehen, um einen Spieler in die Reserve zu verschieben</div>
+          <div class="table-head">
+            <div class="th" data-sort="usage">Einsatz</div><div>[Nr]</div><div class="th" data-sort="name">Name</div>
+            <div class="th" data-sort="main">Pos</div><div class="th" data-sort="secondary">NPos</div><div class="th" data-sort="strength">St</div>
+            <div class="th" data-sort="form">Form</div><div class="th" data-sort="fit">Fit</div>
+          </div>
+          <div id="squadList" class="table-scroll"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="kf-modal-host"></div>
+<script src="../../src/core/app.js"></script>
+</body></html>

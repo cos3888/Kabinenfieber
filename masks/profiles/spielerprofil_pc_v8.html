@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kabinenfieber – Spielerprofil PC v4</title>
+  <style>
+    :root{
+      --bg:#0f1823; --bg2:#162333; --panel:#1b2836; --panel2:#14202b;
+      --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.05);
+      --text:#edf3fa; --muted:#9fb0c2; --gold:#d6b154;
+      --good:#71d38f; --btn:#223446; --btn2:#182432;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;font-family:Arial,Helvetica,sans-serif;background:linear-gradient(180deg,var(--bg2),var(--bg));color:var(--text);overflow:hidden}
+    button{font:inherit}
+    .app{height:100vh;display:grid;grid-template-rows:64px 1fr}
+    .topbar{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:10px 16px;background:rgba(9,14,22,.94);border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:center;gap:12px;min-width:0}
+    .brand-badge{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(180deg,#15355B,#F2F2F2);border:1px solid rgba(255,255,255,.12);font-size:14px}
+    .brand h1{margin:0;font-size:18px;white-space:nowrap}
+    .btn{height:38px;padding:0 12px;border:none;border-radius:12px;background:linear-gradient(180deg,var(--btn),var(--btn2));color:var(--text);border:1px solid rgba(255,255,255,.1);font-weight:700;cursor:pointer}
+    .main{padding:14px;overflow:hidden}
+    .frame{height:100%;border-radius:24px;border:1px solid var(--line);overflow:hidden;background:linear-gradient(180deg,#162332,#101923);box-shadow:0 18px 42px rgba(0,0,0,.25)}
+    .overlay-stage{height:100%;display:grid;place-items:center;padding:10px;background:radial-gradient(circle at 20% 20%, rgba(214,177,84,.05), transparent 26%)}
+    .overlay-box{width:94%;height:93%;display:grid;grid-template-rows:54px 1fr;border-radius:22px;border:1px solid var(--line);background:linear-gradient(180deg,#162332,#101923);overflow:hidden;padding-bottom:10px}
+    .overlay-top{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:8px 12px;border-bottom:1px solid var(--line)}
+    .overlay-top h1{margin:0;font-size:22px}
+    .nav{display:flex;gap:8px}
+    .icon-btn{width:38px;height:38px;border-radius:11px;border:1px solid rgba(255,255,255,.1);display:grid;place-items:center;cursor:pointer;background:linear-gradient(180deg,#223446,#182432);color:#f1f5fb;font-weight:800;font-size:18px}
+    .layout{display:grid;grid-template-columns:.9fr 1.1fr;gap:12px;padding:12px;height:100%}
+    .left-col,.right-col{display:grid;gap:12px;min-height:0}
+    .left-col{grid-template-rows:338px minmax(0,1fr)}
+    .panel{border-radius:16px;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2));overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0}
+    .panel-head{padding:12px 14px;border-bottom:1px solid var(--line)}
+    .panel-head h2{margin:0;font-size:16px}
+    .panel-body{padding:12px;overflow:auto;min-height:0}
+    .core-grid{display:grid;grid-template-columns:205px 1fr;gap:12px;height:100%}
+    .rating-stack{display:grid;grid-template-rows:1fr auto;gap:10px;min-height:0}
+    .rating-card{border-radius:16px;border:1px solid rgba(113,211,143,.16);background:linear-gradient(180deg, rgba(30,51,72,.75), rgba(24,38,53,.9));display:grid;place-items:center;text-align:center;padding:10px 10px}
+    .rating-value{font-size:52px;font-weight:800;line-height:1;color:var(--good)}
+    .rating-label{margin-top:6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#c2d0de}
+    .talent-wrap{margin-top:10px}
+    .stars-line{font-size:18px;letter-spacing:1px;color:var(--gold);line-height:1}
+    .reliability{margin-top:6px;font-size:12px;color:#dce6f0}
+    .mini-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .mini-section{border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(28,44,61,.46);padding:10px;min-height:72px}
+    .mini-title{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin-bottom:8px;font-weight:700}
+    .icon-slot-wrap{display:flex;justify-content:center;gap:8px}
+    .icon-slot{width:28px;height:28px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg, rgba(58,82,106,.55), rgba(35,52,70,.55));display:grid;place-items:center;font-size:13px;color:#eef4fb}
+    .info-box{border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(30,47,66,.5);padding:12px;overflow:hidden}
+    .info-group{padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06)}
+    .info-group:last-child{padding-bottom:0;margin-bottom:0;border-bottom:none}
+    .info-group-title{margin:0 0 7px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);font-weight:700}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+    .info-item small{display:block;color:var(--muted);font-size:11px;margin-bottom:3px}
+    .info-item strong{display:block;font-size:12px;color:#f3f7fc;line-height:1.2}
+    .extra-box{display:grid;grid-template-rows:auto auto 1fr;min-height:0}
+    .tabs{display:flex;gap:10px;margin-bottom:12px}
+    .tab{padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(34,52,70,.58);color:#eef4fb;font-size:13px;font-weight:700;cursor:pointer}
+    .tab.active{background:linear-gradient(180deg,#35506c,#24374b);border-color:rgba(143,184,255,.22)}
+    .extra-content{border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(27,43,59,.42);padding:14px;overflow:auto;font-size:14px;color:#dce6f0;line-height:1.45}
+    .skills-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;height:100%;min-height:0}
+    .skill-card{border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(30,47,66,.48);padding:12px;min-height:0;display:grid;grid-template-rows:auto 1fr}
+    .skill-card h3{margin:0 0 10px;font-size:15px;color:var(--gold)}
+    .skill-list{display:grid;gap:9px;align-content:start}
+    .skill-row{display:grid;grid-template-columns:1fr 42px;gap:8px;align-items:center}
+    .skill-row .name{font-size:13px;color:#eef4fb}
+    .skill-row .value{text-align:right;font-size:13px;font-weight:800;color:#f4f7fb}
+    .bar{grid-column:1 / -1;height:4px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+    .fill{height:100%;background:linear-gradient(90deg,#50a8ff,#76d5b4)}
+    @media (max-width: 1200px){.layout{grid-template-columns:1fr}.left-col{grid-template-rows:350px 240px}.skills-grid{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body data-page="player-profile">
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><div class="brand-badge">KF</div><h1>Kabinenfieber</h1></div>
+      <div></div>
+      <button id="profileBackBtn" class="btn">Zurück</button>
+    </header>
+    <main class="main">
+      <section class="frame">
+        <div class="overlay-stage">
+          <section class="overlay-box">
+            <header class="overlay-top">
+              <div class="nav"><button class="icon-btn">‹</button><button class="icon-btn">›</button></div>
+              <div class="title-wrap"><h1>#8 Lukas Meyer</h1></div>
+              <button class="icon-btn">×</button>
+            </header>
+
+            <div class="layout">
+              <div class="left-col">
+                <section class="panel">
+                  <div class="panel-head"><h2>Kerninfos</h2></div>
+                  <div class="panel-body" style="overflow:hidden">
+                    <div class="core-grid">
+                      <div class="rating-stack">
+                        <div class="rating-card">
+                          <div>
+                            <div class="rating-value">73</div>
+                            <div class="rating-label">Gesamtstärke</div>
+                            <div style="margin-top:8px;font-size:11px;color:#dce6f0;line-height:1.35">
+                              <div><strong style="color:#f4f7fb">Form</strong> 7,4</div>
+                              <div><strong style="color:#f4f7fb">Fitness</strong> 92%</div>
+                            </div>
+                            <div class="talent-wrap">
+                              <div class="stars-line">★★★★⯪</div>
+                              <div class="reliability">Verlässlichkeit 4/10</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="mini-row">
+                          <div class="mini-section">
+                            <div class="mini-title">Charakter</div>
+                            <div class="icon-slot-wrap">
+                              <div class="icon-slot">◎</div>
+                              <div class="icon-slot">＋</div>
+                            </div>
+                          </div>
+
+                          <div class="mini-section">
+                            <div class="mini-title">Spielertyp</div>
+                            <div class="icon-slot-wrap">
+                              <div class="icon-slot">◆</div>
+                              <div class="icon-slot">◈</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="info-box">
+                        <div class="info-group">
+                          <div class="info-group-title">Allgemein</div>
+                          <div class="info-grid">
+                            <div class="info-item"><small>Trikotnummer</small><strong>8</strong></div>
+                            <div class="info-item"><small>Verein</small><strong>SV Elbwerder</strong></div>
+                            <div class="info-item"><small>Alter</small><strong>24</strong></div>
+                            <div class="info-item"><small>Nationalität</small><strong>Deutschland</strong></div>
+                          </div>
+                        </div>
+
+                        <div class="info-group">
+                          <div class="info-group-title">Position</div>
+                          <div class="info-grid">
+                            <div class="info-item"><small>Hauptposition</small><strong>ZM</strong></div>
+                            <div class="info-item"><small>Nebenrollen</small><strong>DM, OM</strong></div>
+                          </div>
+                        </div>
+
+                        <div class="info-group">
+                          <div class="info-group-title">Körper & Füße</div>
+                          <div class="info-grid">
+                            <div class="info-item"><small>Körper</small><strong>183 cm · 77 kg</strong></div>
+                            <div class="info-item"><small>Starker Fuß</small><strong>rechts</strong></div>
+                            <div class="info-item"></div>
+                            <div class="info-item"><small>Schwacher Fuß</small><strong>3/5</strong></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="panel extra-box">
+                  <div class="panel-head"><h2>Zusatzinfos</h2></div>
+                  <div class="panel-body" style="padding-bottom:0;overflow:hidden">
+                    <div class="tabs">
+                      <div class="tab active" data-tab="statistik">Statistik</div>
+                      <div class="tab" data-tab="scout">Scout</div>
+                      <div class="tab" data-tab="saison">Saison</div>
+                    </div>
+                    <div class="extra-content" id="extraContent">
+                      <strong>Spielerstatistik</strong><br><br>
+                      Einsätze: 21<br>
+                      Tore: 4<br>
+                      Vorlagen: 7<br>
+                      Durchschnittsnote: 7,1<br>
+                      Gelbe Karten: 3
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div class="right-col">
+                <section class="panel">
+                  <div class="panel-head"><h2>Fähigkeiten</h2></div>
+                  <div class="panel-body">
+                    <div class="skills-grid">
+                      <div class="skill-card">
+                        <h3>Technik</h3>
+                        <div class="skill-list">
+                          <div class="skill-row"><div class="name">Ballkontrolle</div><div class="value">76</div><div class="bar"><div class="fill" style="width:76%"></div></div></div>
+                          <div class="skill-row"><div class="name">Dribbling</div><div class="value">70</div><div class="bar"><div class="fill" style="width:70%"></div></div></div>
+                          <div class="skill-row"><div class="name">Kurzpass</div><div class="value">81</div><div class="bar"><div class="fill" style="width:81%"></div></div></div>
+                          <div class="skill-row"><div class="name">Lange Pässe</div><div class="value">77</div><div class="bar"><div class="fill" style="width:77%"></div></div></div>
+                          <div class="skill-row"><div class="name">Flanken</div><div class="value">55</div><div class="bar"><div class="fill" style="width:55%"></div></div></div>
+                        </div>
+                      </div>
+
+                      <div class="skill-card">
+                        <h3>Abschluss</h3>
+                        <div class="skill-list">
+                          <div class="skill-row"><div class="name">Abschluss</div><div class="value">62</div><div class="bar"><div class="fill" style="width:62%"></div></div></div>
+                          <div class="skill-row"><div class="name">Fernschüsse</div><div class="value">68</div><div class="bar"><div class="fill" style="width:68%"></div></div></div>
+                          <div class="skill-row"><div class="name">Kopfball</div><div class="value">58</div><div class="bar"><div class="fill" style="width:58%"></div></div></div>
+                          <div class="skill-row"><div class="name">Standards</div><div class="value">49</div><div class="bar"><div class="fill" style="width:49%"></div></div></div>
+                          <div class="skill-row"><div class="name">Technik & Flair</div><div class="value">66</div><div class="bar"><div class="fill" style="width:66%"></div></div></div>
+                        </div>
+                      </div>
+
+                      <div class="skill-card">
+                        <h3>Mental</h3>
+                        <div class="skill-list">
+                          <div class="skill-row"><div class="name">Übersicht</div><div class="value">79</div><div class="bar"><div class="fill" style="width:79%"></div></div></div>
+                          <div class="skill-row"><div class="name">Entscheidungen</div><div class="value">75</div><div class="bar"><div class="fill" style="width:75%"></div></div></div>
+                          <div class="skill-row"><div class="name">Stellungsspiel</div><div class="value">74</div><div class="bar"><div class="fill" style="width:74%"></div></div></div>
+                          <div class="skill-row"><div class="name">Teamwork</div><div class="value">84</div><div class="bar"><div class="fill" style="width:84%"></div></div></div>
+                          <div class="skill-row"><div class="name">Konzentration</div><div class="value">77</div><div class="bar"><div class="fill" style="width:77%"></div></div></div>
+                        </div>
+                      </div>
+
+                      <div class="skill-card">
+                        <h3>Physis</h3>
+                        <div class="skill-list">
+                          <div class="skill-row"><div class="name">Schnelligkeit</div><div class="value">65</div><div class="bar"><div class="fill" style="width:65%"></div></div></div>
+                          <div class="skill-row"><div class="name">Antritt</div><div class="value">63</div><div class="bar"><div class="fill" style="width:63%"></div></div></div>
+                          <div class="skill-row"><div class="name">Ausdauer</div><div class="value">80</div><div class="bar"><div class="fill" style="width:80%"></div></div></div>
+                          <div class="skill-row"><div class="name">Stärke</div><div class="value">71</div><div class="bar"><div class="fill" style="width:71%"></div></div></div>
+                          <div class="skill-row"><div class="name">Balance</div><div class="value">72</div><div class="bar"><div class="fill" style="width:72%"></div></div></div>
+                        </div>
+                      </div>
+
+                      <div class="skill-card">
+                        <h3>Defensiv</h3>
+                        <div class="skill-list">
+                          <div class="skill-row"><div class="name">Zweikampf</div><div class="value">64</div><div class="bar"><div class="fill" style="width:64%"></div></div></div>
+                          <div class="skill-row"><div class="name">Aggressivität</div><div class="value">61</div><div class="bar"><div class="fill" style="width:61%"></div></div></div>
+                          <div class="skill-row"><div class="name">Nervenstärke</div><div class="value">73</div><div class="bar"><div class="fill" style="width:73%"></div></div></div>
+                          <div class="skill-row"><div class="name">Führung</div><div class="value">67</div><div class="bar"><div class="fill" style="width:67%"></div></div></div>
+                          <div class="skill-row"><div class="name">Disziplin</div><div class="value">81</div><div class="bar"><div class="fill" style="width:81%"></div></div></div>
+                        </div>
+                      </div>
+
+                      <div class="skill-card">
+                        <h3>Torwart</h3>
+                        <div class="skill-list">
+                          <div class="skill-row"><div class="name">Reflexe</div><div class="value">9</div><div class="bar"><div class="fill" style="width:9%"></div></div></div>
+                          <div class="skill-row"><div class="name">Strafraumkontrolle</div><div class="value">8</div><div class="bar"><div class="fill" style="width:8%"></div></div></div>
+                          <div class="skill-row"><div class="name">Abschlag</div><div class="value">12</div><div class="bar"><div class="fill" style="width:12%"></div></div></div>
+                          <div class="skill-row"><div class="name">1-gegen-1</div><div class="value">7</div><div class="bar"><div class="fill" style="width:7%"></div></div></div>
+                          <div class="skill-row"><div class="name">Fangsicherheit</div><div class="value">10</div><div class="bar"><div class="fill" style="width:10%"></div></div></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="kf-modal-host"></div>
+<script src="../../src/core/app.js"></script>
+</body>
+</html>

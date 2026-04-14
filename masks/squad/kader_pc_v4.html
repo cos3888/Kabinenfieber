@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kabinenfieber – Kader PC v4</title>
+  <style>
+    :root{
+      --bg:#0f1823; --bg2:#162333; --panel:#1b2836; --panel2:#14202b;
+      --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.05);
+      --text:#edf3fa; --muted:#9fb0c2; --gold:#d6b154;
+      --good:#71d38f; --warn:#d6b154; --bad:#d96b6b;
+      --btn:#223446; --btn2:#182432;
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;height:100%;
+      font-family:Arial,Helvetica,sans-serif;
+      background:linear-gradient(180deg,var(--bg2),var(--bg));
+      color:var(--text);overflow:hidden;
+    }
+    button{font:inherit}
+    .app{height:100vh;display:grid;grid-template-rows:64px 1fr}
+    .topbar{
+      display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;
+      padding:10px 16px;background:rgba(9,14,22,.94);border-bottom:1px solid var(--line);
+    }
+    .brand{display:flex;align-items:center;gap:12px;min-width:0}
+    .brand-badge{
+      width:42px;height:42px;border-radius:11px;display:grid;place-items:center;
+      font-weight:800;color:#fff;background:linear-gradient(180deg,#15355B,#F2F2F2);
+      border:1px solid rgba(255,255,255,.12);font-size:14px
+    }
+    .brand h1{margin:0;font-size:18px;white-space:nowrap}
+    .sub{font-size:12px;color:var(--muted)}
+    .btn{
+      height:38px;padding:0 12px;border:none;border-radius:12px;
+      background:linear-gradient(180deg,var(--btn),var(--btn2));color:var(--text);
+      border:1px solid rgba(255,255,255,.1);font-weight:700;cursor:pointer
+    }
+    .main{padding:14px;overflow:hidden}
+    .frame{
+      height:100%;border-radius:24px;border:1px solid var(--line);overflow:hidden;
+      background:linear-gradient(180deg,#162332,#101923);box-shadow:0 18px 42px rgba(0,0,0,.25)
+    }
+    .layout{display:grid;grid-template-rows:64px 50px 1fr;height:100%}
+    .head{
+      display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;
+      padding:14px 16px;border-bottom:1px solid var(--line)
+    }
+    .head h2{margin:0;font-size:22px}
+    .head p{margin:6px 0 0;color:var(--muted);font-size:13px}
+    .stats{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+    .pill{
+      padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.08);
+      background:rgba(50,73,99,.52);color:#eef4fb;font-size:12px;font-weight:700;white-space:nowrap;
+    }
+    .filters{
+      display:flex;gap:10px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--line);
+      background:rgba(13,21,32,.22)
+    }
+    .filter-btn{
+      padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);
+      background:rgba(34,52,70,.58);color:#eef4fb;font-size:13px;font-weight:700;cursor:pointer
+    }
+    .filter-btn.active{
+      background:linear-gradient(180deg,#35506c,#24374b);border-color:rgba(143,184,255,.22)
+    }
+    .table-wrap{overflow:auto}
+    .table-head,.table-row{
+      display:grid;
+      grid-template-columns:82px 44px .88fr 52px 84px 60px 70px 58px 54px 58px 64px 62px 92px 92px 96px 96px 54px 70px;
+      align-items:center;
+      padding:0 12px;
+      min-width:1450px;
+    }
+    .table-head{
+      border-bottom:1px solid var(--line);
+      color:var(--gold);
+      font-weight:700;
+      font-size:11px;
+      position:sticky;
+      top:0;
+      background:linear-gradient(180deg,#1a2838,#15212d);
+      z-index:2;
+    }
+    .th{cursor:pointer;user-select:none;padding:10px 0;white-space:nowrap}
+    .table-row{padding:9px 12px;border-bottom:1px solid var(--line2);font-size:12px}
+    .table-row:hover{background:rgba(255,255,255,.02)}
+    .numcell{display:flex;justify-content:center}
+    .mini-nr{
+      display:inline-block;min-width:16px;padding:0 2px;
+      color:#fff;font-size:10px;font-weight:800;cursor:pointer;
+      text-decoration:underline;text-underline-offset:2px
+    }
+    .name-link{font-weight:700;cursor:pointer}
+    .mini-nr:hover,.name-link:hover{color:#efe6c8}
+    .state-start{color:var(--good);font-weight:700}
+    .state-bank{color:var(--gold);font-weight:700}
+    .state-reserve{color:var(--muted)}
+    .fit-good{color:var(--good)}
+    .fit-mid{color:var(--warn)}
+    .fit-bad{color:var(--bad)}
+    .stars{color:var(--gold);letter-spacing:1px;white-space:nowrap}
+  </style>
+</head>
+<body data-page="squad">
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-badge">EL</div>
+        <div>
+          <h1>FC Elbtor</h1>
+          <div class="sub">Kader-Menü · PC-Version</div>
+        </div>
+      </div>
+      <div></div>
+      <button id="backToOfficeBtn" class="btn">Zurück ins Büro</button>
+    </header>
+
+    <main class="main">
+      <section class="frame">
+        <div class="layout">
+          <div class="head">
+            <div>
+              <h2>Kader</h2>
+              <p>Ausführliche Kaderübersicht auf Basis der Aufstellungs-Kaderliste.</p>
+            </div>
+            <div class="stats">
+              <div class="pill">Kaderplätze: <strong>25/30</strong></div>
+              <div class="pill">Durchschnittsstärke: <strong>70,8</strong></div>
+              <div class="pill">Ø Alter: <strong>24,9</strong></div>
+            </div>
+          </div>
+
+          <div class="filters">
+            <button class="filter-btn active" data-filter="all">Alle</button>
+            <button class="filter-btn" data-filter="field">Startelf</button>
+            <button class="filter-btn" data-filter="bench">Bank</button>
+            <button class="filter-btn" data-filter="reserve">Reserve</button>
+          </div>
+
+          <div class="table-wrap">
+            <div class="table-head">
+              <div class="th" data-sort="usage">Einsatz</div>
+              <div>[Nr]</div>
+              <div class="th" data-sort="name">Name</div>
+              <div class="th" data-sort="age">Alter</div>
+              <div class="th" data-sort="nation">Nation</div>
+              <div class="th" data-sort="main">Pos</div>
+              <div class="th" data-sort="secondary">NPos</div>
+              <div class="th" data-sort="strength">St</div>
+              <div class="th" data-sort="form">Form</div>
+              <div class="th" data-sort="fit">Fit</div>
+              <div class="th" data-sort="talent">Talent</div>
+              <div class="th" data-sort="reliability">Verl</div>
+              <div class="th" data-sort="char1">Char 1</div>
+              <div class="th" data-sort="char2">Char 2</div>
+              <div class="th" data-sort="type1">Typ 1</div>
+              <div class="th" data-sort="type2">Typ 2</div>
+              <div class="th" data-sort="strongFoot">Fuß</div>
+              <div class="th" data-sort="weakFoot">WF</div>
+            </div>
+            <div id="kaderRows"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<div id="kf-modal-host"></div>
+<script src="../../src/core/app.js"></script>
+</body>
+</html>
