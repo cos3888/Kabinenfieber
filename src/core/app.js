@@ -152,7 +152,7 @@ function ageBucket(age){ if(age<=19) return 'u20'; if(age<=24) return 'age20to24
 function chooseAge(r){ const dist=[{min:17,max:19,w:18},{min:20,max:23,w:30},{min:24,max:27,w:27},{min:28,max:31,w:18},{min:32,max:35,w:7}]; const bucket=weightedPick(dist,x=>x.w,r); return randomInt(r,bucket.min,bucket.max); }
 function chooseFirstName(nationality, age, r){ const rows=KFDB.firstNames.filter(x=>x.nationality===nationality||x.nation===nationality); const field = age<=20 ? 'age15to20' : age<=25 ? 'age20to25' : age<=30 ? 'age25to30' : 'age30plus'; return weightedPick(rows.length?rows:KFDB.firstNames.slice(0,50), x=>x.ageWeights?.[field] || x[field] || 1, r)?.firstName || 'Alex'; }
 function chooseLastName(nationality, r){ const rows=KFDB.lastNames.filter(x=>x.nationality===nationality||x.nation===nationality); return weightedPick(rows.length?rows:KFDB.lastNames.slice(0,50), x=>x.weight||x.frequency||x['Häufigkeit']||1, r)?.lastName || 'Meyer'; }
-function chooseMainPositionForGroup(groupKey,r){ const map={TW:['TW'],IV:['IV'],FB:['LV','RV'],CM:['DM','ZM','OM'],WM:['LM','RM'],ST:['LF','HS','ST','RF']}; return weightedPick(map[groupKey]||['ZM'], ()=>1, r); }
+function chooseMainPositionForGroup(groupKey,r){ if(KFDB.positions && KFDB.positions[groupKey]) return groupKey; const map={TW:['TW'],IV:['IV'],FB:['LV','RV'],CM:['DM','ZM','OM'],WM:['LM','RM'],ST:['LF','HS','ST','RF']}; return weightedPick(map[groupKey]||['ZM'], ()=>1, r); }
 function chooseSecondaryPositions(mainPosition,r){ const map={TW:[],LV:['LM','IV'],RV:['RM','IV'],IV:['DM'],DM:['IV','ZM'],ZM:['DM','OM'],OM:['ZM','HS'],LM:['LV','LF'],RM:['RV','RF'],LF:['LM','ST'],RF:['RM','ST'],HS:['OM','ST'],ST:['HS','LF','RF']}; const candidates=map[mainPosition]||[]; if(!candidates.length) return [null,null]; const count=weightedPick([0,1,2], x=>({0:35,1:45,2:20}[x]), r); const selected=sampleWithoutReplacement(candidates,count,r); return [selected[0]||null, selected[1]||null]; }
 function chooseCharacterKeys(nationality,r){ const nationGroup=nationGroupMap[nationality]||'BAL'; const defs=KFDB.characterDefinitions; const count=weightedPick([0,1,2], x=>({0:15,1:60,2:25}[x]), r); if(count===0) return [null,null]; const pool=[...defs]; const out=[]; while(out.length<count && pool.length){ const pick=weightedPick(pool, d=>Number(d.groupWeights?.[nationGroup]||1), r); out.push(pick); pool.splice(pool.findIndex(x=>x.key===pick.key),1); } return [out[0]||null,out[1]||null]; }
 function chooseTypeKeys(mainPosition,r){ const defs=KFDB.playerTypeDefinitions.filter(d=>d.availableAtGameStart!==false); const count=weightedPick([0,1,2], x=>({0:10,1:65,2:25}[x]), r); if(count===0) return [null,null]; const pool=[...defs]; const out=[]; while(out.length<count&&pool.length){ const pick=weightedPick(pool, d=>Number(d.positionWeights?.[mainPosition]||1), r); out.push(pick); pool.splice(pool.findIndex(x=>x.key===pick.key),1); } return [out[0]||null,out[1]||null]; }
@@ -240,15 +240,35 @@ function awayKitPath(club){ return resolveAssetPath(club && club.awayKitAsset); 
 function clubInitials(club){ return club.clubName.split(/\s+/).filter(w=>!['FC','SC','SV','TSV','Union'].includes(w)).slice(0,2).map(w=>w[0]).join('').slice(0,2).toUpperCase() || club.clubName.slice(0,2).toUpperCase(); }
 function resolveClubByIdInAnyState(clubId){ const career=getJSON(STORAGE_KEYS.career); if(career?.clubsById?.[clubId]) return career.clubsById[clubId]; const sel=getJSON(STORAGE_KEYS.selection); if(sel?.leagueState?.clubsById?.[clubId]) return sel.leagueState.clubsById[clubId]; return KFDB.clubs.find(c=>c.clubId===clubId)||null; }
 function resolvePlayerById(playerId){ const career=getJSON(STORAGE_KEYS.career); return career?.playersById?.[playerId] || null; }
-function getTeamTemplate(formation){ const counts={TW:2, IV:4, FB:4, CM:8, WM:4, ST:5}; const extras=[]; const posMap=formation.positionMap; Object.values(posMap).forEach(pos=>{ if(pos==='TW') return; if(['IV'].includes(pos)) extras.push('IV'); else if(['LV','RV'].includes(pos)) extras.push('FB'); else if(['DM','ZM','OM'].includes(pos)) extras.push('CM'); else if(['LM','RM'].includes(pos)) extras.push('WM'); else extras.push('ST'); }); const base=[]; for(let i=0;i<counts.TW;i++) base.push('TW'); for(let i=0;i<counts.IV;i++) base.push('IV'); for(let i=0;i<counts.FB;i++) base.push('FB'); for(let i=0;i<counts.CM;i++) base.push('CM'); for(let i=0;i<counts.WM;i++) base.push('WM'); for(let i=0;i<counts.ST;i++) base.push('ST'); while(base.length<25){ base.push(weightedPick(['CM','WM','ST','IV','FB'], x=>({CM:5,WM:4,ST:3,IV:3,FB:2}[x]), Math.random)); }
-  return base.slice(0,25);
+function formationStarterPositions(formation){ return (formation?.occupiedSlots||[]).map(slotId=>formation?.positionMap?.[slotId]).filter(Boolean); }
+function buildBenchAndReserveTemplate(starterPositions,r){
+  const counts = starterPositions.reduce((acc,pos)=>{ acc[pos]=(acc[pos]||0)+1; return acc; }, {});
+  const extras = ['TW'];
+  const mustHaveBackups = ['IV','LV','RV','DM','ZM','OM','ST'];
+  mustHaveBackups.forEach(pos=>{ if((counts[pos]||0) > 0) extras.push(pos); });
+  ['LM','RM','LF','RF','HS'].forEach(pos=>{ if((counts[pos]||0) > 0 && extras.length < 14) extras.push(pos); });
+  const weightedPool = [];
+  Object.entries(counts).forEach(([pos,count])=>{
+    const weight = Math.max(1, Number(count)||1);
+    for(let i=0;i<weight;i++) weightedPool.push(pos);
+  });
+  if(!weightedPool.length) weightedPool.push('ZM','IV','ST','LV','RV','OM');
+  while(starterPositions.length + extras.length < 25){
+    extras.push(weightedPick(weightedPool, ()=>1, r));
+  }
+  return extras.slice(0, Math.max(0, 25 - starterPositions.length));
+}
+function getTeamTemplate(formation, r){
+  const starters = formationStarterPositions(formation);
+  const extras = buildBenchAndReserveTemplate(starters, r);
+  return [...starters, ...extras].slice(0,25);
 }
 function generateLeagueState(countryName, leagueKey){ const seed = Date.now() + '_' + leagueKey; const r = rnd(seed); const clubs = clubsForLeague(leagueKey); const league = getLeagueRef(leagueKey);
   const leagueState = { seed, countryName, leagueKey, clubsById:{}, clubIds:[], playersById:{}, playerIds:[], tacticsByClubId:{}, generatedAt:new Date().toISOString() };
   let playerIndex=0;
   clubs.forEach(club=>{
     const formation = weightedPick(KFDB.formations, ()=>1, r);
-    const template = getTeamTemplate(formation);
+    const template = getTeamTemplate(formation, r);
     const playerIds=[];
     template.forEach((groupKey, index)=>{
       playerIndex += 1;
