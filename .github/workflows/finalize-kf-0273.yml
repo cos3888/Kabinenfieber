@@ -1,0 +1,232 @@
+name: Finalize KF 0.27.3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/finalize-kf-0273.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Update version, tests and documentation
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const read=p=>fs.readFileSync(p,'utf8');
+          const write=(p,s)=>{fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,s);};
+
+          const pkg=JSON.parse(read('package.json'));
+          pkg.version='0.27.3';
+          pkg.scripts=pkg.scripts||{};
+          pkg.scripts['test:0273']='node tests/run_kf_0_27_3_club_crest_integration_test.js';
+          write('package.json',JSON.stringify(pkg,null,2)+'\n');
+
+          let app=read('src/app.bundle.js');
+          app=app.replace("var KF_VERSION = '0.27.2';","var KF_VERSION = '0.27.3';")
+                 .replace("var KF_BUILD_LABEL = 'KF_0.27.2 - Repository / Asset Cleanup';","var KF_BUILD_LABEL = 'KF_0.27.3 - Club Crest Integration';");
+          write('src/app.bundle.js',app);
+
+          write('index.html',read('index.html').replace(/KF_0\.27\.2/g,'KF_0.27.3'));
+
+          for(const name of fs.readdirSync('tests')){
+            if(!name.endsWith('.js')||name==='run_kf_0_27_2_repository_asset_cleanup_test.js')continue;
+            const p='tests/'+name;
+            let s=read(p)
+              .replace(/KF_0\.27\.2/g,'KF_0.27.3')
+              .replace(/version==='0\.27\.2'/g,"version==='0.27.3'")
+              .replace(/var KF_VERSION = '0\.27\.2';/g,"var KF_VERSION = '0.27.3';");
+            write(p,s);
+          }
+
+          let t272=read('tests/run_kf_0_27_2_repository_asset_cleanup_test.js');
+          t272=t272.replace("check('Runtime version/schema are KF_0.27.2',app.includes(\"var KF_VERSION = '0.27.2';\")&&app.includes(\"world.meta.schemaVersion='kf-core-0.27.2'\")&&app.includes(\"record.schemaVersion='kf-world-record-0.27.2'\"),{});",
+            "check('Runtime is KF_0.27.3 while cleanup schema remains 0.27.2',app.includes(\"var KF_VERSION = '0.27.3';\")&&app.includes(\"world.meta.schemaVersion='kf-core-0.27.2'\")&&app.includes(\"record.schemaVersion='kf-world-record-0.27.2'\"),{});");
+          write('tests/run_kf_0_27_2_repository_asset_cleanup_test.js',t272);
+
+          write('tests/run_kf_0_27_3_club_crest_integration_test.js',`const fs=require('fs'),path=require('path');
+          const root=path.resolve(__dirname,'..');
+          const read=r=>fs.readFileSync(path.join(root,r),'utf8');
+          const db=JSON.parse(read('data/db3_vereine/db3_vereine_final.json'));
+          const expectedMissing=['tur3_fc_kapidag','tur3_sc_marmara_adasi','tur3_fc_artvin_yayla','tur3_sc_rize_cay','tur3_fc_harran_ovasi','tur3_sc_mardin_tas','tur3_fc_tunceli_munzur','tur3_sc_erzincan_yayla'].sort();
+          const missing=[],badDimensions=[],notPng=[],sizes=[];
+          function pngDimensions(file){
+            const b=fs.readFileSync(file);
+            if(b.length<24||b.toString('hex',0,8)!=='89504e470d0a1a0a')return null;
+            return {width:b.readUInt32BE(16),height:b.readUInt32BE(20)};
+          }
+          for(const club of db.clubs){
+            const file=path.join(root,club.crestAsset);
+            if(!fs.existsSync(file)){missing.push(club.clubId);continue;}
+            const d=pngDimensions(file);
+            if(!d){notPng.push(club.clubId);continue;}
+            if(d.width>512||d.height>512)badDimensions.push({clubId:club.clubId,...d});
+            sizes.push(fs.statSync(file).size);
+          }
+          const totalBytes=sizes.reduce((a,b)=>a+b,0);
+          const app=read('src/app.bundle.js');
+          const passed=db.clubs.length===432&&sizes.length===424&&JSON.stringify(missing.sort())===JSON.stringify(expectedMissing)&&badDimensions.length===0&&notPng.length===0&&app.includes("var KF_VERSION = '0.27.3';");
+          const report={passed,totalClubs:db.clubs.length,present:sizes.length,missing:missing.sort(),badDimensions,notPng,totalBytes,totalMiB:Number((totalBytes/1024/1024).toFixed(2)),maxBytes:sizes.length?Math.max(...sizes):0};
+          console.log(JSON.stringify(report,null,2));
+          process.exit(passed?0:1);
+          `.replace(/^          /gm,''));
+
+          let suite=read('tests/run_current_regression_suite.js');
+          if(!suite.includes('run_kf_0_27_3_club_crest_integration_test.js')){
+            suite=suite.replace("'tests/run_kf_0_27_2_repository_asset_cleanup_test.js'","'tests/run_kf_0_27_2_repository_asset_cleanup_test.js',\n  'tests/run_kf_0_27_3_club_crest_integration_test.js'");
+          }
+          write('tests/run_current_regression_suite.js',suite);
+
+          let readme=read('README.md');
+          readme=readme.replace('# Kabinenfieber KF_0.27.2','# Kabinenfieber KF_0.27.3');
+          if(!readme.includes('## Neu in KF_0.27.3')){
+            readme=readme.replace('## Neu in KF_0.27.2',`## Neu in KF_0.27.3
+
+          - 424 aktuelle Vereinswappen aus der freigegebenen Google-Drive-Masterquelle integriert.
+          - technische Laufzeitablage bleibt \`assets/clubs/<clubId>/crest.png\`; Drive-Dateinamen sind nur Importhilfe.
+          - Runtime-Wappen auf maximal 512×512 PNG optimiert.
+          - exakt 8 Tuerkei-3-Vereine bleiben kontrollierte Fallbackfaelle.
+          - keine Gameplay-, Simulations- oder Persistenzaenderung; die World-Schemas bleiben auf 0.27.2.
+
+          ## Grundlage KF_0.27.2`.replace(/^          /gm,''));
+          }
+          write('README.md',readme);
+
+          let status=read('docs/assets/Vereinswappen_Status.md');
+          status=status.replace('Nach Abgleich über normalisierte Vereinsnamen sind 424 Dateien den aktuellen Vereinen eindeutig zuordenbar.','KF_0.27.3 hat 424 Wappen in die stabilen \`clubId\`-Pfade integriert. Google Drive bleibt die Master-/Importquelle; die Runtime-Dateien sind auf maximal 512×512 Pixel optimiert.')
+                       .replace('Noch nicht passend vorhanden sind die Wappen für:','Weiterhin nicht passend vorhanden sind die Wappen für:');
+          if(!status.includes('## Runtime-Stand KF_0.27.3')){
+            status+=`
+
+          ## Runtime-Stand KF_0.27.3
+
+          - 432 Vereine insgesamt
+          - 424 echte Wappen im Repository
+          - 8 kontrollierte Fallback-Faelle in Tuerkei 3
+          - Zielpfad immer \`assets/clubs/<clubId>/crest.png\`
+          - Runtime-Wappen maximal 512×512 PNG
+          - hochaufgeloeste Masterdateien bleiben ausserhalb des Repositories in Google Drive
+          `.replace(/^          /gm,'');
+          }
+          write('docs/assets/Vereinswappen_Status.md',status);
+
+          let human=read('docs/projekt/Beschreibung_Projekt_fuer_Menschen.md')
+            .replace('# Kabinenfieber - Stand KF_0.27.2','# Kabinenfieber - Stand KF_0.27.3')
+            .replace('App-Version: \`KF_0.27.2\`','App-Version: \`KF_0.27.3\`');
+          if(!human.includes('## 19. KF_0.27.3 - Vereinswappen-Integration')){
+            human+=`
+
+          ## 19. KF_0.27.3 - Vereinswappen-Integration
+
+          - 424 der 432 aktuellen Vereine besitzen nun ihr echtes Wappen unter \`assets/clubs/<clubId>/crest.png\`.
+          - Google Drive ist nur Master-/Importquelle. Runtime-Wahrheit bleibt \`clubId\` + \`crestAsset\`.
+          - Runtime-Wappen wurden auf maximal 512×512 Pixel optimiert.
+          - Acht Tuerkei-3-Vereine bleiben bewusst beim bestehenden Fallback, weil die acht uebrigen Dateien im Quellordner nicht zu den aktuellen fiktiven Vereinen gehoeren.
+          - Keine Gameplay-, Simulations- oder Persistenzlogik wurde veraendert. \`kf-core-0.27.2\` und \`kf-world-record-0.27.2\` bleiben deshalb unveraendert.
+          `.replace(/^          /gm,'');
+          }
+          write('docs/projekt/Beschreibung_Projekt_fuer_Menschen.md',human);
+
+          let restore=read('docs/projekt/Wiederherstellung_Projekt_fuer_ChatGPT.md')
+            .replace('# Wiederherstellung Kabinenfieber - KF_0.27.2','# Wiederherstellung Kabinenfieber - KF_0.27.3')
+            .replace('Version: \`KF_0.27.2\`','Version: \`KF_0.27.3\`')
+            .replace('\`KF_0.27.2 - Repository / Asset Cleanup\`','\`KF_0.27.3 - Club Crest Integration\`')
+            .replace('Aktuelle ZIP nach Export soll \`KF_0.27.2.zip\` heissen.','Aktuelle ZIP nach Export soll \`KF_0.27.3.zip\` heissen.');
+          if(!restore.includes('## KF_0.27.3 - Vereinswappen')){
+            restore+=`
+
+          ## KF_0.27.3 - Vereinswappen
+
+          424 aktuelle Vereine besitzen echte, optimierte Runtime-Wappen unter \`assets/clubs/<clubId>/crest.png\`.
+
+          Offene Tuerkei-3-IDs:
+          - \`tur3_fc_kapidag\`
+          - \`tur3_sc_marmara_adasi\`
+          - \`tur3_fc_artvin_yayla\`
+          - \`tur3_sc_rize_cay\`
+          - \`tur3_fc_harran_ovasi\`
+          - \`tur3_sc_mardin_tas\`
+          - \`tur3_fc_tunceli_munzur\`
+          - \`tur3_sc_erzincan_yayla\`
+
+          Drive-Dateinamen sind niemals Runtime-Wahrheit. Die Zuordnung erfolgt nur beim Import; danach ist \`clubId\`/\`crestAsset\` kanonisch. Masterdateien bleiben in Drive, Runtime-PNGs sind maximal 512×512. Das World-Schema bleibt 0.27.2, da diese Version nur Assets ergaenzt.
+          `.replace(/^          /gm,'');
+          }
+          write('docs/projekt/Wiederherstellung_Projekt_fuer_ChatGPT.md',restore);
+
+          write('reports/kf_0.27.3_release_notes.md',`# KF_0.27.3 - Vereinswappen-Integration
+
+          424 eindeutig belegbare Vereinswappen wurden aus der freigegebenen Google-Drive-Masterquelle importiert und unter den stabilen \`clubId\`-Pfaden abgelegt.
+
+          Die Runtime-Dateien wurden auf maximal 512×512 PNG optimiert. Acht aktuelle Tuerkei-3-Vereine bleiben bewusst Fallbackfaelle; die dort vorhandenen acht abweichenden Quelldateien wurden nicht unscharf oder nach Reihenfolge zugeordnet.
+
+          Keine Gameplay-, Simulations- oder Persistenzlogik wurde veraendert. Die World-Schemas bleiben auf 0.27.2.
+          `.replace(/^          /gm,''));
+          NODE
+
+      - name: Validate KF 0.27.3
+        run: |
+          node --check src/app.bundle.js
+          node tests/run_current_source_integrity_test.js
+          node tests/run_current_data_truth_invariants_test.js
+          node tests/run_kf_0_27_2_repository_asset_cleanup_test.js
+          node tests/run_kf_0_27_3_club_crest_integration_test.js | tee /tmp/crest-test.json
+          node tools/check_club_assets.js > /tmp/assets.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync('/tmp/assets.json','utf8'));
+          const expected=['tur3_fc_kapidag','tur3_sc_marmara_adasi','tur3_fc_artvin_yayla','tur3_sc_rize_cay','tur3_fc_harran_ovasi','tur3_sc_mardin_tas','tur3_fc_tunceli_munzur','tur3_sc_erzincan_yayla'].sort();
+          const actual=r.missingCrests.map(x=>x.clubId).sort();
+          if(r.crests.present!==424||r.crests.missing!==8||JSON.stringify(actual)!==JSON.stringify(expected)||r.kitDesigner.missing!==0)process.exit(1);
+          NODE
+
+      - name: Write validation summary
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const raw=fs.readFileSync('/tmp/crest-test.json','utf8');
+          const start=raw.indexOf('{'), end=raw.lastIndexOf('}');
+          const r=JSON.parse(raw.slice(start,end+1));
+          const text=`# KF_0.27.3 – Validation Summary
+
+          Stand: 2026-09-24
+
+          ## Vereinswappen
+          - Vereine gesamt: 432
+          - echte Runtime-Wappen: ${r.present}
+          - kontrollierte Fallbacks: ${r.missing.length}
+          - Runtime-Wappen: maximal 512×512 PNG
+          - Gesamtgroesse der 424 Runtime-Wappen: ${r.totalMiB} MiB
+          - ungueltige PNGs: ${r.notPng.length}
+          - uebergrosse Wappen: ${r.badDimensions.length}
+
+          ## Bewusst offen
+          Die acht bekannten Tuerkei-3-Vereine bleiben beim Fallback, bis ihre passenden fiktiven Wappen nachgereicht werden.
+
+          ## Regression
+          Source-Integritaet, Datenwahrheit, KF_0.27.2-Repository-/Asset-Bereinigung, KF_0.27.3-Wappenabdeckung und der zentrale Asset-Check sind gruen.
+
+          Diese Version aendert keine Simulation, kein Gameplay und kein Persistenzschema.
+          `.replace(/^          /gm,'');
+          fs.writeFileSync('reports/kf_0.27.3_validation_summary.md',text);
+          NODE
+
+      - name: Commit final KF 0.27.3 metadata
+        run: |
+          rm -f .github/workflows/finalize-kf-0273.yml
+          rm -f reports/*.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Finalize KF_0.27.3 club crest integration"
+          git push origin main
