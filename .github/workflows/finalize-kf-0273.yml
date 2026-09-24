@@ -230,3 +230,5 @@ jobs:
           git diff --cached --check
           git commit -m "Finalize KF_0.27.3 club crest integration"
           git push origin main
+
+# retry after asset-only schema test correction
