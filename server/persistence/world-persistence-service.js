@@ -1,0 +1,208 @@
+'use strict';
+
+const { encodeJsonGzip, decodeJsonGzip, encodeJson, decodeJson } = require('./json-codec');
+const { PersistenceConflictError, PersistenceNotFoundError } = require('./errors');
+
+const MANIFEST_SCHEMA = 'kf-persistence-manifest-1';
+const STORAGE_SCHEMA = 'kf-storage-0.28.0';
+
+function safeKey(value, name) {
+  const text = String(value == null ? '' : value);
+  if (!text || !/^[A-Za-z0-9._:-]+$/.test(text)) throw new Error(`Invalid ${name}`);
+  return text;
+}
+
+class WorldPersistenceService {
+  constructor({ objectStore }) {
+    if (!objectStore) throw new Error('WorldPersistenceService requires objectStore');
+    this.store = objectStore;
+  }
+
+  manifestKey(worldId) { return `worlds/${safeKey(worldId, 'worldId')}/manifest.json`; }
+  revisionPrefix(worldId, revision) { return `worlds/${safeKey(worldId, 'worldId')}/revisions/${String(revision).padStart(8, '0')}`; }
+  seasonPrefix(worldId, season) { return `worlds/${safeKey(worldId, 'worldId')}/current-season/${Number(season)}`; }
+
+  async _readManifestEnvelope(worldId) {
+    const key = this.manifestKey(worldId);
+    try {
+      const object = await this.store.read(key);
+      return { manifest: decodeJson(object.body), generation: object.generation };
+    } catch (error) {
+      if (error && error.code === 'PERSISTENCE_NOT_FOUND') return null;
+      throw error;
+    }
+  }
+
+  async getManifest(worldId) {
+    const envelope = await this._readManifestEnvelope(worldId);
+    return envelope ? envelope.manifest : null;
+  }
+
+  async initializeWorld({ worldRecord }) {
+    const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
+    const existing = await this._readManifestEnvelope(worldId);
+    if (existing) throw new PersistenceConflictError('World is already initialized', { worldId });
+    const revision = 1, prefix = this.revisionPrefix(worldId, revision);
+    const worldPath = `${prefix}/world.json.gz`;
+    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+    const manifest = {
+      schemaVersion: MANIFEST_SCHEMA,
+      storageSchema: STORAGE_SCHEMA,
+      worldId,
+      revision,
+      committedAt: new Date().toISOString(),
+      worldRecordPath: worldPath,
+      currentSeason: Number(worldRecord.gameState && worldRecord.gameState.meta && worldRecord.gameState.meta.seasonNumber || 1),
+      matchSegments: {},
+      financeSegments: {}
+    };
+    try {
+      await this.store.write(this.manifestKey(worldId), encodeJson(manifest), { ifGenerationMatch: 0, contentType: 'application/json' });
+    } catch (error) {
+      await this.store.delete(worldPath).catch(() => {});
+      throw error;
+    }
+    return manifest;
+  }
+
+  async loadWorldRecord(worldId) {
+    const manifest = await this.getManifest(worldId);
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const object = await this.store.read(manifest.worldRecordPath);
+    return decodeJsonGzip(object.body);
+  }
+
+  async loadMatchSegment(worldId, slotKey) {
+    const manifest = await this.getManifest(worldId);
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const path = manifest.matchSegments[String(slotKey)];
+    if (!path) return null;
+    return decodeJsonGzip((await this.store.read(path)).body);
+  }
+
+  async loadFinanceSegment(worldId, slotKey) {
+    const manifest = await this.getManifest(worldId);
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const path = manifest.financeSegments[String(slotKey)];
+    if (!path) return null;
+    return decodeJsonGzip((await this.store.read(path)).body);
+  }
+
+  async commitWorldRecord({ worldRecord, expectedRevision }) {
+    const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
+    const envelope = await this._readManifestEnvelope(worldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const current = envelope.manifest;
+    if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
+      throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: current.revision });
+    }
+    const revision = Number(current.revision) + 1;
+    const worldPath = `${this.revisionPrefix(worldId, revision)}/world.json.gz`;
+    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+    const next = { ...current, revision, committedAt: new Date().toISOString(), worldRecordPath: worldPath };
+    try {
+      await this.store.write(this.manifestKey(worldId), encodeJson(next), {
+        ifGenerationMatch: envelope.generation,
+        contentType: 'application/json'
+      });
+    } catch (error) {
+      await this.store.delete(worldPath).catch(() => {});
+      throw error;
+    }
+    if (current.worldRecordPath && current.worldRecordPath !== worldPath) {
+      await this.store.delete(current.worldRecordPath).catch(() => {});
+    }
+    return next;
+  }
+
+  async commitSlot({ worldRecord, season, slotKey, matches = [], financeEvents = [], expectedRevision }) {
+    const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
+    slotKey = safeKey(slotKey, 'slotKey');
+    const envelope = await this._readManifestEnvelope(worldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const current = envelope.manifest;
+    if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
+      throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: current.revision });
+    }
+    if (Number(season) !== Number(current.currentSeason)) {
+      throw new PersistenceConflictError('Slot season does not match current persisted season', { worldId, season, currentSeason: current.currentSeason });
+    }
+
+    const revision = Number(current.revision) + 1;
+    const revisionPrefix = this.revisionPrefix(worldId, revision);
+    const segmentPrefix = `${this.seasonPrefix(worldId, season)}/revisions/${String(revision).padStart(8, '0')}`;
+    const worldPath = `${revisionPrefix}/world.json.gz`;
+    const matchPath = `${segmentPrefix}/matches/${slotKey}.json.gz`;
+    const financePath = `${segmentPrefix}/finances/${slotKey}.json.gz`;
+    const staged = [worldPath, matchPath, financePath];
+
+    try {
+      await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+      await this.store.write(matchPath, await encodeJsonGzip({ season: Number(season), slotKey, matches }), { contentType: 'application/gzip' });
+      await this.store.write(financePath, await encodeJsonGzip({ season: Number(season), slotKey, events: financeEvents }), { contentType: 'application/gzip' });
+      const next = {
+        ...current,
+        revision,
+        committedAt: new Date().toISOString(),
+        worldRecordPath: worldPath,
+        currentSeason: Number(season),
+        matchSegments: { ...(current.matchSegments || {}), [slotKey]: matchPath },
+        financeSegments: { ...(current.financeSegments || {}), [slotKey]: financePath }
+      };
+      await this.store.write(this.manifestKey(worldId), encodeJson(next), {
+        ifGenerationMatch: envelope.generation,
+        contentType: 'application/json'
+      });
+      if (current.worldRecordPath && current.worldRecordPath !== worldPath) {
+        await this.store.delete(current.worldRecordPath).catch(() => {});
+      }
+      return next;
+    } catch (error) {
+      for (const path of staged) await this.store.delete(path).catch(() => {});
+      throw error;
+    }
+  }
+
+  async commitSeasonTransition({ worldRecord, newSeason, expectedRevision }) {
+    const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
+    const envelope = await this._readManifestEnvelope(worldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const current = envelope.manifest;
+    if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
+      throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: current.revision });
+    }
+    const previousSeason = Number(current.currentSeason);
+    const revision = Number(current.revision) + 1;
+    const prefix = this.revisionPrefix(worldId, revision);
+    const worldPath = `${prefix}/world.json.gz`;
+    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+    const next = {
+      ...current,
+      revision,
+      committedAt: new Date().toISOString(),
+      worldRecordPath: worldPath,
+      currentSeason: Number(newSeason),
+      matchSegments: {},
+      financeSegments: {}
+    };
+    try {
+      await this.store.write(this.manifestKey(worldId), encodeJson(next), {
+        ifGenerationMatch: envelope.generation,
+        contentType: 'application/json'
+      });
+    } catch (error) {
+      await this.store.delete(worldPath).catch(() => {});
+      throw error;
+    }
+
+    if (current.worldRecordPath && current.worldRecordPath !== worldPath) {
+      await this.store.delete(current.worldRecordPath).catch(() => {});
+    }
+    if (Number.isFinite(previousSeason) && previousSeason !== Number(newSeason)) {
+      await this.store.deletePrefix(this.seasonPrefix(worldId, previousSeason)).catch(() => {});
+    }
+    return next;
+  }
+}
+
+module.exports = { WorldPersistenceService, MANIFEST_SCHEMA, STORAGE_SCHEMA };

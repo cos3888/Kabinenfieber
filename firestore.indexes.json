@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "kf_dev_world_participation_index",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "kf_dev_world_participation_index",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "worldId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.27.3
+# Kabinenfieber - Stand KF_0.28.0
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.27.3`
+App-Version: `KF_0.28.0`
 
 Persistierte Schemas:
 
@@ -16,6 +16,43 @@ Persistierte Schemas:
 - WorldRecord: `kf-world-record-0.27.2`
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
+
+## KF_0.28.0 – Backend Persistence Foundation
+
+KF_0.28.0 ergänzt eine getrennte Server-/Persistenzschicht; Gameplay und Matchsimulation des Browser-Clients werden in diesem Block bewusst nicht verändert.
+
+### Entwicklungsarchitektur
+
+- GitHub: Code, Tests, Dokumentation, StaticData/Assets
+- Google Cloud Run: geplanter Serverprozess
+- Google Cloud Storage: komprimierter WorldRecord sowie slotweise Match-/Finance-Segmente
+- Firestore: Weltslots, Weltregister, Einladungen und rebuildbarer User-Welt-Teilnahmeindex
+- lokale File-Adapter: identische Schnittstellen für Tests und einen später möglichen Pi-/Eigenserverbetrieb
+
+### Zentrale Wahrheiten
+
+`WorldRecord.memberships` bleibt die einzige persistente Wahrheit für menschliche Trainerzuordnung, `clubId` und `PLAYER`/`WORLD_ADMIN`. Firestore speichert diese Angaben bewusst nicht nochmals. Der Firestore-Teilnahmeindex ist nur ein rebuildbarer Lookup für die Regeln „maximal 5 aktive Welten je User“ und Weltlisten.
+
+Globale Produktregeln dieses Blocks:
+
+- maximal 1000 Weltslots,
+- maximal 5 aktive Weltteilnahmen je User,
+- Ersteller wird initial erster `WORLD_ADMIN`,
+- weitere Weltadmins können nachträglich ernannt oder zurückgestuft werden,
+- mindestens ein Weltadmin muss erhalten bleiben.
+
+### Spielstandspeicherung
+
+Der WorldRecord wird gzip-komprimiert gespeichert. Vollmatch- und Finance-Details der laufenden Saison werden nicht pro Match/Event als eigenes Cloudobjekt geschrieben, sondern pro abgeschlossenem Kalenderslot gebündelt. Ein Manifest zeigt atomar auf die aktuell gültige WorldRecord-Revision und die Current-Season-Segmente. Veraltete Revisionen werden über Generation/Revision abgewiesen. Alte WorldRecord-Snapshots werden nach erfolgreichem Commit entfernt; Current-Season-Detailsegmente der abgeschlossenen Saison werden erst nach erfolgreichem Saisonwechsel physisch bereinigt.
+
+Damit wächst der Speicher nicht durch jede Autosave-Revision und die bestehende Trennung zwischen aktueller und historischer Wahrheit bleibt erhalten.
+
+### Teststand
+
+Der isolierte Backendtest `tests/run_kf_0_28_0_backend_persistence_foundation_test.js` bestand mit 20/20 Checks. Geprüft wurden u. a. Datenquellen-Trennung, 1000-Slot-Regel, 5-Welten-Limit, Weltadmin-Rollen, Adminberechtigung für Einladungen, Restart/Reload, Revisionskonflikte, Slot-Segmentierung, Speicherretention und Saisonwechsel.
+
+Die bestehende Browser-Regressionssuite wurde in dieser Arbeitsumgebung nicht frisch ausgeführt; der Browser-Bundle wurde in KF_0.28.0 nicht verändert.
+
 
 ## 3. Historien-/Ressourcenumbau KF_0.26.0 und KF_0.26.1
 

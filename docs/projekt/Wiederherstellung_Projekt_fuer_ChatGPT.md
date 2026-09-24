@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.27.3
+# Wiederherstellung Kabinenfieber - KF_0.28.0
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.27.3`
+Version: `KF_0.28.0`
 
 Build-Label:
 
-`KF_0.27.3 - Club Crest Integration`
+`KF_0.28.0 - Backend Persistence Foundation`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.27.3.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.28.0.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -35,6 +35,33 @@ Aktuelle ZIP nach Export soll `KF_0.27.3.zip` heissen.
 - Bestehende Systeme vor neuen Features sauber abschliessen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
+
+## KF_0.28.0 – Backend Persistence Foundation
+
+Neue serverseitige Dateien:
+
+- `server/domain/world-memberships.js`: Rollenlogik auf der kanonischen `WorldRecord.memberships`-Wahrheit.
+- `server/persistence/*`: Object-Store-, Metadata- und WorldPersistence-Adapter.
+- `server/services/world-administration-service.js`: Weltadmin-Berechtigung und Adminaktionen.
+- `server/index.js`: Cloud-Run-fähiger Servereinstieg mit Health-/Persistence-Status.
+- `Dockerfile`, `.env.example`, `firestore.rules`, `firestore.indexes.json`: Deployment-/Cloud-Grundlage.
+
+Wichtigste Datenquellenentscheidung: Firestore ist **keine zweite Mitgliedschaftswahrheit**. `clubId` und `PLAYER`/`WORLD_ADMIN` liegen ausschließlich in `WorldRecord.memberships`. Firestore bzw. FileMetadataRepository hält nur Weltslots, Weltregister, Einladungen und einen rebuildbaren User-Welt-Teilnahmeindex.
+
+Persistenzpfad:
+
+1. `WorldPersistenceService.initializeWorld` legt Revision 1 + Manifest an.
+2. `commitSlot` schreibt komprimierten WorldRecord, Matchsegment und Finance-Segment für den Slot zunächst unter einer neuen Revision.
+3. Erst das per Generation abgesicherte Manifest macht diese Revision gültig.
+4. Danach wird der vorherige WorldRecord-Snapshot entfernt.
+5. `commitSeasonTransition` setzt die Current-Season-Zeiger zurück und löscht erst nach erfolgreichem Commit die Detailsegmente der abgeschlossenen Saison.
+
+Produktregeln: 1000 globale Weltslots, max. 5 aktive Weltteilnahmen/User, Ersteller initial `WORLD_ADMIN`, spätere Admin-Ernennung/-Rückstufung möglich, letzter Weltadmin geschützt.
+
+Test: `tests/run_kf_0_28_0_backend_persistence_foundation_test.js` – 20/20 Checks bestanden.
+
+Bewusst offen: Browser-Client nutzt weiterhin seine lokale Runtime; Auth/Login, Lobby, Join/Leave-Orchestrierung, Command Gateway, Ready/Deadline und Live-Match-Steuerung sind noch nicht serverautoritativ umgesetzt.
+
 
 ## 3. Kanonische Datenquellen ab KF_0.27.1
 

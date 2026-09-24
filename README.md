@@ -1,6 +1,22 @@
-# Kabinenfieber KF_0.27.3
+# Kabinenfieber KF_0.28.0
 
 KF_0.27.2 bereinigt auf Basis des abgeschlossenen KF_0.27.1-Stands die Repository- und Assetstruktur, ohne Gameplay oder Simulation zu veraendern. Die Match- und Finance-Segmentierung aus KF_0.27.0/0.27.1 bleibt unveraendert aktiv.
+
+## Neu in KF_0.28.0 – Backend Persistence Foundation
+
+KF_0.28.0 ergänzt die serverfähige Persistenzgrundlage, ohne Gameplay oder Matchsimulation des Browser-Clients zu verändern. GitHub bleibt die Code-Wahrheit; die Entwicklungszielplattform ist Google Cloud.
+
+- `WorldRecord.memberships` bleibt die kanonische Wahrheit für menschliche Trainer, `clubId` und die Weltrolle `PLAYER` / `WORLD_ADMIN`.
+- Firestore bzw. der lokale Metadata-Adapter hält nur Weltslots, Weltregister, Einladungen und einen **rebuildbaren** User-Welt-Teilnahmeindex. Dort liegt bewusst keine zweite Club-/Rollenwahrheit.
+- maximal 1000 belegbare Weltslots global und maximal 5 aktive Weltteilnahmen je User.
+- der Ersteller wird bei der Rolleninitialisierung erster `WORLD_ADMIN`; weitere Weltadmins können später ernannt oder zurückgestuft werden, solange mindestens ein Weltadmin verbleibt.
+- der eigentliche `WorldRecord` wird gzip-komprimiert im Object Store gespeichert; Match- und Finance-Details der laufenden Saison werden slotweise segmentiert.
+- Manifest + Revision schützen vor veralteten Überschreibungen. Nach erfolgreichem Commit wird der vorherige WorldRecord-Snapshot entfernt; nach Saisonwechsel werden die Detailsegmente der abgeschlossenen Saison physisch bereinigt.
+- lokale File-Adapter und Google-Cloud-Adapter verwenden dieselben fachlichen Schnittstellen. Ein späterer Umzug auf Pi/SSD oder einen anderen Cloud-Anbieter bleibt damit möglich.
+- Cloud-Run-fähiger Servereinstieg: `server/index.js`; lokaler Start: `npm run start:server`.
+- neuer Test: `npm run test:0280`.
+
+**Noch nicht Teil von KF_0.28.0:** Browser-Anbindung an das Backend, Login/Auth, Lobby/Einladungs-UI, serverautoritatives Command Gateway, Ready/Countdown und Live-Match-Runtime. Der bestehende Browser-Client bleibt gameplay-seitig auf dem Stand von KF_0.27.3.
 
 ## Neu in KF_0.27.3
 

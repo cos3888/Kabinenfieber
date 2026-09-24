@@ -1,0 +1,14 @@
+.git
+node_modules
+runtime-data
+storage
+saves
+worlds
+reports
+assets
+data
+docs
+tests
+tools
+src
+*.zip
