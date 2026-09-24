@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.27.2
+# Wiederherstellung Kabinenfieber - KF_0.27.3
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.27.2`
+Version: `KF_0.27.3`
 
 Build-Label:
 
-`KF_0.27.2 - Repository / Asset Cleanup`
+`KF_0.27.3 - Club Crest Integration`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.27.2.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.27.3.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -496,3 +496,20 @@ Bewusst nicht veraendert:
 Zusaetzlicher Kompatibilitaetsfix: `kf0261FinanceEventsForClub` muss bei noch nicht migrierten Altwelten ein vorhandenes eingebettetes `financeEvents`-Array bevorzugen und darf erst danach auf `CurrentSeasonFinanceRepository` zurueckfallen. Sonst koennen KF_0.26.0-Transferklausel-`eventKey`s vor der 0.27.1-Ledgerauslagerung nicht mehr nachgetragen werden.
 
 Validierung: siehe `reports/kf_0.27.2_validation_summary.md`; Kern-, Migrations-, UI-, Match-, Finance- und Mehrsaisontests sind gruen.
+
+
+## KF_0.27.3 - Vereinswappen
+
+424 aktuelle Vereine besitzen echte, optimierte Runtime-Wappen unter `assets/clubs/<clubId>/crest.png`.
+
+Offene Tuerkei-3-IDs:
+- `tur3_fc_kapidag`
+- `tur3_sc_marmara_adasi`
+- `tur3_fc_artvin_yayla`
+- `tur3_sc_rize_cay`
+- `tur3_fc_harran_ovasi`
+- `tur3_sc_mardin_tas`
+- `tur3_fc_tunceli_munzur`
+- `tur3_sc_erzincan_yayla`
+
+Drive-Dateinamen sind niemals Runtime-Wahrheit. Die Zuordnung erfolgt nur beim Import; danach ist `clubId`/`crestAsset` kanonisch. Masterdateien bleiben in Drive, Runtime-PNGs sind maximal 512×512. Das World-Schema bleibt 0.27.2, da diese Version nur Assets ergaenzt.

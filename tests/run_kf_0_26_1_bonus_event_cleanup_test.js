@@ -12,7 +12,7 @@ for(const f of ['src/static-data.js','src/db1-db2-data.js'])vm.runInContext(read
 let code=read('src/app.bundle.js');
 code=code.replace(/\n\n  if \(document\.readyState === 'loading'\) \{/,`\n  window.KFTest={AppState,startNewCareer,kf021ProcessMatchContractBonuses,kf021PaySeasonPlayerBonus,kf021PayInterClubBonus,kf0261BonusKeySeen,kf0261MigrateLegacyBonusEvents,migrateWorldDataTruthToCurrent,addFinanceEvent,financeCurrentCash,financeEventsForSeason,CurrentSeasonFinanceRepository,worldRecordForGameState,assignTrainerClub};\n\n  if (document.readyState === 'loading') {`);
 vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();const T=windowObj.KFTest;
-check('Runtime meldet KF_0.26.2',code.includes("var KF_VERSION = '0.27.2';")&&read('index.html').includes('KF_0.27.2')&&JSON.parse(read('package.json')).version==='0.27.2');
+check('Runtime meldet KF_0.26.2',code.includes("var KF_VERSION = '0.27.3';")&&read('index.html').includes('KF_0.27.3')&&JSON.parse(read('package.json')).version==='0.27.3');
 T.startNewCareer();const w=T.AppState.world;
 check('Neuwelt verwendet kf-core-0.26.2',w.meta.schemaVersion==='kf-core-0.27.2',{schema:w.meta.schemaVersion});
 check('bonusEvents ist nur leerer Legacy-Container',Array.isArray(w.history.bonusEvents)&&w.history.bonusEvents.length===0,{bonusEvents:(w.history.bonusEvents||[]).length});

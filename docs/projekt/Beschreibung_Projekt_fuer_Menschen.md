@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.27.2
+# Kabinenfieber - Stand KF_0.27.3
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.27.2`
+App-Version: `KF_0.27.3`
 
 Persistierte Schemas:
 
@@ -385,3 +385,12 @@ KF_0.27.2 veraendert kein Gameplay. Die Version entfernt nachweislich obsolete R
 - Bei der Regression wurde ein Legacy-Migrationsrandfall korrigiert: noch eingebettete KF_0.26.0-FinanceEvents werden fuer die eventKey-Nachmigration gelesen, bevor der Ledger in den CurrentSeasonFinanceRepository verschoben wird.
 
 Validierung KF_0.27.2: Kern-, Migrations-, UI-, Match-, Finance- und Mehrsaisontests bestanden. Der Trikotdesigner besitzt 20/20 Basisfarben, 5/5 Stilmasken und 3/3 Akzentmasken. Details: `reports/kf_0.27.2_validation_summary.md`.
+
+
+## 19. KF_0.27.3 - Vereinswappen-Integration
+
+- 424 der 432 aktuellen Vereine besitzen nun ihr echtes Wappen unter `assets/clubs/<clubId>/crest.png`.
+- Google Drive ist nur Master-/Importquelle. Runtime-Wahrheit bleibt `clubId` + `crestAsset`.
+- Runtime-Wappen wurden auf maximal 512×512 Pixel optimiert.
+- Acht Tuerkei-3-Vereine bleiben bewusst beim bestehenden Fallback, weil die acht uebrigen Dateien im Quellordner nicht zu den aktuellen fiktiven Vereinen gehoeren.
+- Keine Gameplay-, Simulations- oder Persistenzlogik wurde veraendert. `kf-core-0.27.2` und `kf-world-record-0.27.2` bleiben deshalb unveraendert.

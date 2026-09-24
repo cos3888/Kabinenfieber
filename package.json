@@ -1,6 +1,6 @@
 {
   "name": "kabinenfieber",
-  "version": "0.27.2",
+  "version": "0.27.3",
   "private": true,
   "description": "Kabinenfieber Fussballmanager",
   "scripts": {
@@ -40,6 +40,7 @@
     "test:0271-storage": "node tests/run_kf_0_27_1_server_storage_test.js",
     "assets:check": "node tools/check_club_assets.js",
     "assets:crests:import": "node tools/import_club_crests.js",
-    "test:0272": "node tests/run_kf_0_27_2_repository_asset_cleanup_test.js"
+    "test:0272": "node tests/run_kf_0_27_2_repository_asset_cleanup_test.js",
+    "test:0273": "node tests/run_kf_0_27_3_club_crest_integration_test.js"
   }
 }

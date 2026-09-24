@@ -1,8 +1,16 @@
-# Kabinenfieber KF_0.27.2
+# Kabinenfieber KF_0.27.3
 
 KF_0.27.2 bereinigt auf Basis des abgeschlossenen KF_0.27.1-Stands die Repository- und Assetstruktur, ohne Gameplay oder Simulation zu veraendern. Die Match- und Finance-Segmentierung aus KF_0.27.0/0.27.1 bleibt unveraendert aktiv.
 
-## Neu in KF_0.27.2
+## Neu in KF_0.27.3
+
+- 424 aktuelle Vereinswappen aus der freigegebenen Google-Drive-Masterquelle integriert.
+- technische Laufzeitablage bleibt `assets/clubs/<clubId>/crest.png`; Drive-Dateinamen sind nur Importhilfe.
+- Runtime-Wappen auf maximal 512×512 PNG optimiert.
+- exakt 8 Tuerkei-3-Vereine bleiben kontrollierte Fallbackfaelle.
+- keine Gameplay-, Simulations- oder Persistenzaenderung; die World-Schemas bleiben auf 0.27.2.
+
+## Grundlage KF_0.27.2
 
 - club-spezifische 1x1-Platzhalter `home.png` / `away.png` und ihre `homeKitAsset`/`awayKitAsset`-Felder entfernt; Trikots kommen ausschliesslich aus dem Trikotdesigner.
 - nachweislich tote alte Kit-Templates, doppelte Icons/Tiles, Sponsor-/Nation-Platzhalter und ein ungenutztes Base-Asset entfernt.

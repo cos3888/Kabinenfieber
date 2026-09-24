@@ -26,7 +26,8 @@ const core=[
   'tests/run_kf_0_26_2_player_lifecycle_strength_test.js',
   'tests/run_kf_0_27_0_current_season_match_store_test.js',
   'tests/run_kf_0_27_1_current_season_finance_store_test.js',
-  'tests/run_kf_0_27_2_repository_asset_cleanup_test.js'
+  'tests/run_kf_0_27_2_repository_asset_cleanup_test.js',
+  'tests/run_kf_0_27_3_club_crest_integration_test.js'
 ];
 const extended=[
   'tests/run_current_ui_ownership_pipeline_test.js',
