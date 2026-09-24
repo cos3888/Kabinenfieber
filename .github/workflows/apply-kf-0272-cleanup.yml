@@ -1,0 +1,133 @@
+name: Apply KF 0.27.2 cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-kf-0272-cleanup.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Apply repository and asset cleanup
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),vm=require('vm');
+          const root=process.cwd();
+          const p=r=>path.join(root,r);
+          const read=r=>fs.readFileSync(p(r),'utf8');
+          const write=(r,v)=>{fs.mkdirSync(path.dirname(p(r)),{recursive:true});fs.writeFileSync(p(r),v);};
+          const rm=r=>fs.rmSync(p(r),{recursive:true,force:true});
+          const must=(s,a,b,label)=>{if(!s.includes(a))throw new Error('Missing '+label);return s.replace(a,b);};
+
+          let app=read('src/app.bundle.js');
+          app=must(app,"var KF_VERSION = '0.27.1';","var KF_VERSION = '0.27.2';",'KF_VERSION');
+          app=must(app,"var KF_BUILD_LABEL = 'KF_0.27.0 - Current-Season Match Store';","var KF_BUILD_LABEL = 'KF_0.27.2 - Repository / Asset Cleanup';",'build label');
+          app=must(app,"schemaVersion:'kf-world-record-0.27.1'","schemaVersion:'kf-world-record-0.27.2'",'world record constructor');
+          app=must(app,"schemaVersion: 'kf-core-0.27.0'","schemaVersion: 'kf-core-0.27.2'",'world constructor');
+          app=must(app,
+            "processedFinancialEvents: 'world.clubFinances.byClub[clubId].financeEvents[].eventKey (current season only)',",
+            "processedFinancialEvents: 'CurrentSeasonFinanceRepository[worldId][season][clubId][eventId].eventKey (current season only)',",
+            'finance truth metadata');
+          app=must(app,
+            "currentFormation: 'world.squads[clubId].lineupMaskState.formationKey',",
+            "currentFormation: 'world.squads[clubId].lineupMaskState.formationKey',\n      clubKitDesign: 'world.clubs.byId[clubId] home*/away* KitDesigner fields; rendered from assets/kits',",
+            'kit truth metadata');
+          app=app.replace(/^\s*homeKitAsset:\s*club\.homeKitAsset,\s*\n/m,'');
+          app=app.replace(/^\s*awayKitAsset:\s*club\.awayKitAsset,\s*\n/m,'');
+          app=must(app,
+            "kf0261FinanceEventsForClub=function(world,clubId){return CurrentSeasonFinanceRepository.listClubEvents(world,clubId,Number(((world||{}).meta||{}).seasonNumber||1));};",
+            "kf0261FinanceEventsForClub=function(world,clubId){var entry=(((((world||{}).clubFinances||{}).byClub)||{})[clubId])||null;if(entry&&Array.isArray(entry.financeEvents))return entry.financeEvents;return CurrentSeasonFinanceRepository.listClubEvents(world,clubId,Number(((world||{}).meta||{}).seasonNumber||1));};",
+            'legacy finance migration fallback');
+          const oldMigration="if(!world)return {financeStoreMigration:{eventsMoved:0,clubsMigrated:0,repositoryEvents:0}};var result=kf0271BaseMigrateWorldDataTruthToCurrent(world)||{},migration=kf0271ArchiveExistingFinanceEvents(world);world.meta=world.meta||{};world.meta.schemaVersion='kf-core-0.27.1';world.meta.version=KF_VERSION;var truth=Object.assign({},world.meta.dataTruth||{});truth.currentSeasonFinanceState='world.clubFinances.byClub[clubId] (compact current balance/state)';truth.currentSeasonFinanceLedger='CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]';truth.processedFinancialEvents='CurrentSeasonFinanceRepository financeEvents[].eventKey (current season only)';world.meta.dataTruth=truth;var record=worldRecordForGameState(world);if(record){record.schemaVersion='kf-world-record-0.27.1';record.gameVersion=KF_VERSION;}result.financeStoreMigration=migration;return result;";
+          const newMigration="if(!world)return {financeStoreMigration:{eventsMoved:0,clubsMigrated:0,repositoryEvents:0},legacyClubAssetFieldsRemoved:0};var result=kf0271BaseMigrateWorldDataTruthToCurrent(world)||{},migration=kf0271ArchiveExistingFinanceEvents(world),removed=0;Object.keys((((world||{}).clubs||{}).byId)||{}).forEach(function(clubId){var club=world.clubs.byId[clubId];if(!club)return;if(Object.prototype.hasOwnProperty.call(club,'homeKitAsset')){delete club.homeKitAsset;removed+=1;}if(Object.prototype.hasOwnProperty.call(club,'awayKitAsset')){delete club.awayKitAsset;removed+=1;}});world.meta=world.meta||{};world.meta.schemaVersion='kf-core-0.27.2';world.meta.version=KF_VERSION;var truth=Object.assign({},world.meta.dataTruth||{});truth.currentSeasonFinanceState='world.clubFinances.byClub[clubId] (compact current balance/state)';truth.currentSeasonFinanceLedger='CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]';truth.processedFinancialEvents='CurrentSeasonFinanceRepository financeEvents[].eventKey (current season only)';truth.clubKitDesign='world.clubs.byId[clubId] KitDesigner fields rendered from assets/kits';world.meta.dataTruth=truth;var record=worldRecordForGameState(world);if(record){record.schemaVersion='kf-world-record-0.27.2';record.gameVersion=KF_VERSION;}result.financeStoreMigration=migration;result.legacyClubAssetFieldsRemoved=removed;return result;";
+          app=must(app,oldMigration,newMigration,'0.27.2 migration wrapper');
+          write('src/app.bundle.js',app);
+
+          for(const rel of ['data/db3_vereine/db3_vereine_final.json','data/db3_vereine/db3_field_rules.json']){
+            const db=JSON.parse(read(rel));
+            if(db.meta&&Array.isArray(db.meta.initializationNotes)) db.meta.initializationNotes=db.meta.initializationNotes.map(n=>n.includes('crestAsset, homeKitAsset und awayKitAsset')?'crestAsset wird als standardisierter Vereinswappen-Pfad erzeugt; Trikots werden im Spiel aus dem Trikotdesigner gerendert.':n);
+            if(db.fieldRules){delete db.fieldRules.homeKitAsset;delete db.fieldRules.awayKitAsset;}
+            if(Array.isArray(db.clubs)) db.clubs.forEach(c=>{delete c.homeKitAsset;delete c.awayKitAsset;});
+            write(rel,JSON.stringify(db,null,2)+'\n');
+          }
+
+          const ctx={window:{}};vm.createContext(ctx);vm.runInContext(read('src/static-data.js'),ctx);
+          const sd=ctx.window.KFStaticData;if(!sd||!Array.isArray(sd.clubs))throw new Error('StaticData parse failed');
+          sd.clubs.forEach(c=>{delete c.homeKitAsset;delete c.awayKitAsset;});
+          write('src/static-data.js','window.KFStaticData = '+JSON.stringify(sd)+';\n/* END KF_0.27.2 STATIC DATA */\n');
+
+          let css=read('src/styles/app.css');
+          for(const re of [
+            /^\.kit-layer,.kit-layer-image\{[^\n]*\}\n/m,
+            /^\.kit-layer\{[^\n]*\}\n/m,
+            /^\.kit-layer-primary\{[^\n]*\}\n/m,
+            /^\.kit-layer-secondary\{[^\n]*\}\n/m,
+            /^\.kit-layer-accent\{[^\n]*\}\n/m,
+            /^\.kit-layer-shadow\{[^\n]*\}\n/m,
+            /^\.kit-layer-detail\{[^\n]*\}\n/m
+          ]) css=css.replace(re,'');
+          write('src/styles/app.css',css);
+
+          [
+            'assets/ui/kits','assets/ui/icons','assets/ui/tiles',
+            'assets/icons/icon_lineup.png','assets/icons/icon_squad.png','assets/icons/icon_statistics.png',
+            'assets/tiles/tile_lineup_bg.png','assets/tiles/tile_squad_bg.png','assets/tiles/tile_statistics_bg.png','assets/tiles/office_tile_sponsoring.jpeg',
+            'assets/common/sponsor_placeholder.png','assets/kits/bases/base_lime.png',
+            'assets/kits/masks_2/.gitkeep','assets/kits/masks_3/.gitkeep','assets/nations',
+            'data/db3_vereine/db3_vereine_final.js','data/source_archives','tests/_tmp_profile_nosave.js'
+          ].forEach(rm);
+          const clubs=p('assets/clubs');
+          if(fs.existsSync(clubs)) for(const e of fs.readdirSync(clubs,{withFileTypes:true})) if(e.isDirectory()) for(const n of ['home.png','away.png','README.md']) rm(path.join('assets/clubs',e.name,n));
+          if(fs.existsSync(p('reports'))) for(const n of fs.readdirSync(p('reports'))) if(n.endsWith('.json')) rm(path.join('reports',n));
+
+          write('tools/check_club_assets.js',`#!/usr/bin/env node
+          'use strict';
+          const fs=require('fs'),path=require('path');
+          const ROOT=path.resolve(__dirname,'..');
+          const db=JSON.parse(fs.readFileSync(path.join(ROOT,'data','db3_vereine','db3_vereine_final.json'),'utf8'));
+          const clubs=Array.isArray(db.clubs)?db.clubs:[];
+          function exists(rel){return Boolean(rel)&&fs.existsSync(path.join(ROOT,rel));}
+          const missingCrests=[];
+          for(const club of clubs){if(!exists(club.crestAsset))missingCrests.push({clubId:club.clubId,clubName:club.clubName,leagueKey:club.leagueKey,asset:club.crestAsset});}
+          const baseColors=['white','black','navy','royal_blue','sky_blue','red','dark_red','green','dark_green','yellow','orange','purple','pink','brown','gray','dark_gray','teal','turquoise','cream','gold'];
+          const styleMasks=['style_001','style_002','style_003','style_004','style_005'];
+          const accentMasks=['accent_001','accent_002','accent_003'];
+          const missingDesignerAssets=[];
+          baseColors.forEach(x=>{const rel='assets/kits/bases/'+x+'.png';if(!exists(rel))missingDesignerAssets.push(rel);});
+          styleMasks.forEach(x=>{const rel='assets/kits/masks_2/'+x+'.png';if(!exists(rel))missingDesignerAssets.push(rel);});
+          accentMasks.forEach(x=>{const rel='assets/kits/masks_3/'+x+'.png';if(!exists(rel))missingDesignerAssets.push(rel);});
+          const summary={totalClubs:clubs.length,crests:{present:clubs.length-missingCrests.length,missing:missingCrests.length},kitDesigner:{baseColors:baseColors.length,styleMasks:styleMasks.length,accentMasks:accentMasks.length,missing:missingDesignerAssets.length},missingCrests,missingDesignerAssets};
+          console.log(JSON.stringify(summary,null,2));
+          if(process.argv.includes('--strict')&&(missingCrests.length||missingDesignerAssets.length))process.exit(1);
+          `.replace(/^          /gm,''));
+
+          const pkg=JSON.parse(read('package.json'));pkg.version='0.27.2';pkg.scripts=pkg.scripts||{};pkg.scripts['test:0272']='node tests/run_kf_0_27_2_repository_asset_cleanup_test.js';write('package.json',JSON.stringify(pkg,null,2)+'\n');
+          write('index.html',read('index.html').replace(/KF_0\.27\.1/g,'KF_0.27.2'));
+          let gi=read('.gitignore');if(!gi.includes('reports/*.json'))gi+='\n# Reproducible test output\nreports/*.json\n';write('.gitignore',gi);
+          NODE
+
+      - name: Sanity check cleaned runtime
+        run: |
+          node --check src/app.bundle.js
+          node tools/check_club_assets.js > /tmp/assets.json
+          node -e "const r=require('/tmp/assets.json'); if(r.totalClubs!==432||r.kitDesigner.missing!==0) process.exit(1); console.log({clubs:r.totalClubs,crests:r.crests,kitDesigner:r.kitDesigner});"
+
+      - name: Commit cleanup
+        run: |
+          rm -f .github/workflows/import-club-crests.yml
+          rm -f .github/workflows/apply-kf-0272-cleanup.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "KF_0.27.2 repository and asset cleanup"
+          git push origin main
