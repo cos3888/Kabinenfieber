@@ -24,3 +24,6 @@ _asset_import/
 Thumbs.db
 .vscode/
 .idea/
+
+# Reproducible test output
+reports/*.json

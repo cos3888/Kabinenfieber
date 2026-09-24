@@ -11,16 +11,16 @@
     "initializationNotes": [
       "countryName und leagueLevel werden beim Export aus leagueKey abgeleitet.",
       "clubId wird deterministisch aus Land, Ligastufe und Vereinsname erzeugt.",
-      "crestAsset, homeKitAsset und awayKitAsset werden als standardisierte Asset-Pfade erzeugt.",
+      "crestAsset wird als standardisierter Vereinswappen-Pfad erzeugt; Trikots werden im Spiel aus dem Trikotdesigner gerendert.",
       "successScoreRaw, successScore, squadStrength, squadCount, leaguePosition und squadMarketValue starten mit 0, weil noch keine Historie bzw. Spielerdatenbank zugeordnet ist.",
       "clubWealth, financialPower, prestige, ambition und seasonTarget werden auf Basis der aktuellen Startwerte initialisiert und später im Spiel neu fortgeschrieben."
     ],
     "seasonTargetBucketsPerLeague": {
-      "5": "Rang 1 intern = Meister",
-      "4": "Ränge 2-5 intern = Top 5",
-      "3": "Ränge 6-10 intern = oberes Mittelfeld",
+      "1": "Ränge 15-18 intern = Klassenerhalt",
       "2": "Ränge 11-14 intern = unteres Mittelfeld",
-      "1": "Ränge 15-18 intern = Klassenerhalt"
+      "3": "Ränge 6-10 intern = oberes Mittelfeld",
+      "4": "Ränge 2-5 intern = Top 5",
+      "5": "Rang 1 intern = Meister"
     }
   },
   "fieldRules": {
@@ -159,20 +159,6 @@
     },
     "crestAsset": {
       "purpose": "Pfad Wappen-PNG",
-      "mode": "fixed",
-      "source": "DB-Assetpfad",
-      "formula": null,
-      "updateTrigger": null
-    },
-    "homeKitAsset": {
-      "purpose": "Pfad Heimtrikot-PNG",
-      "mode": "fixed",
-      "source": "DB-Assetpfad",
-      "formula": null,
-      "updateTrigger": null
-    },
-    "awayKitAsset": {
-      "purpose": "Pfad Auswärtstrikot-PNG",
       "mode": "fixed",
       "source": "DB-Assetpfad",
       "formula": null,

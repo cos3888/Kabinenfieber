@@ -61,8 +61,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.27.1';
-  var KF_BUILD_LABEL = 'KF_0.27.0 - Current-Season Match Store';
+  var KF_VERSION = '0.27.2';
+  var KF_BUILD_LABEL = 'KF_0.27.2 - Repository / Asset Cleanup';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -83,13 +83,14 @@
       previousSeasonRecentContext: 'world.history.previousSeasonRecentContext (bounded derived snapshot)',
       staticRulesAndTexts: 'StaticData',
       clubFinances: 'world.clubFinances.byClub',
-      processedFinancialEvents: 'world.clubFinances.byClub[clubId].financeEvents[].eventKey (current season only)',
+      processedFinancialEvents: 'CurrentSeasonFinanceRepository[worldId][season][clubId][eventId].eventKey (current season only)',
       sponsors: 'world.sponsors.byId',
       sponsorContracts: 'world.sponsorContracts.byId',
       sponsorRelations: 'world.sponsorRelations.byClubSponsor',
       sponsorRequests: 'world.sponsorRequests.byId',
       playerContracts: 'world.players.byId[playerId].contract',
       currentFormation: 'world.squads[clubId].lineupMaskState.formationKey',
+      clubKitDesign: 'world.clubs.byId[clubId] home*/away* KitDesigner fields; rendered from assets/kits',
       currentInjuries: 'world.players.byId[playerId].injurySlotsLeft',
       transferMarket: 'world.transferMarket.listings',
       transferNegotiations: 'world.negotiations.transfers',
@@ -1088,7 +1089,7 @@
     gameState.meta=gameState.meta||{}; gameState.meta.id=worldId;
     var record={
       id:worldId,
-      schemaVersion:'kf-world-record-0.27.1',
+      schemaVersion:'kf-world-record-0.27.2',
       gameVersion:KF_VERSION,
       createdAt:gameState.meta.createdAt || new Date().toISOString(),
       createdByUserId:options.createdByUserId || null,
@@ -1207,7 +1208,7 @@
         createdAt: new Date().toISOString(),
         version: KF_VERSION,
         seasonNumber: options.seasonNumber || 1,
-        schemaVersion: 'kf-core-0.27.0',
+        schemaVersion: 'kf-core-0.27.2',
         initialized: false,
         initializedAt: null
       },
@@ -20250,8 +20251,6 @@ function baseOverallForClub(club, mainPos, index){
         sponsoringPower: club.sponsoringPower,
         ambition: club.ambition,
         crestAsset: club.crestAsset,
-        homeKitAsset: club.homeKitAsset,
-        awayKitAsset: club.awayKitAsset,
         homeKitColorsRaw: club.homeKitColorsRaw,
         awayKitColorsRaw: club.awayKitColorsRaw,
         homeKitBase1: designerBaseNameFromRaw(club.homeKitColorsRaw, 'home'),
@@ -24241,7 +24240,7 @@ applySlotSalaryExpenses=function(world,slot){
 kf0261FinanceEventKeyCache=function(world){
   if(!world)return {season:0,keys:new Set(),initialized:true};var season=Number(((world||{}).meta||{}).seasonNumber||1),cache=KF0261FinanceEventKeyCacheByWorld.get(world);if(!cache||cache.season!==season){cache={season:season,keys:new Set(),initialized:false};KF0261FinanceEventKeyCacheByWorld.set(world,cache);}if(!cache.initialized){CurrentSeasonFinanceRepository.eventKeys(world,season).forEach(function(key){cache.keys.add(String(key));});cache.initialized=true;}return cache;
 };
-kf0261FinanceEventsForClub=function(world,clubId){return CurrentSeasonFinanceRepository.listClubEvents(world,clubId,Number(((world||{}).meta||{}).seasonNumber||1));};
+kf0261FinanceEventsForClub=function(world,clubId){var entry=(((((world||{}).clubFinances||{}).byClub)||{})[clubId])||null;if(entry&&Array.isArray(entry.financeEvents))return entry.financeEvents;return CurrentSeasonFinanceRepository.listClubEvents(world,clubId,Number(((world||{}).meta||{}).seasonNumber||1));};
 kf0251BonusKeySeen=kf0261BonusKeySeen;kf0251RegisterBonusKey=kf0261RegisterBonusKey;
 
 /* Saisonwechsel: Der alte Ledger bleibt bis nach dem erfolgreichen Reset
@@ -24260,7 +24259,7 @@ WorldRepository.delete=function(worldId){CurrentSeasonFinanceRepository.deleteWo
 /* Migration 0.27.0 -> 0.27.1. */
 var kf0271BaseMigrateWorldDataTruthToCurrent=migrateWorldDataTruthToCurrent;
 migrateWorldDataTruthToCurrent=function(world){
-  if(!world)return {financeStoreMigration:{eventsMoved:0,clubsMigrated:0,repositoryEvents:0}};var result=kf0271BaseMigrateWorldDataTruthToCurrent(world)||{},migration=kf0271ArchiveExistingFinanceEvents(world);world.meta=world.meta||{};world.meta.schemaVersion='kf-core-0.27.1';world.meta.version=KF_VERSION;var truth=Object.assign({},world.meta.dataTruth||{});truth.currentSeasonFinanceState='world.clubFinances.byClub[clubId] (compact current balance/state)';truth.currentSeasonFinanceLedger='CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]';truth.processedFinancialEvents='CurrentSeasonFinanceRepository financeEvents[].eventKey (current season only)';world.meta.dataTruth=truth;var record=worldRecordForGameState(world);if(record){record.schemaVersion='kf-world-record-0.27.1';record.gameVersion=KF_VERSION;}result.financeStoreMigration=migration;return result;
+  if(!world)return {financeStoreMigration:{eventsMoved:0,clubsMigrated:0,repositoryEvents:0},legacyClubAssetFieldsRemoved:0};var result=kf0271BaseMigrateWorldDataTruthToCurrent(world)||{},migration=kf0271ArchiveExistingFinanceEvents(world),removed=0;Object.keys((((world||{}).clubs||{}).byId)||{}).forEach(function(clubId){var club=world.clubs.byId[clubId];if(!club)return;if(Object.prototype.hasOwnProperty.call(club,'homeKitAsset')){delete club.homeKitAsset;removed+=1;}if(Object.prototype.hasOwnProperty.call(club,'awayKitAsset')){delete club.awayKitAsset;removed+=1;}});world.meta=world.meta||{};world.meta.schemaVersion='kf-core-0.27.2';world.meta.version=KF_VERSION;var truth=Object.assign({},world.meta.dataTruth||{});truth.currentSeasonFinanceState='world.clubFinances.byClub[clubId] (compact current balance/state)';truth.currentSeasonFinanceLedger='CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]';truth.processedFinancialEvents='CurrentSeasonFinanceRepository financeEvents[].eventKey (current season only)';truth.clubKitDesign='world.clubs.byId[clubId] KitDesigner fields rendered from assets/kits';world.meta.dataTruth=truth;var record=worldRecordForGameState(world);if(record){record.schemaVersion='kf-world-record-0.27.2';record.gameVersion=KF_VERSION;}result.financeStoreMigration=migration;result.legacyClubAssetFieldsRemoved=removed;return result;
 };
 
   if (document.readyState === 'loading') {

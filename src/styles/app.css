@@ -201,13 +201,6 @@ body{overflow:hidden}
 .kit-card{padding:18px 16px;background:rgba(255,255,255,.025)}
 .kit-frame{padding:2px 0 10px}
 .kit-template-png{position:relative;width:260px;height:308px}
-.kit-layer,.kit-layer-image{position:absolute;inset:0;width:100%;height:100%}
-.kit-layer{background:var(--kit-color, #6d7f99);mask-size:contain;mask-repeat:no-repeat;mask-position:center;-webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center}
-.kit-layer-primary{mask-image:url('../../assets/ui/kits/template01_primary.png');-webkit-mask-image:url('../../assets/ui/kits/template01_primary.png')}
-.kit-layer-secondary{mask-image:url('../../assets/ui/kits/template01_secondary.png');-webkit-mask-image:url('../../assets/ui/kits/template01_secondary.png')}
-.kit-layer-accent{mask-image:url('../../assets/ui/kits/template01_accent.png');-webkit-mask-image:url('../../assets/ui/kits/template01_accent.png')}
-.kit-layer-shadow{opacity:.42;mix-blend-mode:multiply}
-.kit-layer-detail{opacity:.92}
 .kit-caption{font-size:16px}
 @media (max-width: 1220px){
   .club-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
