@@ -1,0 +1,130 @@
+name: Fast crest import
+
+on:
+  push:
+    branches:
+      - kf-0273-crest-fast
+    paths:
+      - ".github/workflows/fast-crest-import.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install tools
+        run: python3 -m pip install --disable-pip-version-check "gdown==5.2.0" "Pillow>=11,<13"
+
+      - name: Download 424 mapped files concurrently
+        run: |
+          python3 - <<'PY'
+          import json, subprocess, time, sys
+          from pathlib import Path
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+
+          parts=[]
+          for name in [".github/crest-manifest-part1.json",".github/crest-manifest-part2.json"]:
+              parts += json.loads(Path(name).read_text(encoding="utf-8"))
+          if len(parts) != 424:
+              raise SystemExit(f"manifest count {len(parts)} != 424")
+          ids=[x["clubId"] for x in parts]
+          if len(set(ids)) != 424:
+              raise SystemExit("duplicate clubId in manifest")
+
+          raw=Path("_crest_raw")
+          raw.mkdir(exist_ok=True)
+
+          def fetch(item):
+              out=raw/(item["clubId"]+".png")
+              url="https://drive.google.com/uc?id="+item["fileId"]
+              last=""
+              for attempt in range(1,6):
+                  p=subprocess.run(["gdown",url,"-O",str(out)],text=True,capture_output=True)
+                  if p.returncode==0 and out.exists() and out.stat().st_size>0:
+                      return item, None
+                  last=(p.stdout or "")+"\n"+(p.stderr or "")
+                  time.sleep(attempt*3)
+              return item, last[-1500:]
+
+          failures=[]
+          with ThreadPoolExecutor(max_workers=8) as pool:
+              futures=[pool.submit(fetch,item) for item in parts]
+              done=0
+              for fut in as_completed(futures):
+                  item,err=fut.result()
+                  done+=1
+                  if err:
+                      failures.append((item,err))
+                  if done%25==0 or done==424:
+                      print(f"downloaded {done}/424, failures={len(failures)}", flush=True)
+
+          if failures:
+              for item,err in failures:
+                  print("FAILED",item["clubId"],item["sourceName"],item["fileId"],err, file=sys.stderr)
+              raise SystemExit(f"{len(failures)} downloads failed")
+          PY
+
+      - name: Optimize and place runtime files
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from PIL import Image
+
+          items=[]
+          for name in [".github/crest-manifest-part1.json",".github/crest-manifest-part2.json"]:
+              items += json.loads(Path(name).read_text(encoding="utf-8"))
+
+          for item in items:
+              src=Path("_crest_raw")/(item["clubId"]+".png")
+              dst=Path(item["target"])
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              with Image.open(src) as im:
+                  im.load()
+                  if im.width>512 or im.height>512:
+                      im.thumbnail((512,512),Image.Resampling.LANCZOS)
+                  if im.mode not in ("RGBA","RGB","P","LA","L"):
+                      im=im.convert("RGBA")
+                  im.save(dst,format="PNG",optimize=True,compress_level=9)
+          print({"placed":len(items)})
+          PY
+
+      - name: Verify exact final coverage
+        run: |
+          node tools/check_club_assets.js > /tmp/assets.json
+          cat /tmp/assets.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync('/tmp/assets.json','utf8'));
+          const expected=['tur3_fc_kapidag','tur3_sc_marmara_adasi','tur3_fc_artvin_yayla','tur3_sc_rize_cay','tur3_fc_harran_ovasi','tur3_sc_mardin_tas','tur3_fc_tunceli_munzur','tur3_sc_erzincan_yayla'].sort();
+          const actual=r.missingCrests.map(x=>x.clubId).sort();
+          if(r.crests.present!==424||r.crests.missing!==8||JSON.stringify(actual)!==JSON.stringify(expected)||r.kitDesigner.missing!==0){
+            console.error({crests:r.crests,actual,kitDesigner:r.kitDesigner});
+            process.exit(1);
+          }
+          NODE
+          python3 - <<'PY'
+          from pathlib import Path
+          files=list(Path("assets/clubs").glob("*/crest.png"))
+          total=sum(p.stat().st_size for p in files)
+          print({"files":len(files),"MiB":round(total/1024/1024,2)})
+          PY
+
+      - name: Commit optimized crests only
+        run: |
+          rm -rf _crest_raw
+          rm -f .github/crest-manifest-part1.json .github/crest-manifest-part2.json
+          rm -f .github/workflows/fast-crest-import.yml
+          rm -f .github/workflows/import-kf-0273-crests.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Import 424 optimized club crests"
+          git push origin kf-0273-crest-fast
