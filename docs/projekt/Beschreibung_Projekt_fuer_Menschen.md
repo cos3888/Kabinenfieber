@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.28.0
+# Kabinenfieber - Stand KF_0.28.1
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.28.0`
+App-Version: `KF_0.28.1`
 
 Persistierte Schemas:
 
@@ -16,6 +16,26 @@ Persistierte Schemas:
 - WorldRecord: `kf-world-record-0.27.2`
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
+
+## KF_0.28.1 – Cloud Persistence Verification
+
+Der in KF_0.28.0 vorbereitete Cloud-Backendpfad wird nun beim Start technisch geprüft. Der Server führt genau einen kontrollierten Write/Read/Delete-Roundtrip gegen den konfigurierten Object Store und den Metadata Store aus.
+
+Technische Testbereiche:
+
+- Cloud Storage: `_system/persistence-verification/<probeId>.json`
+- Firestore: `<KF_FIRESTORE_PREFIX>_system/persistence-verification-<probeId>`
+
+Die Testdaten sind keine fachlichen Spiel- oder Historiedaten und werden nach der Prüfung wieder gelöscht. Weder Weltslots noch `WorldRecord`, Mitgliedschaften, Matchsegmente oder Finanzsegmente werden verändert.
+
+`GET /api/v1/persistence/status` zeigt jetzt zusätzlich einen `verification`-Block mit dem tatsächlichen Zustand beider Speicherwege. Berechtigungsfehler werden u. a. als `permission_denied` sichtbar. Ein Fehler stoppt den Server nicht, damit die Ursache über den Status diagnostiziert werden kann.
+
+Zusätzlich wurde im Google-Cloud-Storage-Adapter die Option `metadadata` zu `metadata` korrigiert; damit wird der Content-Type eines gespeicherten Objekts korrekt an den GCS-Client weitergereicht.
+
+Zentrale Datenquellen bleiben unverändert. Es entsteht keine zweite fachliche Datenhaltung.
+
+Test: `tests/run_kf_0_28_1_cloud_persistence_verification_test.js` – **9/9 Checks bestanden**.
+
 
 ## KF_0.28.0 – Backend Persistence Foundation
 

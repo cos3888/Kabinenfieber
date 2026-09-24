@@ -1,6 +1,20 @@
-# Kabinenfieber KF_0.28.0
+# Kabinenfieber KF_0.28.1
 
 KF_0.27.2 bereinigt auf Basis des abgeschlossenen KF_0.27.1-Stands die Repository- und Assetstruktur, ohne Gameplay oder Simulation zu veraendern. Die Match- und Finance-Segmentierung aus KF_0.27.0/0.27.1 bleibt unveraendert aktiv.
+
+## Neu in KF_0.28.1 – Cloud Persistence Verification
+
+KF_0.28.1 ergänzt einen technischen Persistenz-Selbsttest beim Start des Backendservers.
+
+- Google Cloud Storage: reserviertes Testobjekt schreiben, lesen, Inhalt prüfen und löschen.
+- Firestore: reserviertes Dokument in `<prefix>_system` schreiben, lesen, Inhalt prüfen und löschen.
+- `/api/v1/persistence/status` zeigt den tatsächlichen Prüfstatus für Object Store und Metadata Store, statt nur vorhandene Konfiguration zu melden.
+- Berechtigungsfehler werden als `permission_denied`, fehlende Ressourcen als `not_found` und Cleanup-/Payloadfehler separat ausgewiesen.
+- Ein fehlgeschlagener Persistenztest beendet Cloud Run nicht; der Fehler bleibt diagnostizierbar.
+- GCS-Adapter: Tippfehler `metadadata` → `metadata` korrigiert, damit Content-Type-Metadaten korrekt übergeben werden.
+
+Die Prüfung berührt keine Weltslots, Mitgliedschaften, Spielstände oder Fußballwahrheiten. Testdaten liegen ausschließlich unter `_system/persistence-verification/` bzw. `<prefix>_system` und werden unmittelbar wieder entfernt.
+
 
 ## Neu in KF_0.28.0 – Backend Persistence Foundation
 

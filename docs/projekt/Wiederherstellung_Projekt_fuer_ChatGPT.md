@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.28.0
+# Wiederherstellung Kabinenfieber - KF_0.28.1
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.28.0`
+Version: `KF_0.28.1`
 
 Build-Label:
 
-`KF_0.28.0 - Backend Persistence Foundation`
+`KF_0.28.1 - Cloud Persistence Verification`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.28.0.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.28.1.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -35,6 +35,36 @@ Aktuelle ZIP nach Export soll `KF_0.28.0.zip` heissen.
 - Bestehende Systeme vor neuen Features sauber abschliessen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
+
+## KF_0.28.1 – Cloud Persistence Verification
+
+Neu:
+
+- `server/services/persistence-verification-service.js`: technischer, nicht-fachlicher Write/Read/Delete-Roundtrip.
+- `FileMetadataRepository.verifyRoundTrip(...)` und `FirestoreMetadataRepository.verifyRoundTrip(...)`.
+- Firestore reserviert dafür `<prefix>_system`; die Probe wird nach dem Lesen gelöscht.
+- Object Store reserviert `_system/persistence-verification/<probeId>.json`; die Probe wird nach dem Lesen gelöscht.
+- `server/index.js` startet die Prüfung einmal beim Prozessstart und veröffentlicht das Ergebnis unter `/api/v1/persistence/status`.
+- Fehlerklassifikation: `permission_denied`, `not_found`, `conflict`, `payload_mismatch`, `cleanup_failed`, `unsupported`, `error`.
+- Fehlgeschlagene Prüfung beendet den Cloud-Run-Prozess bewusst nicht.
+- GCS-Adapter: `metadadata` → `metadata` korrigiert.
+
+Der Selbsttest darf niemals Weltslots, WorldRecords, Mitgliedschaften, Match-/Finance-Segmente oder andere Fußballwahrheiten als Testdaten verwenden.
+
+Test KF_0.28.1: **9/9 Checks bestanden**.
+
+Cloud-Dev-Konfiguration zum Stand KF_0.28.1:
+
+- Google-Cloud-Projekt-ID: `kabinenfieber-dev`
+- Region: `us-central1`
+- Cloud-Run-Dienst: `kabinenfieber-backend`
+- GCS-Bucket: `kabinenfieber-dev-saves-4821`
+- Object Store: `gcs`
+- Metadata Store: `firestore`
+- Firestore-Präfix: `kf_dev`
+- Cloud Run: request-based, Autoscaling min 0 / max 1
+- Service Account: `Kabinenfieber Backend`
+
 
 ## KF_0.28.0 – Backend Persistence Foundation
 

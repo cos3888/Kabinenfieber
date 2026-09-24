@@ -36,7 +36,7 @@ class GoogleCloudObjectStore {
       await file.save(Buffer.isBuffer(body) ? body : Buffer.from(body), {
         resumable: false,
         validation: 'crc32c',
-        metadadata: { contentType },
+        metadata: { contentType },
         ...(ifGenerationMatch !== undefined
           ? { preconditionOpts: { ifGenerationMatch: Number(ifGenerationMatch) } }
           : {})

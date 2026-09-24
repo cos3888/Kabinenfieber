@@ -77,6 +77,31 @@ class FileMetadataRepository {
     return data.slots[String(Number(slotId))] ? clone(data.slots[String(Number(slotId))]) : null;
   }
 
+  async verifyRoundTrip({ probeId, payload }) {
+    const safeId = String(probeId || '').replace(/[^A-Za-z0-9_-]/g, '');
+    if (!safeId) throw new Error('verification_probe_id_required');
+    const target = `${this.filePath}.verification-${safeId}.json`;
+    let failure = null;
+    try {
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, String(payload), 'utf8');
+      const readBack = await fs.readFile(target, 'utf8');
+      if (readBack !== String(payload)) throw new Error('verification_payload_mismatch');
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      await fs.unlink(target);
+    } catch (cleanupError) {
+      if (cleanupError && cleanupError.code !== 'ENOENT' && !failure) {
+        cleanupError.message = `verification_cleanup_failed: ${cleanupError.message || 'file metadata cleanup failed'}`;
+        failure = cleanupError;
+      }
+    }
+    if (failure) throw failure;
+    return true;
+  }
+
   async createWorldRegistration({ slotId, worldId, createdByUserId, createdAt = nowIso() }) {
     return this._mutate(data => {
       slotId = Number(slotId);

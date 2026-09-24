@@ -18,7 +18,8 @@ class FirestoreMetadataRepository {
       slots: `${collectionPrefix}_world_slots`,
       worlds: `${collectionPrefix}_worlds`,
       participation: `${collectionPrefix}_world_participation_index`,
-      invitations: `${collectionPrefix}_invitations`
+      invitations: `${collectionPrefix}_invitations`,
+      system: `${collectionPrefix}_system`
     };
   }
 
@@ -44,6 +45,37 @@ class FirestoreMetadataRepository {
   async getSlot(slotId) {
     const doc = await this._slot(slotId).get();
     return doc.exists ? doc.data() : null;
+  }
+
+  async verifyRoundTrip({ probeId, payload }) {
+    const safeId = String(probeId || '').replace(/[^A-Za-z0-9_-]/g, '');
+    if (!safeId) throw new Error('verification_probe_id_required');
+    const ref = this.db.collection(this.names.system).doc(`persistence-verification-${safeId}`);
+    let failure = null;
+    try {
+      await ref.create({
+        kind: 'persistence-verification',
+        probeId: safeId,
+        payload: String(payload),
+        createdAt: nowIso()
+      });
+      const doc = await ref.get();
+      if (!doc.exists || !doc.data() || doc.data().payload !== String(payload)) {
+        throw new Error('verification_payload_mismatch');
+      }
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      await ref.delete();
+    } catch (cleanupError) {
+      if (!failure) {
+        cleanupError.message = `verification_cleanup_failed: ${cleanupError.message || 'firestore cleanup failed'}`;
+        failure = cleanupError;
+      }
+    }
+    if (failure) throw failure;
+    return true;
   }
 
   async createWorldRegistration({ slotId, worldId, createdByUserId, createdAt = nowIso() }) {
