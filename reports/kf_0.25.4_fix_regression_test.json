@@ -1,0 +1,231 @@
+{
+  "version": "0.25.4",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Runtime enthaelt den KF_0.25.4-Fix und laeuft aktuell als KF_0.26.2",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Normaler und schneller Kalenderpfad nutzen denselben Slot-Lifecycle",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Slot-Lifecycle verarbeitet Bewertung, Slotstatus und Finanz-/Vertragsaktionen zentral",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Abbruch verwirft keinen bereits gestarteten Slot mehr",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Vergleichsslot enthaelt echte Fixtures",
+      "ok": true,
+      "details": {
+        "slot": "w7-middle",
+        "fixtures": 112
+      }
+    },
+    {
+      "name": "Normaler Referenzpfad schliesst Vergleichsslot ab",
+      "ok": true,
+      "details": {
+        "type": "cup-matchday",
+        "slot": "w7-middle"
+      }
+    },
+    {
+      "name": "Schnellsimulation plant Arbeit asynchron ein",
+      "ok": true,
+      "details": {
+        "queued": 1,
+        "requestSlot": "w10-end"
+      }
+    },
+    {
+      "name": "Schnellsimulation startet denselben naechsten Slot",
+      "ok": true,
+      "details": {
+        "expected": "w7-middle",
+        "actual": "w7-middle"
+      }
+    },
+    {
+      "name": "Abbruch beendet am sicheren Slot-Rand",
+      "ok": true,
+      "details": {
+        "callbacks": 114,
+        "slot": "w7-middle"
+      }
+    },
+    {
+      "name": "Schnellsimulation bucht Gehaelter identisch zum normalen Weiter",
+      "ok": true,
+      "details": {
+        "sampleNormal": [
+          {
+            "id": "ger1_fc_elbtor",
+            "amount": -3.285,
+            "slots": 12
+          },
+          {
+            "id": "ger1_sc_weserwerder",
+            "amount": -3.243,
+            "slots": 12
+          },
+          {
+            "id": "ger1_fc_leinebrueck",
+            "amount": -2.964,
+            "slots": 12
+          }
+        ],
+        "sampleFast": [
+          {
+            "id": "ger1_fc_elbtor",
+            "amount": -3.285,
+            "slots": 12
+          },
+          {
+            "id": "ger1_sc_weserwerder",
+            "amount": -3.243,
+            "slots": 12
+          },
+          {
+            "id": "ger1_fc_leinebrueck",
+            "amount": -2.964,
+            "slots": 12
+          }
+        ]
+      }
+    },
+    {
+      "name": "Faellige Future-Move wird vor dem Match in beiden Pfaden identisch ausgefuehrt",
+      "ok": true,
+      "details": {
+        "normal": "ger1_sc_weserwerder",
+        "fast": "ger1_sc_weserwerder",
+        "target": "ger1_sc_weserwerder"
+      }
+    },
+    {
+      "name": "Abgebrochene Schnellsimulation speichert den gestarteten Slot vollstaendig statt halb",
+      "ok": true,
+      "details": {
+        "expected": 112,
+        "normal": 112,
+        "fast": 112
+      }
+    },
+    {
+      "name": "Matchresultate des Slots bleiben zwischen Normal- und Schnellpfad identisch",
+      "ok": true,
+      "details": {
+        "normal": [
+          [
+            "fx:ncup:deutschland:001:r1:00001",
+            0,
+            2,
+            0,
+            0
+          ],
+          [
+            "fx:ncup:deutschland:001:r1:00002",
+            1,
+            1,
+            0,
+            0
+          ],
+          [
+            "fx:ncup:deutschland:001:r1:00003",
+            1,
+            2,
+            0,
+            0
+          ]
+        ],
+        "fast": [
+          [
+            "fx:ncup:deutschland:001:r1:00001",
+            0,
+            2,
+            0,
+            0
+          ],
+          [
+            "fx:ncup:deutschland:001:r1:00002",
+            1,
+            1,
+            0,
+            0
+          ],
+          [
+            "fx:ncup:deutschland:001:r1:00003",
+            1,
+            2,
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "Saison 1 nutzt Startkapital ohne vorab gebuchten Platzierungsbonus",
+      "ok": true,
+      "details": {
+        "seasonStartCash": 7.166,
+        "placementBooked": 0
+      }
+    },
+    {
+      "name": "Finaler Platzierungsbonus Platz 1 ist exakt und einmalig",
+      "ok": true,
+      "details": {
+        "position": 1,
+        "booked": 10.529,
+        "expected": 10.529,
+        "count": 1
+      }
+    },
+    {
+      "name": "Finaler Platzierungsbonus Platz 5 ist exakt und einmalig",
+      "ok": true,
+      "details": {
+        "position": 5,
+        "booked": 9.749,
+        "expected": 9.749,
+        "count": 1
+      }
+    },
+    {
+      "name": "Finaler Platzierungsbonus Platz 12 ist exakt und einmalig",
+      "ok": true,
+      "details": {
+        "position": 12,
+        "booked": 8.385,
+        "expected": 8.385,
+        "count": 1
+      }
+    },
+    {
+      "name": "Finaler Platzierungsbonus Platz 18 ist exakt und einmalig",
+      "ok": true,
+      "details": {
+        "position": 18,
+        "booked": 7.215,
+        "expected": 7.215,
+        "count": 1
+      }
+    }
+  ],
+  "metrics": {
+    "checks": 18,
+    "comparisonSlot": "w7-middle",
+    "fixtures": 112,
+    "queueCallbacks": 114,
+    "clubs": 432
+  }
+}

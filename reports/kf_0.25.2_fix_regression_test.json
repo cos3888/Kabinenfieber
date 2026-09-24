@@ -1,0 +1,74 @@
+{
+  "version": "0.25.2",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Runtime enthaelt weiterhin den KF_0.25.2-Fix",
+      "ok": true,
+      "details": {
+        "runtimeVersion": "0.27.0"
+      }
+    },
+    {
+      "name": "Persistiertes Weltschema ist fuer KF_0.26.2 migriert",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Scheduler hat ein kleines Zeitbudget statt starrem 8er-Batch",
+      "ok": true,
+      "details": {
+        "tickBudgetMs": 12
+      }
+    },
+    {
+      "name": "Fortschritts-DOM wird gedrosselt",
+      "ok": true,
+      "details": {
+        "paintIntervalMs": 120
+      }
+    },
+    {
+      "name": "Matchcache bleibt ueber fortlaufende Append-Schreibvorgaenge dasselbe Runtime-Objekt",
+      "ok": true,
+      "details": {
+        "recorded": 30,
+        "historyLength": 30,
+        "cacheLength": 30
+      }
+    },
+    {
+      "name": "Vereins-Matchcache enthaelt jedes kanonische Match genau einmal",
+      "ok": true,
+      "details": {
+        "clubId": "ger1_fc_auenring",
+        "canonical": 1,
+        "indexed": 1
+      }
+    },
+    {
+      "name": "Bonus-Deduplizierung bleibt schnell, nutzt aber ab KF_0.26.2 FinanceEvents statt Bonus-Historie",
+      "ok": true,
+      "details": {
+        "beforeBonus": 0,
+        "afterBonus": 0,
+        "beforeFinance": 25,
+        "afterFinance": 26,
+        "paid": true,
+        "paidAgain": false,
+        "keySeen": true
+      }
+    },
+    {
+      "name": "Slot bleibt staged und wird erst im Abschluss in die Historie geschrieben",
+      "ok": true,
+      "details": {}
+    }
+  ],
+  "metrics": {
+    "checks": 8,
+    "recordedMatches": 30,
+    "tickBudgetMs": 12,
+    "progressPaintIntervalMs": 120
+  }
+}

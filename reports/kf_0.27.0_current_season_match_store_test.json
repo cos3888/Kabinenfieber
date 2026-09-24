@@ -1,0 +1,113 @@
+{
+  "version": "0.27.0",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Runtime meldet KF_0.27.0",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Abgeschlossenes Match liegt im WorldRecord nur kompakt",
+      "ok": true,
+      "details": {
+        "compactKeys": [
+          "fixtureId",
+          "status",
+          "season",
+          "competition",
+          "leagueKey",
+          "countryName",
+          "roundType",
+          "roundNumber",
+          "matchday",
+          "slotKey",
+          "slotLabel",
+          "week",
+          "stage",
+          "groupId",
+          "pairIndex",
+          "leg",
+          "tieId",
+          "homeClubId",
+          "awayClubId",
+          "homeGoals",
+          "awayGoals",
+          "id",
+          "storageKind",
+          "storageVersion",
+          "competitionLabel",
+          "homeLineupIds",
+          "awayLineupIds",
+          "playerStats",
+          "matchStats",
+          "usedTactics"
+        ],
+        "playerStatKeys": [
+          "playerId",
+          "clubId",
+          "side",
+          "starter",
+          "appearances",
+          "minutesPlayed",
+          "goals",
+          "rating",
+          "matchPosition"
+        ]
+      }
+    },
+    {
+      "name": "Vollständiges Match liegt genau im separaten CurrentSeasonMatchRepository",
+      "ok": true,
+      "details": {
+        "storeCount": 1
+      }
+    },
+    {
+      "name": "Normale Matchabfragen liefern keinen Vollbericht in den aktiven Weltzustand zurück",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Spielinfo lädt Vollmatch bei Bedarf aus dem Match-Store",
+      "ok": true,
+      "details": {
+        "htmlLength": 2925
+      }
+    },
+    {
+      "name": "WorldRepository Save/Load bleibt vom Vollmatch getrennt",
+      "ok": true,
+      "details": {
+        "worldPayloadBytes": 4475,
+        "storeBytes": 3260
+      }
+    },
+    {
+      "name": "Spielbericht bleibt nach WorldRecord-Reload verfügbar",
+      "ok": true,
+      "details": {
+        "htmlLength": 2925
+      }
+    },
+    {
+      "name": "0.26.2-Migration lagert vorhandene Vollmatches ohne Informationsverlust aus",
+      "ok": true,
+      "details": {
+        "migration": {
+          "archived": 1,
+          "alreadyCompact": 0,
+          "missingDetails": 0,
+          "repositoryMatches": 1
+        }
+      }
+    }
+  ],
+  "metrics": {
+    "fullMatchBytes": 3260,
+    "compactMatchBytes": 999,
+    "worldPayloadBytes": 4475,
+    "storeBytes": 3260,
+    "compactRatio": 30.64
+  }
+}

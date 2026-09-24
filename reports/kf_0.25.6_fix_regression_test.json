@@ -1,0 +1,163 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "KF_0.25.6 Sponsorfix bleibt unter KF_0.26.2 aktiv",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Tatsaechlich aktiver licence-aware Saisonwechsel ruft Sponsor-Autofill direkt nach resetFinanceForNewSeason auf",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Sponsor-Lookups verwenden nur einen ableitbaren Runtime-Index und keine persistente zweite Wahrheit",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Humanclub wird ueber echtes Membership-Modell gesetzt",
+      "ok": true,
+      "details": {
+        "humanId": "ger1_fc_elbtor"
+      }
+    },
+    {
+      "name": "Runtime-Sponsorindex liefert exakt dieselben aktiven Vertraege wie die kanonische Historie",
+      "ok": true,
+      "details": {
+        "indexMismatch": 0
+      }
+    },
+    {
+      "name": "Vor dem kritischen Wechsel sind alle KI-Clubs auch in Saison 2 noch 10/10 belegt",
+      "ok": true,
+      "details": {
+        "clubs": 431
+      }
+    },
+    {
+      "name": "Humanclub wird durch Autofill nicht auf 10/10 gezwungen",
+      "ok": true,
+      "details": {
+        "humanContracts": 8
+      }
+    },
+    {
+      "name": "Echter advanceIntoNextSeason wechselt von S2 auf S3",
+      "ok": true,
+      "details": {
+        "season": 3,
+        "transitionMs": 2796
+      }
+    },
+    {
+      "name": "Kritischer S3-Integrationsfall: alle KI-Clubs werden im echten Saisonwechsel wieder 10/10 belegt",
+      "ok": true,
+      "details": {
+        "min": 10,
+        "max": 10
+      }
+    },
+    {
+      "name": "S3-Autofill wurde im echten Saisonwechsel ausgefuehrt",
+      "ok": true,
+      "details": {
+        "lastAiSponsorAutofill": {
+          "season": 3,
+          "clubsChecked": 431,
+          "clubsFilled": 431,
+          "contractsCreated": 4310,
+          "missingAfter": 0,
+          "bySlot": {
+            "main": 431,
+            "large": 862,
+            "medium": 1293,
+            "small": 1724
+          }
+        }
+      }
+    },
+    {
+      "name": "Humanclub bleibt auch im echten S3-Saisonwechsel unangetastet",
+      "ok": true,
+      "details": {
+        "humanContracts": 0
+      }
+    },
+    {
+      "name": "S3 erzeugt weder Sponsor-Doppelbelegung noch Hauptsponsor-Konflikte",
+      "ok": true,
+      "details": {
+        "duplicateClubs": 0,
+        "mainConflicts": 0
+      }
+    },
+    {
+      "name": "Neu geschlossene S3-Vertraege buchen ihre Sponsorzahlung im neuen Finanzjahr",
+      "ok": true,
+      "details": {
+        "clubsWithMismatch": 0,
+        "sample": []
+      }
+    },
+    {
+      "name": "S4 benoetigt wegen Zweijahreslaufzeit keine erneute KI-Vertragswelle",
+      "ok": true,
+      "details": {
+        "summary": {
+          "season": 4,
+          "clubsChecked": 431,
+          "clubsFilled": 0,
+          "contractsCreated": 0,
+          "missingAfter": 0,
+          "bySlot": {
+            "main": 0,
+            "large": 0,
+            "medium": 0,
+            "small": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "S5 erneuert die in S3 gestarteten Zweijahresvertraege wieder vollstaendig",
+      "ok": true,
+      "details": {
+        "summary": {
+          "season": 5,
+          "clubsChecked": 431,
+          "clubsFilled": 431,
+          "contractsCreated": 4310,
+          "missingAfter": 0,
+          "bySlot": {
+            "main": 431,
+            "large": 862,
+            "medium": 1293,
+            "small": 1724
+          }
+        }
+      }
+    }
+  ],
+  "metrics": {
+    "clubs": 432,
+    "humanClubId": "ger1_fc_elbtor",
+    "transitionMs": 2796,
+    "lastAiSponsorAutofill": {
+      "season": 5,
+      "clubsChecked": 431,
+      "clubsFilled": 431,
+      "contractsCreated": 4310,
+      "missingAfter": 0,
+      "bySlot": {
+        "main": 431,
+        "large": 862,
+        "medium": 1293,
+        "small": 1724
+      }
+    },
+    "s3ContractCount": 4310
+  }
+}

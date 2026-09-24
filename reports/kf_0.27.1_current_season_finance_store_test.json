@@ -1,0 +1,92 @@
+{
+  "version": "0.27.1",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Runtime meldet KF_0.27.1",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Migration verschiebt Legacy-FinanceEvents vollständig aus dem WorldRecord",
+      "ok": true,
+      "details": {
+        "migration": {
+          "eventsMoved": 2,
+          "clubsMigrated": 1,
+          "repositoryEvents": 2
+        },
+        "entry": {
+          "clubId": "c1",
+          "seasonId": 1,
+          "seasonStartCash": 10,
+          "licenceWarnings": [],
+          "sanctionStatus": null,
+          "financeTotals": {
+            "net": 7,
+            "income": 9,
+            "expense": -2,
+            "byType": {
+              "income": 5,
+              "expense": -2,
+              "bonus": 4
+            }
+          },
+          "currentCash": 17,
+          "financeEventCount": 3,
+          "financeLedgerKind": "current-season-external",
+          "financeLedgerSeason": 1
+        }
+      }
+    },
+    {
+      "name": "Kompakter Finanzzustand behält den korrekten Kontostand",
+      "ok": true,
+      "details": {
+        "currentCash": 13
+      }
+    },
+    {
+      "name": "Finance-Ledger ist weiterhin vollständig abrufbar",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "eventKey-Idempotenz wird aus ausgelagertem Ledger rekonstruiert",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Neue Buchung aktualisiert Zustand und Ledger genau einmal",
+      "ok": true,
+      "details": {
+        "before": 13,
+        "after": 17,
+        "count": 3
+      }
+    },
+    {
+      "name": "Neue eventKeys sind sofort idempotent",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "WorldRepository Save/Load enthält keine FinanceEvent-Liste",
+      "ok": true,
+      "details": {
+        "worldBytes": 3970,
+        "financeStoreBytes": 333
+      }
+    },
+    {
+      "name": "Finanzwerte bleiben nach Reload verfügbar",
+      "ok": true,
+      "details": {}
+    }
+  ],
+  "metrics": {
+    "worldBytes": 3970,
+    "financeStoreBytes": 333,
+    "eventCount": 3
+  }
+}

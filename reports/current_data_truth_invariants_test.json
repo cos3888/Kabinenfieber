@@ -1,0 +1,211 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "Current player contracts have one canonical contract object",
+      "ok": true,
+      "details": {
+        "clubPlayers": 10371,
+        "invalid": []
+      }
+    },
+    {
+      "name": "Legacy player salary/contract-until scalar fields are absent from current worlds",
+      "ok": true,
+      "details": {
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "name": "Salary helper reads exactly player.contract.salaryBase",
+      "ok": true,
+      "details": {
+        "count": 0
+      }
+    },
+    {
+      "name": "Current formation exists in world.squads for every club",
+      "ok": true,
+      "details": {
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "name": "Club objects no longer duplicate currentFormationKey",
+      "ok": true,
+      "details": {
+        "count": 0
+      }
+    },
+    {
+      "name": "Changing formation writes only the squad formation truth",
+      "ok": true,
+      "details": {
+        "before": "formation_4_3_3",
+        "after": "formation_3_1_4_2",
+        "target": "formation_3_1_4_2"
+      }
+    },
+    {
+      "name": "Reading injury status does not migrate or mutate legacy fields",
+      "ok": true,
+      "details": {
+        "issueRead": 0
+      }
+    },
+    {
+      "name": "Explicit injury migration converts legacy fields to injurySlotsLeft",
+      "ok": true,
+      "details": {
+        "migrated": 1,
+        "slots": 4
+      }
+    },
+    {
+      "name": "Explicit schema migration absorbs legacy contract scalars then deletes them",
+      "ok": true,
+      "details": {
+        "migration": {
+          "contracts": 1,
+          "formations": 2,
+          "injuries": 0,
+          "marketValues": 0,
+          "suspensions": 0,
+          "historyMigration": {
+            "seasons": 0,
+            "matches": 0
+          },
+          "bonusMigration": {
+            "legacyEvents": 0,
+            "currentSeasonEvents": 0,
+            "financeKeysAttached": 0,
+            "financeKeysAlreadyPresent": 0,
+            "legacyContainerCleared": true
+          },
+          "retiredPlayersMigrated": 0,
+          "matchStoreMigration": {
+            "archived": 0,
+            "alreadyCompact": 0,
+            "missingDetails": 0,
+            "repositoryMatches": 0
+          },
+          "financeStoreMigration": {
+            "eventsMoved": 0,
+            "clubsMigrated": 0,
+            "repositoryEvents": 2996
+          }
+        },
+        "contract": {
+          "role": "starter",
+          "salaryBase": 1.234,
+          "validUntilSeason": 9
+        }
+      }
+    },
+    {
+      "name": "Explicit schema migration absorbs legacy currentFormationKey then deletes it",
+      "ok": true,
+      "details": {
+        "migration": {
+          "contracts": 1,
+          "formations": 2,
+          "injuries": 0,
+          "marketValues": 0,
+          "suspensions": 0,
+          "historyMigration": {
+            "seasons": 0,
+            "matches": 0
+          },
+          "bonusMigration": {
+            "legacyEvents": 0,
+            "currentSeasonEvents": 0,
+            "financeKeysAttached": 0,
+            "financeKeysAlreadyPresent": 0,
+            "legacyContainerCleared": true
+          },
+          "retiredPlayersMigrated": 0,
+          "matchStoreMigration": {
+            "archived": 0,
+            "alreadyCompact": 0,
+            "missingDetails": 0,
+            "repositoryMatches": 0
+          },
+          "financeStoreMigration": {
+            "eventsMoved": 0,
+            "clubsMigrated": 0,
+            "repositoryEvents": 2996
+          }
+        },
+        "formation": "formation_4_3_3"
+      }
+    },
+    {
+      "name": "World schema is current and JSON-serializable",
+      "ok": true,
+      "details": {
+        "schemaVersion": "kf-core-0.27.1"
+      }
+    },
+    {
+      "name": "WorldRecord schema migrates with the gameState schema",
+      "ok": true,
+      "details": {
+        "schemaVersion": "kf-world-record-0.27.1",
+        "gameVersion": "0.27.1"
+      }
+    },
+    {
+      "name": "Data-truth metadata no longer labels current-season matches as the historical truth",
+      "ok": true,
+      "details": {
+        "dataTruth": {
+          "currentPlayers": "world.players.byId",
+          "currentSquads": "world.squads",
+          "currentFixtures": "world.calendar.fixtures",
+          "currentSeasonMatches": "world.history.matches (compact current-season index)",
+          "historicalResults": "world.history.seasonResults",
+          "historicalPlayerSeasons": "world.history.playerSeasons",
+          "historicalStandings": "world.history.seasonStandings",
+          "staticRules": "StaticData",
+          "currentContracts": "world.players.byId[playerId].contract",
+          "currentFormation": "world.squads[clubId].lineupMaskState.formationKey",
+          "currentInjuries": "world.players.byId[playerId].injurySlotsLeft",
+          "historicalMarketValues": "world.history.playerMarketValues[playerId] (marketValue + optional averageStrength)",
+          "processedFinancialEvents": "CurrentSeasonFinanceRepository financeEvents[].eventKey (current season only)",
+          "retiredPlayers": "world.history.retiredPlayers.byId",
+          "currentSeasonMatchDetails": "CurrentSeasonMatchRepository[worldId][season][matchId]",
+          "currentSeasonFinanceState": "world.clubFinances.byClub[clubId] (compact current balance/state)",
+          "currentSeasonFinanceLedger": "CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]"
+        }
+      }
+    },
+    {
+      "name": "BonusEvents is no longer a persistent truth and stays empty",
+      "ok": true,
+      "details": {
+        "bonusEvents": 0,
+        "dataTruth": {
+          "currentPlayers": "world.players.byId",
+          "currentSquads": "world.squads",
+          "currentFixtures": "world.calendar.fixtures",
+          "currentSeasonMatches": "world.history.matches (compact current-season index)",
+          "historicalResults": "world.history.seasonResults",
+          "historicalPlayerSeasons": "world.history.playerSeasons",
+          "historicalStandings": "world.history.seasonStandings",
+          "staticRules": "StaticData",
+          "currentContracts": "world.players.byId[playerId].contract",
+          "currentFormation": "world.squads[clubId].lineupMaskState.formationKey",
+          "currentInjuries": "world.players.byId[playerId].injurySlotsLeft",
+          "historicalMarketValues": "world.history.playerMarketValues[playerId] (marketValue + optional averageStrength)",
+          "processedFinancialEvents": "CurrentSeasonFinanceRepository financeEvents[].eventKey (current season only)",
+          "retiredPlayers": "world.history.retiredPlayers.byId",
+          "currentSeasonMatchDetails": "CurrentSeasonMatchRepository[worldId][season][matchId]",
+          "currentSeasonFinanceState": "world.clubFinances.byClub[clubId] (compact current balance/state)",
+          "currentSeasonFinanceLedger": "CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]"
+        }
+      }
+    }
+  ]
+}

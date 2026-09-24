@@ -1,0 +1,55 @@
+const fs=require('fs'),vm=require('vm'),path=require('path');
+const root=path.resolve(__dirname,'..'),read=r=>fs.readFileSync(path.join(root,r),'utf8');
+const report={version:'0.27.0',passed:true,checks:[],metrics:{}};
+function check(name,ok,details={}){report.checks.push({name,ok:!!ok,details});if(!ok)report.passed=false;}
+class E{constructor(){this.innerHTML='';this.style={};this.dataset={};this.value='';this.classList={add(){},remove(){},contains(){return false}}}addEventListener(){}removeEventListener(){}setAttribute(k,v){this[k]=v}getAttribute(k){return this[k]||null}querySelector(){return null}querySelectorAll(){return[]}closest(){return null}getBoundingClientRect(){return{width:1760,height:990}}}
+const els={'app-root':new E(),'modal-root':new E(),'app-shell':new E()};
+const document={readyState:'loading',documentElement:{clientWidth:1760,clientHeight:990,style:{setProperty(){}}},body:new E(),getElementById:id=>els[id]||null,addEventListener(t,cb){if(t==='DOMContentLoaded')this.cb=cb},removeEventListener(){},createElement(){return new E()},querySelector(){return null},querySelectorAll(){return[]}};
+let seed=260002;const math=Object.create(Math);math.random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+const windowObj={innerWidth:1760,innerHeight:990,addEventListener(){},removeEventListener(){},requestAnimationFrame:cb=>cb(),cancelAnimationFrame(){},console,setTimeout,clearTimeout,document,Element:E,navigator:{userAgent:'node-test'},performance:{now:()=>Date.now()},localStorage:{getItem(){return null},setItem(){}}};
+const context=vm.createContext({window:windowObj,document,console,setTimeout,clearTimeout,Element:E,navigator:windowObj.navigator,performance:windowObj.performance,Math:math,Map,WeakMap,Set});
+for(const f of ['src/static-data.js','src/db1-db2-data.js'])vm.runInContext(read(f),context,{filename:f});
+let code=read('src/app.bundle.js');
+code=code.replace(/\n  if \(document\.readyState === 'loading'\) \{/,`\n  window.KFTest={AppState,startNewCareer,simulateLeagueFixture,recordPlayedMatch,kf0260PrepareCompletedSeason,kf0260CommitCompletedSeason,derivePlayerStatsFromHistory,buildLeaguePlayerStatMap,buildClubCompetitionRows,recentMatchesForClub,CurrentSeasonMatchRepository};\n  if (document.readyState === 'loading') {`);
+vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();const T=windowObj.KFTest;
+T.startNewCareer();const w=T.AppState.world,TARGET=180;
+const leagueKey=((w.clubs.byId[w.clubs.order[0]]||{}).leagueKey)||'Deutschland 1';
+const fixtures=(w.calendar.fixtures||[]).filter(f=>Number(f.season||1)===1&&f.status!=='played'&&f.competition==='league'&&f.leagueKey===leagueKey&&f.homeClubId&&f.awayClubId).slice(0,TARGET);
+const t0=Date.now();for(const f of fixtures){T.recordPlayedMatch(w,f,T.simulateLeagueFixture(w,f));}const simMs=Date.now()-t0;
+const fullMatches=(w.history.matches||[]).slice();
+const bonusEventsCount=((w.history||{}).bonusEvents||[]).length;
+const financeEventKeyCount=Object.values(((w.clubFinances||{}).byClub)||{}).reduce((sum,entry)=>sum+((entry&&entry.financeEvents)||[]).filter(ev=>ev&&ev.eventKey).length,0);
+check('Stichprobe verwendet echte simulierte KF-Matches',fullMatches.length===TARGET&&fullMatches.every(m=>Array.isArray(m.playerStats)&&m.playerStats.length>0&&m.matchStats),{matches:fullMatches.length,simMs});
+check('KF_0.26.2 erzeugt bei echten Matches keine wachsende Bonus-Historie',bonusEventsCount===0&&financeEventKeyCount>0,{bonusEventsCount,financeEventKeyCount});
+const currentIndexBytes=Buffer.byteLength(JSON.stringify(fullMatches));
+const fullStoreBytes=T.CurrentSeasonMatchRepository.serializedBytes(w,1);
+const samplePlayer=(fullMatches[0].playerStats||[]).find(ps=>ps&&ps.playerId&&Number(ps.appearances||0)>0);const playerId=samplePlayer&&samplePlayer.playerId;
+const prePlayer=T.derivePlayerStatsFromHistory(w,playerId,1);
+const sampleLeagueKey=leagueKey;const preLeague=T.buildLeaguePlayerStatMap(w,sampleLeagueKey,'current');
+const sampleClubId=fullMatches[0].homeClubId;const preClub=T.buildClubCompetitionRows(w,sampleClubId,1);
+const preRecent=T.recentMatchesForClub(w,sampleClubId,5).map(m=>[m.fixtureId,m.homeGoals,m.awayGoals]);
+const prepStart=Date.now();const prepared=T.kf0260PrepareCompletedSeason(w,1);const prepareMs=Date.now()-prepStart;
+w.meta.seasonNumber=2;const commitStart=Date.now();const committed=T.kf0260CommitCompletedSeason(w,prepared);const commitMs=Date.now()-commitStart;
+const results=((((w.history||{}).seasonResults||{})[1]||{}).results)||[];
+const playerSeasons=(((w.history||{}).playerSeasons||{})[1])||{};
+const contextSnap=((w.history||{}).previousSeasonRecentContext)||{};
+const archivedBytes=Buffer.byteLength(JSON.stringify({results,playerSeasons,contextSnap}));
+const postPlayer=T.derivePlayerStatsFromHistory(w,playerId,1);
+const postLeague=T.buildLeaguePlayerStatMap(w,sampleLeagueKey,1);
+const postClub=T.buildClubCompetitionRows(w,sampleClubId,1);
+const postRecent=T.recentMatchesForClub(w,sampleClubId,5).map(m=>[m.fixtureId,m.homeGoals,m.awayGoals]);
+check('Verdichtung entfernt echte Vollmatches der abgeschlossenen Saison',committed.removedMatches===TARGET&&(w.history.matches||[]).length===0,{committed,currentMatches:(w.history.matches||[]).length});
+check('Jedes echte Match bleibt als kompaktes Ergebnis erhalten',results.length===TARGET,{results:results.length,target:TARGET});
+check('Kompakte Ergebnisse enthalten keine Matchdetail-Payloads',results.every(r=>!('playerStats'in r)&&!('events'in r)&&!('matchStats'in r)&&!('homeLineupIds'in r)&&!('awayLineupIds'in r)&&!('id'in r)),{});
+check('Spieler-Saisonwerte bleiben nach echten Matches identisch',JSON.stringify(prePlayer)===JSON.stringify(postPlayer),{playerId,before:prePlayer,after:postPlayer});
+function rowSig(map,id){const r=(map||{})[id]||null;if(!r)return null;return {apps:r.appearances,goals:r.goals,assists:r.assists,y:r.yellow,yr:r.yellowRed,red:r.red,ratingTotal:r.ratingTotal,ratingCount:r.ratingCount,cleanSheets:r.cleanSheets,goalsAgainst:r.goalsAgainst};}
+check('Historische Ligaspielerstatistik bleibt nach Verdichtung identisch',JSON.stringify(rowSig(preLeague,playerId))===JSON.stringify(rowSig(postLeague,playerId)),{before:rowSig(preLeague,playerId),after:rowSig(postLeague,playerId)});
+function clubSig(rows){return (rows||[]).map(r=>({competition:r.competition,leagueKey:r.leagueKey,played:r.played,wins:r.wins,draws:r.draws,losses:r.losses,gf:r.goalsFor,ga:r.goalsAgainst}));}
+check('Historische Vereinsstatistik bleibt nach Verdichtung identisch',JSON.stringify(clubSig(preClub))===JSON.stringify(clubSig(postClub)),{before:clubSig(preClub),after:clubSig(postClub)});
+check('Letzte-fuenf-Kontext bleibt fuer Simulation identisch',JSON.stringify(preRecent)===JSON.stringify(postRecent),{before:preRecent,after:postRecent});
+const maxRecent=Math.max(0,...Object.values(contextSnap.byClub||{}).map(a=>(a||[]).length));
+check('Vorsaison-Kontext ist auf maximal fuenf Spiele je Club begrenzt',maxRecent<=5,{maxRecent,clubs:Object.keys(contextSnap.byClub||{}).length,matchesById:Object.keys(contextSnap.matchesById||{}).length});
+check('Laufender Matchindex ist deutlich kleiner als die ausgelagerten Vollmatches',currentIndexBytes<fullStoreBytes*0.25,{currentIndexBytes,fullStoreBytes,ratio:currentIndexBytes/fullStoreBytes});
+check('Abgeschlossene Saison wird gegenueber dem laufenden Index weiter verdichtet',archivedBytes<currentIndexBytes*0.65,{currentIndexBytes,archivedBytes,ratio:archivedBytes/currentIndexBytes});
+report.metrics={matches:TARGET,simMs,bonusEventsCount,financeEventKeyCount,prepareMs,commitMs,currentIndexBytes,currentIndexMB:+(currentIndexBytes/1048576).toFixed(2),fullStoreBytes,fullStoreMB:+(fullStoreBytes/1048576).toFixed(2),archivedBytes,archivedMB:+(archivedBytes/1048576).toFixed(2),archiveRatio:+(archivedBytes/currentIndexBytes).toFixed(4),reductionPct:+((1-archivedBytes/currentIndexBytes)*100).toFixed(1),resultBytes:Buffer.byteLength(JSON.stringify(results)),playerSeasonBytes:Buffer.byteLength(JSON.stringify(playerSeasons)),recentContextBytes:Buffer.byteLength(JSON.stringify(contextSnap)),playerSeasonCount:Object.keys(playerSeasons.byPlayerId||{}).length};
+const out=path.join(root,'reports','kf_0.26.0_real_match_storage_sample_test.json');fs.writeFileSync(out,JSON.stringify(report,null,2));console.log(JSON.stringify({...report,reportFile:out},null,2));process.exit(report.passed?0:1);

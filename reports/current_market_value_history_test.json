@@ -1,0 +1,225 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "Fresh worlds use playerMarketValues and no legacy snapshot array",
+      "ok": true,
+      "details": {
+        "legacy": false,
+        "historyPlayers": 0
+      }
+    },
+    {
+      "name": "Midseason valuation runs immediately before transfer window 2",
+      "ok": true,
+      "details": {
+        "targetSlot": "w25-end",
+        "result": {
+          "updated": 10632,
+          "historyEntries": 10632,
+          "strengthEntries": 0,
+          "snapshots": 10632,
+          "phase": "midseason",
+          "skipped": false
+        },
+        "row": {
+          "season": 1,
+          "phase": "midseason",
+          "reason": "midseason",
+          "marketValue": 9.187,
+          "change": 0,
+          "changePct": 0
+        }
+      }
+    },
+    {
+      "name": "Market-value history stores value and only change-oriented metadata",
+      "ok": true,
+      "details": {
+        "row": {
+          "season": 1,
+          "phase": "midseason",
+          "reason": "midseason",
+          "marketValue": 9.187,
+          "change": 0,
+          "changePct": 0
+        }
+      }
+    },
+    {
+      "name": "Repeated entry into the same checkpoint cannot create a third/duplicate valuation",
+      "ok": true,
+      "details": {
+        "first": 10632,
+        "repeat": 10632
+      }
+    },
+    {
+      "name": "Season start is not a market-value checkpoint",
+      "ok": true,
+      "details": {
+        "startAttempt": {
+          "updated": 0,
+          "historyEntries": 0,
+          "skipped": true,
+          "reason": "season_start_not_a_valuation_checkpoint"
+        },
+        "before": 9.187,
+        "after": 9.187
+      }
+    },
+    {
+      "name": "Season end creates the second and final valuation point for the season",
+      "ok": true,
+      "details": {
+        "result": {
+          "updated": 10632,
+          "historyEntries": 10632,
+          "strengthEntries": 0,
+          "snapshots": 10632,
+          "phase": "seasonEnd",
+          "skipped": false
+        },
+        "rows": [
+          {
+            "season": 1,
+            "phase": "midseason",
+            "reason": "midseason",
+            "marketValue": 9.187,
+            "change": 0,
+            "changePct": 0
+          },
+          {
+            "season": 1,
+            "phase": "seasonEnd",
+            "reason": "season_end",
+            "marketValue": 9.187,
+            "change": 0,
+            "changePct": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "A season can never gain more than two market-value entries",
+      "ok": true,
+      "details": {
+        "repeat": {
+          "updated": 0,
+          "historyEntries": 0,
+          "snapshots": 0,
+          "phase": "seasonEnd",
+          "skipped": true,
+          "reason": "valuation_checkpoint_already_done"
+        },
+        "rows": [
+          {
+            "season": 1,
+            "phase": "midseason",
+            "reason": "midseason",
+            "marketValue": 9.187,
+            "change": 0,
+            "changePct": 0
+          },
+          {
+            "season": 1,
+            "phase": "seasonEnd",
+            "reason": "season_end",
+            "marketValue": 9.187,
+            "change": 0,
+            "changePct": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "All player histories obey maximum two entries per season",
+      "ok": true,
+      "details": {
+        "invalid": []
+      }
+    },
+    {
+      "name": "Reading market-value history does not silently migrate legacy snapshots",
+      "ok": true,
+      "details": {
+        "rows": [],
+        "legacyCount": 2
+      }
+    },
+    {
+      "name": "Explicit world migration converts legacy market-value snapshots",
+      "ok": true,
+      "details": {
+        "migration": {
+          "contracts": 0,
+          "formations": 0,
+          "injuries": 0,
+          "marketValues": 2,
+          "suspensions": 0,
+          "historyMigration": {
+            "seasons": 0,
+            "matches": 0
+          },
+          "bonusMigration": {
+            "legacyEvents": 0,
+            "currentSeasonEvents": 0,
+            "financeKeysAttached": 0,
+            "financeKeysAlreadyPresent": 0,
+            "legacyContainerCleared": true
+          },
+          "retiredPlayersMigrated": 0,
+          "matchStoreMigration": {
+            "archived": 0,
+            "alreadyCompact": 0,
+            "missingDetails": 0,
+            "repositoryMatches": 0
+          }
+        },
+        "rows": [
+          {
+            "season": 7,
+            "phase": "midseason",
+            "reason": "midseason",
+            "marketValue": 12.5,
+            "change": 0,
+            "changePct": 0
+          },
+          {
+            "season": 7,
+            "phase": "seasonEnd",
+            "reason": "season_end",
+            "marketValue": 14,
+            "change": 1.5,
+            "changePct": 12
+          }
+        ]
+      }
+    }
+  ],
+  "metrics": {
+    "players": 10632,
+    "historyPlayers": 1,
+    "historyEntries": 2,
+    "samplePlayer": "player-mudxhiih-h3klil",
+    "sampleInitialValue": 9.187,
+    "sampleRows": [
+      {
+        "season": 1,
+        "phase": "midseason",
+        "reason": "midseason",
+        "marketValue": 9.187,
+        "change": 0,
+        "changePct": 0
+      },
+      {
+        "season": 1,
+        "phase": "seasonEnd",
+        "reason": "season_end",
+        "marketValue": 9.187,
+        "change": 0,
+        "changePct": 0
+      }
+    ]
+  }
+}

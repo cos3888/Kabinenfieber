@@ -1,0 +1,43 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "Runde-1-Auslosung sichtbar und erzeugt 14 Spiele",
+      "ok": true,
+      "details": {
+        "round": 1
+      }
+    },
+    {
+      "name": "Runde 1 hat 4 Liga-2-Duelle und 10 Liga-2/Liga-3-Duelle",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Runde-2-Auslosung fuer Erstligist sichtbar und erzeugt 16 Spiele",
+      "ok": true,
+      "details": {
+        "r2": 16
+      }
+    },
+    {
+      "name": "Gespielte Pokalspiele haben eindeutige Sieger",
+      "ok": true,
+      "details": {
+        "played": 17
+      }
+    },
+    {
+      "name": "Pokal-Historie wertet keine Remis als Endzustand",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Auslosungsmenue rendert im Fensterstil",
+      "ok": true,
+      "details": {
+        "htmlLen": 3793
+      }
+    }
+  ]
+}

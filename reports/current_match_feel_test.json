@@ -1,0 +1,749 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "Durchschnittliche Matchdichte liegt im spielbaren Korridor",
+      "ok": true,
+      "details": {
+        "sampleSize": 20,
+        "avgGoals": 3.2,
+        "avgXg": 3.15,
+        "avgShots": 16.6,
+        "avgReportEvents": 15.85,
+        "lateReportStarts": 0,
+        "extremeLowXgHighGoalMatches": 0,
+        "tacticalTimelineMatches": 17,
+        "textProblems": 0,
+        "textBlockCounts": {
+          "eventTextBlocks": 813,
+          "shortReports": 88,
+          "headlines": 70,
+          "summaries": 58,
+          "analysis": 166
+        }
+      }
+    },
+    {
+      "name": "Berichte starten nicht regelmäßig erst nach der Halbzeit",
+      "ok": true,
+      "details": {
+        "lateStarts": 0,
+        "sampleSize": 20
+      }
+    },
+    {
+      "name": "Berichte haben ausreichend Ereignisdichte",
+      "ok": true,
+      "details": {
+        "avgReportEvents": 15.85
+      }
+    },
+    {
+      "name": "Extreme 3-Tore-unter-0,8-xG-Fälle bleiben selten",
+      "ok": true,
+      "details": {
+        "extremes": 0
+      }
+    },
+    {
+      "name": "KI-Trainerreaktionen werden in der Sofortberechnung historisch gespeichert",
+      "ok": true,
+      "details": {
+        "tacticalTimelineCount": 17
+      }
+    },
+    {
+      "name": "Textausgabe enthält keine offenen Platzhalter oder alte ASCII-Umschreibungen",
+      "ok": true,
+      "details": {
+        "textProblems": []
+      }
+    },
+    {
+      "name": "Textfundament ist deutlich erweitert",
+      "ok": true,
+      "details": {
+        "eventTextBlocks": 813,
+        "shortReports": 88,
+        "headlines": 70,
+        "summaries": 58,
+        "analysis": 166
+      }
+    }
+  ],
+  "metrics": {
+    "sampleSize": 20,
+    "avgGoals": 3.2,
+    "avgXg": 3.15,
+    "avgShots": 16.6,
+    "avgReportEvents": 15.85,
+    "lateReportStarts": 0,
+    "extremeLowXgHighGoalMatches": 0,
+    "tacticalTimelineMatches": 17,
+    "textProblems": 0,
+    "textBlockCounts": {
+      "eventTextBlocks": 813,
+      "shortReports": 88,
+      "headlines": 70,
+      "summaries": 58,
+      "analysis": 166
+    }
+  },
+  "samples": [
+    {
+      "id": "match-mue4e7ib-h8e6l8",
+      "result": "3:3",
+      "xg": {
+        "home": 2.225,
+        "away": 2.102
+      },
+      "shots": {
+        "home": 6,
+        "away": 7
+      },
+      "reportEvents": 20,
+      "headline": "Später Druck verändert das Spiel",
+      "brief": "In der Schlussphase erhöhte Auenring das Risiko und brachte mehr Spieler in gefährliche Räume. Weserwerder verteidigte tiefer, musste aber mehrere brenzlige Szenen überstehen. Der späte Verlauf passte zur veränderten Ausrichtung.",
+      "timeline": {
+        "home": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": 2,
+              "attackStyle": 1,
+              "attackSide": 0,
+              "pressing": 1,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 1,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 1
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          },
+          {
+            "minute": 61,
+            "reason": "leading",
+            "intent": "protect_lead",
+            "phaseModifier": 0.93,
+            "tactics": {
+              "mentality": 2,
+              "attackStyle": 1,
+              "attackSide": 0,
+              "pressing": 1,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 1,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 1
+            },
+            "score": {
+              "for": 3,
+              "against": 1
+            }
+          },
+          {
+            "minute": 76,
+            "reason": "leading",
+            "intent": "protect_lead",
+            "phaseModifier": 0.82,
+            "tactics": {
+              "mentality": 2,
+              "attackStyle": 1,
+              "attackSide": 0,
+              "pressing": 1,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 1,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 1
+            },
+            "score": {
+              "for": 3,
+              "against": 2
+            }
+          }
+        ],
+        "away": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": 0,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 0,
+              "buildUp": 0,
+              "defensiveLine": 0,
+              "compactness": 0,
+              "offsideTrap": 0,
+              "transitionAttack": 0,
+              "transitionDefense": 0
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          },
+          {
+            "minute": 46,
+            "reason": "trailing",
+            "intent": "more_risk",
+            "phaseModifier": 1.07,
+            "tactics": {
+              "mentality": 0,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 0,
+              "buildUp": 0,
+              "defensiveLine": 0,
+              "compactness": 0,
+              "offsideTrap": 0,
+              "transitionAttack": 0,
+              "transitionDefense": 0
+            },
+            "score": {
+              "for": 1,
+              "against": 2
+            }
+          },
+          {
+            "minute": 61,
+            "reason": "trailing",
+            "intent": "more_risk",
+            "phaseModifier": 1.14,
+            "tactics": {
+              "mentality": 0,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 0,
+              "buildUp": 0,
+              "defensiveLine": 0,
+              "compactness": 0,
+              "offsideTrap": 0,
+              "transitionAttack": 0,
+              "transitionDefense": 0
+            },
+            "score": {
+              "for": 1,
+              "against": 3
+            }
+          },
+          {
+            "minute": 76,
+            "reason": "trailing",
+            "intent": "more_risk",
+            "phaseModifier": 1.3,
+            "tactics": {
+              "mentality": 0,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 0,
+              "buildUp": 0,
+              "defensiveLine": 0,
+              "compactness": 0,
+              "offsideTrap": 0,
+              "transitionAttack": 0,
+              "transitionDefense": 0
+            },
+            "score": {
+              "for": 2,
+              "against": 3
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "match-mue4e7iy-wgzgwb",
+      "result": "1:0",
+      "xg": {
+        "home": 2.029,
+        "away": 1.253
+      },
+      "shots": {
+        "home": 9,
+        "away": 7
+      },
+      "reportEvents": 12,
+      "headline": "Schlüsselszenen geben die Richtung vor",
+      "brief": "Stahlfeld gewann die Szenen, in denen aus Kontrolle echte Gefahr wurde. Betzenhöhe arbeitete sich immer wieder zurück, bekam die entscheidenden Räume aber nicht dauerhaft geschlossen. So kippt das Spiel knapp in eine Richtung.",
+      "timeline": {
+        "home": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": -1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": -1,
+              "buildUp": 1,
+              "defensiveLine": -1,
+              "compactness": -1,
+              "offsideTrap": -1,
+              "transitionAttack": 1,
+              "transitionDefense": -1
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          },
+          {
+            "minute": 61,
+            "reason": "leading",
+            "intent": "protect_lead",
+            "phaseModifier": 0.93,
+            "tactics": {
+              "mentality": -1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": -1,
+              "buildUp": 1,
+              "defensiveLine": -1,
+              "compactness": -1,
+              "offsideTrap": -1,
+              "transitionAttack": 1,
+              "transitionDefense": -1
+            },
+            "score": {
+              "for": 1,
+              "against": 0
+            }
+          },
+          {
+            "minute": 76,
+            "reason": "leading",
+            "intent": "protect_lead",
+            "phaseModifier": 0.82,
+            "tactics": {
+              "mentality": -1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": -1,
+              "buildUp": 1,
+              "defensiveLine": -1,
+              "compactness": -1,
+              "offsideTrap": -1,
+              "transitionAttack": 1,
+              "transitionDefense": -1
+            },
+            "score": {
+              "for": 1,
+              "against": 0
+            }
+          }
+        ],
+        "away": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": 1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 2,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 0,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 2
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          },
+          {
+            "minute": 31,
+            "reason": "stabilize_problem_zone",
+            "intent": "stabilize",
+            "phaseModifier": 0.95,
+            "tactics": {
+              "mentality": 1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 2,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 0,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 2
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          },
+          {
+            "minute": 46,
+            "reason": "trailing",
+            "intent": "more_risk",
+            "phaseModifier": 1.02,
+            "tactics": {
+              "mentality": 1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 2,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 0,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 2
+            },
+            "score": {
+              "for": 0,
+              "against": 1
+            }
+          },
+          {
+            "minute": 61,
+            "reason": "trailing",
+            "intent": "more_risk",
+            "phaseModifier": 1.09,
+            "tactics": {
+              "mentality": 1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 2,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 0,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 2
+            },
+            "score": {
+              "for": 0,
+              "against": 1
+            }
+          },
+          {
+            "minute": 76,
+            "reason": "trailing",
+            "intent": "more_risk",
+            "phaseModifier": 1.25,
+            "tactics": {
+              "mentality": 1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 2,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 0,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 2
+            },
+            "score": {
+              "for": 0,
+              "against": 1
+            }
+          },
+          {
+            "minute": 76,
+            "reason": "stabilize_problem_zone",
+            "intent": "stabilize",
+            "phaseModifier": 1.2,
+            "tactics": {
+              "mentality": 1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 2,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 0,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 2
+            },
+            "score": {
+              "for": 0,
+              "against": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "match-mue4e7jq-a386fc",
+      "result": "1:1",
+      "xg": {
+        "home": 2.486,
+        "away": 1.149
+      },
+      "shots": {
+        "home": 11,
+        "away": 8
+      },
+      "reportEvents": 20,
+      "headline": "Mehr Chancen, kein Lohn",
+      "brief": "Spreekern erspielte sich die besseren Möglichkeiten, fand aber nicht oft genug den sauberen Abschluss. Brückenfurt verteidigte mit Einsatz und überstand mehrere Druckphasen. Das Ergebnis fühlt sich für Spreekern deshalb eher wie zwei verlorene Punkte an.",
+      "timeline": {
+        "home": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": 2,
+              "attackStyle": 1,
+              "attackSide": 0,
+              "pressing": 2,
+              "buildUp": 1,
+              "defensiveLine": 2,
+              "compactness": 1,
+              "offsideTrap": 1,
+              "transitionAttack": 2,
+              "transitionDefense": 2
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          }
+        ],
+        "away": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": 1,
+              "attackStyle": -1,
+              "attackSide": 0,
+              "pressing": 1,
+              "buildUp": -1,
+              "defensiveLine": 1,
+              "compactness": 0,
+              "offsideTrap": 0,
+              "transitionAttack": -1,
+              "transitionDefense": 1
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          },
+          {
+            "minute": 31,
+            "reason": "trailing",
+            "intent": "more_risk",
+            "phaseModifier": 1.07,
+            "tactics": {
+              "mentality": 1,
+              "attackStyle": -1,
+              "attackSide": 0,
+              "pressing": 1,
+              "buildUp": -1,
+              "defensiveLine": 1,
+              "compactness": 0,
+              "offsideTrap": 0,
+              "transitionAttack": -1,
+              "transitionDefense": 1
+            },
+            "score": {
+              "for": 0,
+              "against": 1
+            }
+          },
+          {
+            "minute": 46,
+            "reason": "trailing",
+            "intent": "more_risk",
+            "phaseModifier": 1.14,
+            "tactics": {
+              "mentality": 1,
+              "attackStyle": -1,
+              "attackSide": 0,
+              "pressing": 1,
+              "buildUp": -1,
+              "defensiveLine": 1,
+              "compactness": 0,
+              "offsideTrap": 0,
+              "transitionAttack": -1,
+              "transitionDefense": 1
+            },
+            "score": {
+              "for": 0,
+              "against": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "match-mue4e7ke-0uvnm1",
+      "result": "0:1",
+      "xg": {
+        "home": 0.858,
+        "away": 0.593
+      },
+      "shots": {
+        "home": 4,
+        "away": 10
+      },
+      "reportEvents": 12,
+      "headline": "Wenige Momente, großer Ertrag",
+      "brief": "Burgstadt brauchte keine dauerhafte Überlegenheit, um das Spiel zu entscheiden. Die vorhandenen Abschlüsse wurden mit hoher Konsequenz genutzt, während Saarwerk trotz eigener Chancen weniger Wirkung erzielte. Das Ergebnis erzählt deshalb vor allem von Effizienz.",
+      "timeline": {
+        "home": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": 0,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 0,
+              "buildUp": 0,
+              "defensiveLine": 0,
+              "compactness": 0,
+              "offsideTrap": 0,
+              "transitionAttack": 0,
+              "transitionDefense": 0
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          }
+        ],
+        "away": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": 0,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": 0,
+              "buildUp": 0,
+              "defensiveLine": 0,
+              "compactness": 0,
+              "offsideTrap": 0,
+              "transitionAttack": 0,
+              "transitionDefense": 0
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "match-mue4e7kz-frwuo8",
+      "result": "1:1",
+      "xg": {
+        "home": 2.902,
+        "away": 1.101
+      },
+      "shots": {
+        "home": 11,
+        "away": 7
+      },
+      "reportEvents": 17,
+      "headline": "Chancenplus bleibt ohne Lohn",
+      "brief": "Ruhrwerk brachte genug Qualität in die gefährlichen Räume, doch der Ertrag blieb zu gering. Dombogen überstand mehrere kritische Momente und hielt das Spiel über Torwartaktionen und konsequente Abschlüsse auf der eigenen Seite.",
+      "timeline": {
+        "home": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": -1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": -1,
+              "buildUp": 1,
+              "defensiveLine": -1,
+              "compactness": -1,
+              "offsideTrap": -1,
+              "transitionAttack": 1,
+              "transitionDefense": -1
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          },
+          {
+            "minute": 31,
+            "reason": "trailing",
+            "intent": "more_risk",
+            "phaseModifier": 1.07,
+            "tactics": {
+              "mentality": -1,
+              "attackStyle": 0,
+              "attackSide": 0,
+              "pressing": -1,
+              "buildUp": 1,
+              "defensiveLine": -1,
+              "compactness": -1,
+              "offsideTrap": -1,
+              "transitionAttack": 1,
+              "transitionDefense": -1
+            },
+            "score": {
+              "for": 0,
+              "against": 1
+            }
+          }
+        ],
+        "away": [
+          {
+            "minute": 0,
+            "reason": "start",
+            "intent": "start",
+            "phaseModifier": 1,
+            "tactics": {
+              "mentality": 2,
+              "attackStyle": 1,
+              "attackSide": 0,
+              "pressing": 1,
+              "buildUp": 0,
+              "defensiveLine": 1,
+              "compactness": 1,
+              "offsideTrap": 1,
+              "transitionAttack": 1,
+              "transitionDefense": 1
+            },
+            "score": {
+              "for": 0,
+              "against": 0
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

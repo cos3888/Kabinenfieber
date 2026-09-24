@@ -1,0 +1,113 @@
+{
+  "version": "0.27.0",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Career initializes as KF_0.27.0",
+      "ok": true,
+      "details": {
+        "schema": "kf-core-0.27.0",
+        "initMs": 15783
+      }
+    },
+    {
+      "name": "Full season completes before rollover",
+      "ok": true,
+      "details": {
+        "fatal": null,
+        "steps": 102,
+        "matches": 7736,
+        "simMs": 265191
+      }
+    },
+    {
+      "name": "Every current-season compact match has exactly one full store payload",
+      "ok": true,
+      "details": {
+        "storeCount": 7736,
+        "indexCount": 7736,
+        "matches": 7736
+      }
+    },
+    {
+      "name": "Monolithic WorldRecord is JSON-serializable after match extraction",
+      "ok": true,
+      "details": {
+        "stringifyError": null,
+        "stringifyMs": 5010,
+        "stringifyMiB": 206.39
+      }
+    },
+    {
+      "name": "WorldRepository.save succeeds at end of full season",
+      "ok": true,
+      "details": {
+        "repositorySaveError": null
+      }
+    },
+    {
+      "name": "A report from an old matchday of the current season remains loadable on demand",
+      "ok": true,
+      "details": {
+        "sampleId": "match-mudxkrag-yug2nl",
+        "htmlLength": 5124
+      }
+    },
+    {
+      "name": "Season transition succeeds",
+      "ok": true,
+      "details": {
+        "type": "season-transition",
+        "season": 2,
+        "transitionMs": 20448
+      }
+    },
+    {
+      "name": "Full match store of completed season is deleted after successful compaction",
+      "ok": true,
+      "details": {
+        "beforeTransitionStore": 7736,
+        "afterStore": 0
+      }
+    }
+  ],
+  "metrics": {
+    "initMs": 15783,
+    "steps": 102,
+    "matches": 7736,
+    "simMs": 265191,
+    "transitionMs": 20448,
+    "initialRecordBytes": 34210892,
+    "preRecordBytes": 216420047,
+    "compactMatchesBytes": 47412424,
+    "fullMatchStoreBytes": 407542252,
+    "totalSeparatedPersistenceBytes": 623962299,
+    "financeEventBytes": 130916539,
+    "financeEvents": 256984,
+    "postTransitionRecordBytes": 73143542,
+    "storeCountBeforeTransition": 7736,
+    "storeCountAfterTransition": 0,
+    "stringifyBytes": 216420047,
+    "stringifyMs": 5010,
+    "baseline0262": {
+      "preRecordMiB": 550.9,
+      "fullMatchesMiB": 389.8,
+      "clubFinancesMiB": 124.9,
+      "postRecordMiB": 70
+    },
+    "sizesMiB": {
+      "initial": 32.63,
+      "worldRecordPre": 206.39,
+      "compactMatches": 45.22,
+      "fullMatchStore": 388.66,
+      "combined": 595.06,
+      "financeEvents": 124.85,
+      "postTransition": 69.76
+    },
+    "comparisonPct": {
+      "worldRecordVs0262": 37.5,
+      "worldRecordReductionVs0262": 62.5,
+      "combinedVs0262": 108
+    }
+  }
+}

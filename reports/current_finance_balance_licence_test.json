@@ -1,0 +1,291 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "Version is KF_0.26.2",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Country/league income calibration is central StaticData",
+      "ok": true,
+      "details": {
+        "countries": [
+          "Deutschland",
+          "England",
+          "Spanien",
+          "Frankreich",
+          "Italien",
+          "Portugal",
+          "Türkei",
+          "Niederlande"
+        ]
+      }
+    },
+    {
+      "name": "No generated start squad exceeds its base salary budget",
+      "ok": true,
+      "details": {
+        "overBudget": [],
+        "maxBaseBudgetRatio": 0.9261213720316622
+      }
+    },
+    {
+      "name": "Generated squads retain at least about eight percent board salary reserve",
+      "ok": true,
+      "details": {
+        "maxBaseBudgetRatio": 0.9261213720316622,
+        "median": 0.8649596632760435
+      }
+    },
+    {
+      "name": "Neutral club baseline plans around zero operating result",
+      "ok": true,
+      "details": {
+        "median": 0.03199999999999825,
+        "p25": -0.6770000000000009,
+        "p75": 0.9399999999999995
+      }
+    },
+    {
+      "name": "Most clubs start within a credible two-million corridor around zero",
+      "ok": true,
+      "details": {
+        "within2": 85.18518518518519,
+        "negativePct": 49.074074074074076,
+        "min": -3.414999999999999,
+        "max": 9.972999999999999
+      }
+    },
+    {
+      "name": "Every country/league median remains close to zero while differences survive",
+      "ok": true,
+      "details": {
+        "maxGroupMedian": 1.1390000000000002,
+        "groups": {
+          "Deutschland|L1": {
+            "median": 0.7200000000000006,
+            "within2": 61.111111111111114
+          },
+          "Deutschland|L2": {
+            "median": 0.14500000000000135,
+            "within2": 88.88888888888889
+          },
+          "Deutschland|L3": {
+            "median": 0.12399999999999967,
+            "within2": 83.33333333333334
+          },
+          "England|L1": {
+            "median": 0.4180000000000046,
+            "within2": 77.77777777777779
+          },
+          "England|L2": {
+            "median": -0.2660000000000018,
+            "within2": 66.66666666666666
+          },
+          "England|L3": {
+            "median": -0.34999999999999964,
+            "within2": 66.66666666666666
+          },
+          "Spanien|L1": {
+            "median": -0.4480000000000004,
+            "within2": 66.66666666666666
+          },
+          "Spanien|L2": {
+            "median": 0.14200000000000035,
+            "within2": 77.77777777777779
+          },
+          "Spanien|L3": {
+            "median": 0.2759999999999998,
+            "within2": 77.77777777777779
+          },
+          "Frankreich|L1": {
+            "median": -0.34999999999999964,
+            "within2": 94.44444444444444
+          },
+          "Frankreich|L2": {
+            "median": 0.05799999999999983,
+            "within2": 100
+          },
+          "Frankreich|L3": {
+            "median": 0.31399999999999983,
+            "within2": 94.44444444444444
+          },
+          "Italien|L1": {
+            "median": 0.982999999999997,
+            "within2": 66.66666666666666
+          },
+          "Italien|L2": {
+            "median": 1.1390000000000002,
+            "within2": 72.22222222222221
+          },
+          "Italien|L3": {
+            "median": 0.2250000000000001,
+            "within2": 100
+          },
+          "Portugal|L1": {
+            "median": 0.9220000000000006,
+            "within2": 77.77777777777779
+          },
+          "Portugal|L2": {
+            "median": -0.10699999999999932,
+            "within2": 88.88888888888889
+          },
+          "Portugal|L3": {
+            "median": -0.01100000000000012,
+            "within2": 100
+          },
+          "Türkei|L1": {
+            "median": -0.4229999999999996,
+            "within2": 83.33333333333334
+          },
+          "Türkei|L2": {
+            "median": -0.04299999999999926,
+            "within2": 100
+          },
+          "Türkei|L3": {
+            "median": 0.0029999999999997806,
+            "within2": 100
+          },
+          "Niederlande|L1": {
+            "median": -0.02399999999999869,
+            "within2": 100
+          },
+          "Niederlande|L2": {
+            "median": 0.14200000000000035,
+            "within2": 100
+          },
+          "Niederlande|L3": {
+            "median": 0.11899999999999988,
+            "within2": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "Surprise-relegation clubs use more contract-end clauses",
+      "ok": true,
+      "details": {
+        "lowRisk": {
+          "endShare": 0.6346718903036239,
+          "cutShare": 0.34427032321253676,
+          "total": 2042
+        },
+        "highRisk": {
+          "endShare": 0.40712589073634203,
+          "cutShare": 0.5344418052256532,
+          "total": 2105
+        }
+      }
+    },
+    {
+      "name": "Relegation-threatened clubs use wage cuts more often",
+      "ok": true,
+      "details": {
+        "lowRisk": {
+          "endShare": 0.6346718903036239,
+          "cutShare": 0.34427032321253676,
+          "total": 2042
+        },
+        "highRisk": {
+          "endShare": 0.40712589073634203,
+          "cutShare": 0.5344418052256532,
+          "total": 2105
+        }
+      }
+    },
+    {
+      "name": "Regularly expiring contract leaves future squad and licence asset",
+      "ok": true,
+      "details": {
+        "before": 24,
+        "after": 23
+      }
+    },
+    {
+      "name": "Relegation contract-end removes player only in relegation scenario",
+      "ok": true,
+      "details": {
+        "stay": 24,
+        "relegation": 23
+      }
+    },
+    {
+      "name": "Relegation wage cut keeps player but reduces scenario payroll",
+      "ok": true,
+      "details": {
+        "staySalary": 15.345,
+        "relegationSalary": 14.993
+      }
+    },
+    {
+      "name": "Fixed release fee caps exploitable squad value",
+      "ok": true,
+      "details": {
+        "withoutClause": 139.399,
+        "withClause": 132.399
+      }
+    },
+    {
+      "name": "Binding seven-million sale beats later five-million clause",
+      "ok": true,
+      "details": {
+        "owned": false,
+        "nextTransferNet": 7
+      }
+    },
+    {
+      "name": "Own loaned-out player remains asset but is not active while loan continues",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Loaned-in player is active but never counted as owned asset",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Licence thresholds remain exactly 5/15 percent",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Future scenarios visibly explain squad size, strength and exploitable value",
+      "ok": true,
+      "details": {
+        "renderMs": 159
+      }
+    },
+    {
+      "name": "Finance overview remains responsive after scenario projection",
+      "ok": true,
+      "details": {
+        "renderMs": 159
+      }
+    },
+    {
+      "name": "Final placement bonus is booked in old season before licence decision",
+      "ok": true,
+      "details": {
+        "beforePlacement": 0,
+        "afterPlacement": 7.125,
+        "expected": 7.125
+      }
+    },
+    {
+      "name": "Current runtime source is the authoritative app bundle",
+      "ok": true,
+      "details": {}
+    }
+  ],
+  "metrics": {
+    "version": "0.27.0",
+    "checks": 21,
+    "clubs": 432,
+    "operatingMedian": 0.03199999999999825,
+    "withinTwoMillionPercent": 85.18518518518519,
+    "maxCountryLeagueMedianDeviation": 1.1390000000000002,
+    "maxBaseBudgetRatio": 0.9261213720316622,
+    "renderMs": 159
+  }
+}

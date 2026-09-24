@@ -1,0 +1,157 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "10 lifecycle seasons were processed",
+      "ok": true,
+      "details": {
+        "seasons": 10
+      }
+    },
+    {
+      "name": "Retirees accumulate in compact historical store",
+      "ok": true,
+      "details": {
+        "retiredPlayers": 3077
+      }
+    },
+    {
+      "name": "Active truth shrinks exactly by archived retirements without duplicate identities",
+      "ok": true,
+      "details": {
+        "initialActive": 10679,
+        "activePlayers": 7602,
+        "retiredPlayers": 3077
+      }
+    },
+    {
+      "name": "Active byId and players.order stay aligned",
+      "ok": true,
+      "details": {
+        "byId": 7602,
+        "order": 7602
+      }
+    },
+    {
+      "name": "No retired player remains in active truth",
+      "ok": true,
+      "details": {
+        "activePlayers": 7602
+      }
+    },
+    {
+      "name": "Squad structures contain no retired or missing player references",
+      "ok": true,
+      "details": {
+        "missingSquadRefs": 0,
+        "retiredSquadRefs": 0
+      }
+    },
+    {
+      "name": "Retired archive contains no active simulation payload",
+      "ok": true,
+      "details": {
+        "badArchive": []
+      }
+    },
+    {
+      "name": "Compact retiree store is materially smaller than retaining full active-style player objects",
+      "ok": true,
+      "details": {
+        "archiveBytes": 1742843,
+        "avgActiveBytes": 1793,
+        "estimatedFullRetiredBytes": 5517717,
+        "ratio": 0.316
+      }
+    },
+    {
+      "name": "Retirement lifecycle runtime remains bounded across ten seasons",
+      "ok": true,
+      "details": {
+        "maxLifecycleMs": 389
+      }
+    }
+  ],
+  "metrics": {
+    "seasons": [
+      {
+        "season": 1,
+        "retiredThisSeason": 0,
+        "activePlayers": 10679,
+        "retiredPlayers": 0,
+        "lifecycleMs": 12
+      },
+      {
+        "season": 2,
+        "retiredThisSeason": 213,
+        "activePlayers": 10466,
+        "retiredPlayers": 213,
+        "lifecycleMs": 147
+      },
+      {
+        "season": 3,
+        "retiredThisSeason": 218,
+        "activePlayers": 10248,
+        "retiredPlayers": 431,
+        "lifecycleMs": 151
+      },
+      {
+        "season": 4,
+        "retiredThisSeason": 290,
+        "activePlayers": 9958,
+        "retiredPlayers": 721,
+        "lifecycleMs": 188
+      },
+      {
+        "season": 5,
+        "retiredThisSeason": 233,
+        "activePlayers": 9725,
+        "retiredPlayers": 954,
+        "lifecycleMs": 143
+      },
+      {
+        "season": 6,
+        "retiredThisSeason": 243,
+        "activePlayers": 9482,
+        "retiredPlayers": 1197,
+        "lifecycleMs": 151
+      },
+      {
+        "season": 7,
+        "retiredThisSeason": 275,
+        "activePlayers": 9207,
+        "retiredPlayers": 1472,
+        "lifecycleMs": 174
+      },
+      {
+        "season": 8,
+        "retiredThisSeason": 393,
+        "activePlayers": 8814,
+        "retiredPlayers": 1865,
+        "lifecycleMs": 266
+      },
+      {
+        "season": 9,
+        "retiredThisSeason": 512,
+        "activePlayers": 8302,
+        "retiredPlayers": 2377,
+        "lifecycleMs": 306
+      },
+      {
+        "season": 10,
+        "retiredThisSeason": 700,
+        "activePlayers": 7602,
+        "retiredPlayers": 3077,
+        "lifecycleMs": 389
+      }
+    ],
+    "storage": {
+      "retiredArchiveBytes": 1742843,
+      "retiredPlayers": 3077,
+      "avgActivePlayerBytes": 1793,
+      "estimatedFullRetiredBytes": 5517717,
+      "estimatedArchiveVsFullRatio": 0.316
+    },
+    "maxLifecycleMs": 389
+  }
+}

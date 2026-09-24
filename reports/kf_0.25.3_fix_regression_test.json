@@ -1,0 +1,72 @@
+{
+  "version": "0.25.3",
+  "passed": true,
+  "checks": [
+    {
+      "name": "KF_0.25.3-Aufstellungsfix ist im aktuellen Runtimepfad enthalten",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Simulationspfad initialisiert auch vorhandene Masken mit null-Placement",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Alle 432 Vereine erhalten eine gueltige Elf mit echtem TW",
+      "ok": true,
+      "details": {
+        "valid": 432,
+        "total": 432,
+        "bad": []
+      }
+    },
+    {
+      "name": "KI-Formationen bleiben im vorhandenen Korridor ihres Trainertyps",
+      "ok": true,
+      "details": {
+        "bad": []
+      }
+    },
+    {
+      "name": "Initialisierung aller Aufstellungen bleibt leichtgewichtig",
+      "ok": true,
+      "details": {
+        "ensureAllMs": 210
+      }
+    },
+    {
+      "name": "Auenring als KI faellt nicht mehr auf den ersten Kaderspieler als Torwart zurueck",
+      "ok": true,
+      "details": {
+        "formation": "formation_4_3_3",
+        "strength": 75,
+        "goalkeeper": "Paul Bachmann"
+      }
+    },
+    {
+      "name": "Vereinsuebernahme erzeugt keinen Aufstellungs-/Staerkevorteil mehr",
+      "ok": true,
+      "details": {
+        "aiStrength": 75,
+        "humanStrength": 75,
+        "formation": "formation_4_3_3"
+      }
+    },
+    {
+      "name": "Aufstellungsinitialisierung verwendet das uebergebene world statt AppState.world",
+      "ok": true,
+      "details": {
+        "formation": "formation_5_3_2"
+      }
+    }
+  ],
+  "metrics": {
+    "checks": 8,
+    "clubs": 432,
+    "validLineups": 432,
+    "ensureAllMs": 210,
+    "auenringAiStrength": 75,
+    "auenringHumanStrength": 75
+  }
+}

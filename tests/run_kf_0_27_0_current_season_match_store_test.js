@@ -1,0 +1,39 @@
+const fs=require('fs'),vm=require('vm'),path=require('path');
+const root=path.resolve(__dirname,'..'),read=r=>fs.readFileSync(path.join(root,r),'utf8');
+const report={version:'0.27.0',passed:true,checks:[],metrics:{}};
+function check(name,ok,details={}){report.checks.push({name,ok:!!ok,details});if(!ok)report.passed=false;}
+class E{constructor(){this.innerHTML='';this.style={};this.dataset={};this.value='';this.classList={add(){},remove(){},contains(){return false}}}addEventListener(){}removeEventListener(){}setAttribute(k,v){this[k]=v}getAttribute(k){return this[k]||null}querySelector(){return null}querySelectorAll(){return[]}closest(){return null}getBoundingClientRect(){return{width:1760,height:990}}}
+const els={'app-root':new E(),'modal-root':new E(),'app-shell':new E()};
+const document={readyState:'loading',documentElement:{clientWidth:1760,clientHeight:990,style:{setProperty(){}}},body:new E(),getElementById:id=>els[id]||null,addEventListener(t,cb){if(t==='DOMContentLoaded')this.cb=cb},removeEventListener(){},createElement(){return new E()},querySelector(){return null},querySelectorAll(){return[]}};
+const windowObj={innerWidth:1760,innerHeight:990,addEventListener(){},removeEventListener(){},requestAnimationFrame:cb=>cb(),cancelAnimationFrame(){},console,setTimeout,clearTimeout,document,Element:E,navigator:{userAgent:'node-test'},performance:{now:()=>Date.now()},localStorage:{getItem(){return null},setItem(){}}};
+const context=vm.createContext({window:windowObj,document,console,setTimeout,clearTimeout,Element:E,navigator:windowObj.navigator,performance:windowObj.performance,Map,WeakMap,Set});
+for(const f of ['src/static-data.js','src/db1-db2-data.js'])vm.runInContext(read(f),context,{filename:f});
+let code=read('src/app.bundle.js');
+code=code.replace(/\n\n  if \(document\.readyState === 'loading'\) \{/,`\nwindow.KFTest={AppState,createEmptyWorld,createWorldRecord,registerWorldRecord,WorldRepository,CurrentSeasonMatchRepository,recordPlayedMatch,matchById,renderMatchInfoModalBody,kf0270LoadFullCurrentSeasonMatch,kf0270CompactCurrentMatch,kf0270ArchiveExistingCurrentSeasonMatches,migrateWorldDataTruthToCurrent};\n\n  if (document.readyState === 'loading') {`);
+vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();const T=windowObj.KFTest;
+check('Runtime meldet KF_0.27.0',code.includes("var KF_VERSION = '0.27.1';")&&read('index.html').includes('KF_0.27.1')&&JSON.parse(read('package.json')).version==='0.27.1');
+function sampleWorld(id){
+  const w=T.createEmptyWorld({seasonNumber:1});w.meta.id=id;w.meta.initialized=true;
+  w.clubs.byId.c1={id:'c1',name:'Heim',leagueKey:'Test 1',leagueLevel:1,countryName:'Testland'};w.clubs.byId.c2={id:'c2',name:'Gast',leagueKey:'Test 1',leagueLevel:1,countryName:'Testland'};w.clubs.order=['c1','c2'];
+  w.players.byId.p1={id:'p1',fullName:'Max Heim',mainPosition:'ST',clubId:'c1'};w.players.byId.p2={id:'p2',fullName:'Tom Gast',mainPosition:'TW',clubId:'c2'};w.players.order=['p1','p2'];
+  w.squads.c1={playerIds:['p1'],lineup:['p1'],bench:[],reserve:[],tactics:{},lineupMaskState:{formationKey:'4-4-2',playerPlacementById:{}}};w.squads.c2={playerIds:['p2'],lineup:['p2'],bench:[],reserve:[],tactics:{},lineupMaskState:{formationKey:'4-4-2',playerPlacementById:{}}};
+  w.calendar.fixtures=[{id:'f1',season:1,slotKey:'w1-end',competition:'league',roundType:'league',leagueKey:'Test 1',homeClubId:'c1',awayClubId:'c2',status:'scheduled'}];
+  return w;
+}
+function sampleMatch(){return {id:'m1',status:'played',season:1,slotKey:'w1-end',competition:'league',competitionLabel:'Testliga',roundType:'league',leagueKey:'Test 1',homeClubId:'c1',awayClubId:'c2',homeGoals:2,awayGoals:1,homeLineupIds:['p1'],awayLineupIds:['p2'],events:[{type:'goal',minute:12,side:'home',playerId:'p1',playerNameAtMatch:'Max Heim',scoreHome:1,scoreAway:0}],playerStats:[{playerId:'p1',clubId:'c1',side:'home',starter:true,appearances:1,minutesPlayed:90,goals:2,assists:0,yellow:0,yellowRed:0,red:0,rating:7.2,matchPosition:'ST',shots:9,passes:40},{playerId:'p2',clubId:'c2',side:'away',starter:true,appearances:1,minutesPlayed:90,goals:0,assists:0,yellow:0,yellowRed:0,red:0,rating:5.8,matchPosition:'TW',saves:4,shots:0,passes:25}],matchStats:{expectedGoals:{home:1.8,away:.7},possession:{home:54,away:46},shots:{home:12,away:7},shotsOnTarget:{home:6,away:3},corners:{home:5,away:2},attacksByZone:{home:{left:2,center:5,right:3},away:{left:1,center:3,right:2}}},usedTactics:{home:{pressing:1},away:{pressing:-1}},simMeta:{huge:'x'.repeat(1000)},usedTacticsTimeline:[{minute:1,blob:'y'.repeat(1000)}]};}
+const w=sampleWorld('world-0270-test'),record=T.createWorldRecord({id:w.meta.id,gameState:w});T.registerWorldRecord(record);T.AppState.worldRecord=record;T.AppState.world=w;
+const full=sampleMatch(),fixture=w.calendar.fixtures[0];T.recordPlayedMatch(w,fixture,full);
+const compact=w.history.matches[0],stored=T.CurrentSeasonMatchRepository.load(w,'m1',1);
+check('Abgeschlossenes Match liegt im WorldRecord nur kompakt',compact&&compact.storageKind==='current-season-summary'&&!compact.events&&!compact.simMeta&&!compact.usedTacticsTimeline&&Array.isArray(compact.playerStats)&&!Object.prototype.hasOwnProperty.call(compact.playerStats[0],'shots'),{compactKeys:Object.keys(compact),playerStatKeys:Object.keys(compact.playerStats[0]||{})});
+check('Vollständiges Match liegt genau im separaten CurrentSeasonMatchRepository',stored&&stored.events&&stored.events.length===1&&stored.simMeta&&stored.usedTacticsTimeline&&T.CurrentSeasonMatchRepository.count(w,1)===1,{storeCount:T.CurrentSeasonMatchRepository.count(w,1)});
+check('Normale Matchabfragen liefern keinen Vollbericht in den aktiven Weltzustand zurück',T.matchById(w,'m1')===compact&&!T.matchById(w,'m1').events,{});
+const reportHtml=T.renderMatchInfoModalBody('m1','events');
+check('Spielinfo lädt Vollmatch bei Bedarf aus dem Match-Store',reportHtml.includes('Max Heim')&&reportHtml.includes('Spielbericht')&&T.matchById(w,'m1')===compact,{htmlLength:reportHtml.length});
+T.WorldRepository.save(record);const worldPayloadBytes=JSON.stringify(record).length,storeBytes=T.CurrentSeasonMatchRepository.serializedBytes(w,1),loaded=T.WorldRepository.load(record.id);
+check('WorldRepository Save/Load bleibt vom Vollmatch getrennt',loaded&&loaded.gameState.history.matches[0].storageKind==='current-season-summary'&&T.CurrentSeasonMatchRepository.has(loaded.gameState,'m1',1),{worldPayloadBytes,storeBytes});
+T.AppState.worldRecord=loaded;T.AppState.world=loaded.gameState;const reloadHtml=T.renderMatchInfoModalBody('m1','events');
+check('Spielbericht bleibt nach WorldRecord-Reload verfügbar',reloadHtml.includes('Max Heim')&&reloadHtml.includes('Spielbericht'),{htmlLength:reloadHtml.length});
+const legacy=sampleWorld('world-0270-migration');legacy.meta.schemaVersion='kf-core-0.26.2';const lm=sampleMatch();lm.id='legacy-m1';lm.fixtureId='f1';legacy.history.matches=[lm];legacy.calendar.fixtures[0].status='played';legacy.calendar.fixtures[0].playedMatchId='legacy-m1';const migration=T.migrateWorldDataTruthToCurrent(legacy);
+check('0.26.2-Migration lagert vorhandene Vollmatches ohne Informationsverlust aus',migration.matchStoreMigration.archived===1&&legacy.meta.schemaVersion==='kf-core-0.27.1'&&legacy.history.matches[0].storageKind==='current-season-summary'&&T.CurrentSeasonMatchRepository.load(legacy,'legacy-m1',1).events.length===1,{migration:migration.matchStoreMigration});
+report.metrics={fullMatchBytes:JSON.stringify(full).length,compactMatchBytes:JSON.stringify(compact).length,worldPayloadBytes,storeBytes,compactRatio:Math.round(JSON.stringify(compact).length/JSON.stringify(full).length*10000)/100};
+const out=path.join(root,'reports','kf_0.27.0_current_season_match_store_test.json');fs.writeFileSync(out,JSON.stringify(report,null,2));console.log(JSON.stringify({...report,reportFile:out},null,2));process.exit(report.passed?0:1);

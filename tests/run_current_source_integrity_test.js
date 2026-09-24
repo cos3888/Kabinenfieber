@@ -1,0 +1,24 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const read=r=>fs.readFileSync(path.join(root,r),'utf8');
+const report={passed:true,checks:[]};
+function check(name,ok,details={}){report.checks.push({name,ok:!!ok,details});if(!ok)report.passed=false;}
+const pkg=JSON.parse(read('package.json')),index=read('index.html'),app=read('src/app.bundle.js');
+check('Runtime version is consistently KF_0.27.1',pkg.version==='0.27.1'&&index.includes('KF_0.27.1')&&app.includes("var KF_VERSION = '0.27.1';"),{package:pkg.version});
+const srcFiles=fs.readdirSync(path.join(root,'src')).filter(n=>fs.statSync(path.join(root,'src',n)).isFile());
+check('Active src has no backup bundles or version patch sources',!srcFiles.some(n=>/\.bak$/i.test(n)||/^kf\d+.*patch/i.test(n)||/stability-patch/i.test(n)),{srcFiles});
+const styleFiles=fs.readdirSync(path.join(root,'src','styles')).filter(n=>fs.statSync(path.join(root,'src','styles',n)).isFile());
+check('Active styles have no backup or version patch files',styleFiles.length===1&&styleFiles[0]==='app.css',{styleFiles});
+const toolFiles=fs.existsSync(path.join(root,'tools'))?fs.readdirSync(path.join(root,'tools')):[];
+check('Historical bundle build chain is removed from active tools',!toolFiles.some(n=>/^build_\d+_bundle\.js$/.test(n)||n==='build_current_bundle.js'),{toolFiles});
+check('Browser loads the canonical runtime source directly',index.includes('src/app.bundle.js')&&!index.includes('app.bundle.generated.js'),{});
+check('Unused world.tactics duplicate store is removed',!app.includes('world.tactics[')&&!app.includes('tactics: {},\n      calendar:'),{});
+check('Root contains only the production HTML entry',fs.readdirSync(root).filter(n=>/\.html$/i.test(n)).join(',')==='index.html',{htmlFiles:fs.readdirSync(root).filter(n=>/\.html$/i.test(n))});
+check('Legacy standalone kit designer prototype is removed',!fs.existsSync(path.join(root,'assets','kit_designer')),{});
+check('World schema is KF_0.27.1 with external finance ledger',app.includes("world.meta.schemaVersion='kf-core-0.27.1'"),{});
+check('Parallel suspensions have one canonical current container',app.includes('Canonical current truth: player.suspensions[]')&&app.includes('player.suspensions = entries'),{});
+check('Contract, formation and injury truths are declared canonically',app.includes("playerContracts: 'world.players.byId[playerId].contract'")&&app.includes("currentFormation: 'world.squads[clubId].lineupMaskState.formationKey'")&&app.includes("currentInjuries: 'world.players.byId[playerId].injurySlotsLeft'"),{});
+check('Current regression suite includes data-truth invariants',read('tests/run_current_regression_suite.js').includes('run_current_data_truth_invariants_test.js'),{});
+check('Current regression suite includes legacy fixes, KF_0.26.0 history compaction and KF_0.26.1 bonus cleanup',read('tests/run_current_regression_suite.js').includes('run_kf_0_25_1_fix_regression_test.js')&&read('tests/run_current_regression_suite.js').includes('run_kf_0_25_2_fix_regression_test.js')&&read('tests/run_current_regression_suite.js').includes('run_kf_0_25_3_fix_regression_test.js')&&read('tests/run_current_regression_suite.js').includes('run_kf_0_25_4_fix_regression_test.js')&&read('tests/run_current_regression_suite.js').includes('run_kf_0_25_5_fix_regression_test.js')&&read('tests/run_current_regression_suite.js').includes('run_kf_0_25_6_fix_regression_test.js')&&read('tests/run_current_regression_suite.js').includes('run_kf_0_26_0_history_compaction_test.js')&&read('tests/run_current_regression_suite.js').includes('run_kf_0_26_1_bonus_event_cleanup_test.js'),{});
+check('Calendar scheduler uses time budget instead of fixed 8-match batch',app.includes('KF0252_SIM_TICK_BUDGET_MS')&&!app.includes('pendingSlot.fixtureIndex + 8'),{});
+const out=path.join(root,'reports','current_source_integrity_test.json');fs.writeFileSync(out,JSON.stringify(report,null,2));console.log(JSON.stringify({...report,reportFile:out},null,2));process.exit(report.passed?0:1);

@@ -1,0 +1,39 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "Produktionsbundle meldet package-Version",
+      "ok": true,
+      "details": {
+        "version": "0.27.0"
+      }
+    },
+    {
+      "name": "HTML-Titel ist auf package-Version aktualisiert",
+      "ok": true,
+      "details": {
+        "version": "0.27.0"
+      }
+    },
+    {
+      "name": "Architekturvertrag ist im Bundle vorhanden",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Matchhistorie-Zugriff nutzt playedMatchId zuerst",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Nicht geladene 0.5.0-Modulskelette sind nicht mehr im Produktions-src",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Alte Backup-Bundles sind nicht mehr im Produktions-src",
+      "ok": true,
+      "details": {}
+    }
+  ]
+}

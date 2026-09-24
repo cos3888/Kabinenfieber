@@ -1,0 +1,142 @@
+{
+  "version": "0.27.0",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Runtime meldet KF_0.26.2",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Neuwelt nutzt neue Schemata und Ruheständler-Container",
+      "ok": true,
+      "details": {
+        "schema": "kf-core-0.27.0"
+      }
+    },
+    {
+      "name": "Performance-Cache liefert exakt dieselbe angezeigte Stärke wie die vollständige zentrale Berechnung",
+      "ok": true,
+      "details": {}
+    },
+    {
+      "name": "Stärke-Akkumulator mittelt angezeigte Stärke und zählt Slots nur einmal",
+      "ok": true,
+      "details": {
+        "s1": 78,
+        "s2": 84,
+        "avg": 81,
+        "expected": 81,
+        "duplicate": {
+          "sampled": 0,
+          "duplicate": true
+        }
+      }
+    },
+    {
+      "name": "Save/Reload erhält laufenden Halbserien-Akkumulator",
+      "ok": true,
+      "details": {
+        "s3": 83,
+        "avgReload": 81.667,
+        "expectedReload": 81.667
+      }
+    },
+    {
+      "name": "Marktwert reagiert trotz unverändertem player.overall auf sichtbare Form/Fitness/Moral-Stärke",
+      "ok": true,
+      "details": {
+        "staleOverall": 83,
+        "currentLow": 77,
+        "currentHigh": 84,
+        "marketLow": 11.274,
+        "marketHigh": 11.297
+      }
+    },
+    {
+      "name": "Marktwert-Historie speichert am Stichtag denselben Zeitachsenpunkt mit averageStrength",
+      "ok": true,
+      "details": {
+        "row": {
+          "season": 1,
+          "phase": "midseason",
+          "reason": "midseason",
+          "marketValue": 11.297,
+          "change": 0,
+          "changePct": 0,
+          "averageStrength": 82
+        },
+        "havg": 82,
+        "strengthEntries": 1
+      }
+    },
+    {
+      "name": "Stärkeverlauf kann aus derselben Historie gerendert werden",
+      "ok": true,
+      "details": {
+        "averageStrength": 82
+      }
+    },
+    {
+      "name": "Ruheständler verschwindet vollständig aus aktivem Spielerbestand und Kadern",
+      "ok": true,
+      "details": {
+        "clubId": "ger1_fc_elbtor",
+        "retired": true
+      }
+    },
+    {
+      "name": "Ruheständlerprofil ist kompakt und enthält keine aktiven Simulationsdaten",
+      "ok": true,
+      "details": {
+        "archiveKeys": [
+          "id",
+          "playerId",
+          "fullName",
+          "firstName",
+          "lastName",
+          "nationality",
+          "birthYear",
+          "retirementAge",
+          "heightCm",
+          "weightKg",
+          "strongFoot",
+          "mainPosition",
+          "secondaryPosition1",
+          "secondaryPosition2",
+          "lastClubId",
+          "lastClubName",
+          "retiredSeason",
+          "retirementReason",
+          "lastDisplayedOverall",
+          "lastMarketValue",
+          "isRetiredArchive",
+          "retired"
+        ],
+        "beforeKeys": 72
+      }
+    },
+    {
+      "name": "Historisches Spielerprofil bleibt erreichbar und bietet nur historische Bereiche",
+      "ok": true,
+      "details": {
+        "htmlLength": 3311
+      }
+    },
+    {
+      "name": "0.26.1-Migration überführt alte vollständige Ruheständler ohne erfundene Stärkehistorie",
+      "ok": true,
+      "details": {
+        "migration": 1,
+        "schema": "kf-core-0.27.0"
+      }
+    }
+  ],
+  "metrics": {
+    "sampleAverage": 81.667,
+    "marketLow": 11.274,
+    "marketHigh": 11.297,
+    "historyAverage": 82,
+    "archiveKeys": 22
+  }
+}
