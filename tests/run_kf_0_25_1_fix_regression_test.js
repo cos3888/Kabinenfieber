@@ -13,7 +13,7 @@ vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)docu
 function seeded(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
 function sig(m){return JSON.stringify({hg:m.homeGoals,ag:m.awayGoals,xg:m.matchStats&&m.matchStats.expectedGoals,events:m.events,playerStats:m.playerStats,homeLineup:m.homeLineup,awayLineup:m.awayLineup,usedTactics:m.usedTactics});}
 T.startNewCareer();let w=T.AppState.world;
-check('World schema is migrated to current KF_0.26.2 runtime',w.meta&&w.meta.schemaVersion==='kf-core-0.27.1',{schema:w.meta&&w.meta.schemaVersion});
+check('World schema is migrated to current KF_0.26.2 runtime',w.meta&&w.meta.schemaVersion==='kf-core-0.27.2',{schema:w.meta&&w.meta.schemaVersion});
 // Aufstellung: waehle einen tatsaechlich auf dem Feld platzierten Spieler.
 const club=w.clubs.byId[w.clubs.order[0]],squad=w.squads[club.id],fieldId=(squad.lineup||[])[0]||(squad.playerIds||[])[0];
 let assignment=null,error=null;try{assignment=T.playerFieldAssignment(club,squad,fieldId);}catch(e){error=String(e);}check('Aufstellungszuordnung wirft keinen world-ReferenceError',!error&&assignment&&assignment.slotId,{error,assignment});

@@ -1,10 +1,10 @@
-# GitHub-Umstellung – Ausgangsbasis KF_0.27.1
+# GitHub-Umstellung – Ausgangsbasis KF_0.27.2
 
 Stand: 2026-09-24
 
 ## Ziel
 
-KF_0.27.1 wird als saubere neue Repository-Basis verwendet. Der bestehende Spielkern und die relative Dateistruktur bleiben zunächst unverändert, damit lokale ZIP-Tests und GitHub Pages weiterhin denselben Frontendstand verwenden können.
+KF_0.27.2 ist die bereinigte Repository-Basis. Der Spielkern bleibt fachlich unverändert; entfernt wurden nachweislich obsolete Assets und doppelte Entwicklungsartefakte. Der bestehende Spielkern und die relative Dateistruktur bleiben zunächst unverändert, damit lokale ZIP-Tests und GitHub Pages weiterhin denselben Frontendstand verwenden können.
 
 ## Bewusste Entscheidungen
 
@@ -22,4 +22,4 @@ Die vorhandene KF_0.27.1-Struktur bleibt vorerst erhalten. Ergänzt wurden ledig
 
 `npm run assets:check`
 
-liefert eine vollständige Liste fehlender Vereinswappen und Trikots. Damit werden Assetlücken beim GitHub-Neustart sichtbar, ohne sie stillschweigend mit falschen Dateien zu füllen.
+liefert die Wappenabdeckung sowie die Vollstaendigkeit der gemeinsam genutzten Trikotdesigner-Bases und -Masken. Club-spezifische Trikot-PNGs sind kein Bestandteil der aktuellen Architektur mehr.

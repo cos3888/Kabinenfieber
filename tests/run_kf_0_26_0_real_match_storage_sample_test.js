@@ -10,7 +10,7 @@ const windowObj={innerWidth:1760,innerHeight:990,addEventListener(){},removeEven
 const context=vm.createContext({window:windowObj,document,console,setTimeout,clearTimeout,Element:E,navigator:windowObj.navigator,performance:windowObj.performance,Math:math,Map,WeakMap,Set});
 for(const f of ['src/static-data.js','src/db1-db2-data.js'])vm.runInContext(read(f),context,{filename:f});
 let code=read('src/app.bundle.js');
-code=code.replace(/\n  if \(document\.readyState === 'loading'\) \{/,`\n  window.KFTest={AppState,startNewCareer,simulateLeagueFixture,recordPlayedMatch,kf0260PrepareCompletedSeason,kf0260CommitCompletedSeason,derivePlayerStatsFromHistory,buildLeaguePlayerStatMap,buildClubCompetitionRows,recentMatchesForClub,CurrentSeasonMatchRepository};\n  if (document.readyState === 'loading') {`);
+code=code.replace(/\n  if \(document\.readyState === 'loading'\) \{/,`\n  window.KFTest={AppState,startNewCareer,simulateLeagueFixture,recordPlayedMatch,kf0260PrepareCompletedSeason,kf0260CommitCompletedSeason,derivePlayerStatsFromHistory,buildLeaguePlayerStatMap,buildClubCompetitionRows,recentMatchesForClub,CurrentSeasonMatchRepository,CurrentSeasonFinanceRepository};\n  if (document.readyState === 'loading') {`);
 vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();const T=windowObj.KFTest;
 T.startNewCareer();const w=T.AppState.world,TARGET=180;
 const leagueKey=((w.clubs.byId[w.clubs.order[0]]||{}).leagueKey)||'Deutschland 1';
@@ -18,7 +18,7 @@ const fixtures=(w.calendar.fixtures||[]).filter(f=>Number(f.season||1)===1&&f.st
 const t0=Date.now();for(const f of fixtures){T.recordPlayedMatch(w,f,T.simulateLeagueFixture(w,f));}const simMs=Date.now()-t0;
 const fullMatches=(w.history.matches||[]).slice();
 const bonusEventsCount=((w.history||{}).bonusEvents||[]).length;
-const financeEventKeyCount=Object.values(((w.clubFinances||{}).byClub)||{}).reduce((sum,entry)=>sum+((entry&&entry.financeEvents)||[]).filter(ev=>ev&&ev.eventKey).length,0);
+const financeEventKeyCount=T.CurrentSeasonFinanceRepository.eventKeys(w,1).length;
 check('Stichprobe verwendet echte simulierte KF-Matches',fullMatches.length===TARGET&&fullMatches.every(m=>Array.isArray(m.playerStats)&&m.playerStats.length>0&&m.matchStats),{matches:fullMatches.length,simMs});
 check('KF_0.26.2 erzeugt bei echten Matches keine wachsende Bonus-Historie',bonusEventsCount===0&&financeEventKeyCount>0,{bonusEventsCount,financeEventKeyCount});
 const currentIndexBytes=Buffer.byteLength(JSON.stringify(fullMatches));

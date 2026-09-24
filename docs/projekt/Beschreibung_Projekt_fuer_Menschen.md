@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.27.1
+# Kabinenfieber - Stand KF_0.27.2
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,12 +8,12 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.27.1`
+App-Version: `KF_0.27.2`
 
 Persistierte Schemas:
 
-- Fussballwelt/GameState: `kf-core-0.27.1`
-- WorldRecord: `kf-world-record-0.27.1`
+- Fussballwelt/GameState: `kf-core-0.27.2`
+- WorldRecord: `kf-world-record-0.27.2`
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
@@ -322,7 +322,7 @@ Diese Regel wurde durch KF_0.26.1 nicht veraendert.
 
 Der groessere KI-Trainer-/Clubphilosophieblock bleibt geplant, wird aber nicht vor die technische Bereinigung geschoben.
 
-## 15. Tests aktueller Stand KF_0.27.1
+## 15. Tests aktueller Stand KF_0.27.2
 
 Die vorhandenen Core-/Finance-/Historien-/Sponsor-/Transfer-/Matchregressionen sowie die neuen 0.26.2-Spezialtests sind bestanden.
 
@@ -367,6 +367,21 @@ Das entspricht dem Projektgrundsatz: Ressourcen sparen, ohne relevante Fussballg
 - Vereinswappen werden einmalig ueber den normalisierten Vereinsnamen importiert und danach ausschliesslich ueber `clubId`/`crestAsset` referenziert.
 - Die UI nutzt bei fehlendem Wappen weiterhin den vorhandenen Crest-Placeholder.
 - Acht aktuelle Vereine aus Tuerkei 3 haben in der bereitgestellten Wappenquelle noch kein passendes Wappen und bleiben bis zur Nachlieferung im Fallback.
-- Deutschland 3 weist im bestehenden KF_0.27.1-Assetstand 18 fehlende Heim- und 17 fehlende Auswaertstrikots auf. Dieser Altbestand wird im Repository-Neustart nur dokumentiert, nicht stillschweigend veraendert.
+- Beim Audit des KF_0.27.1-Standes wurden fehlende club-spezifische Heim-/Auswaerts-PNGs sichtbar. KF_0.27.2 hat anschliessend geklaert, dass diese Dateien nur alte 1x1-Platzhalter waren und vollstaendig entfallen koennen, weil der Trikotdesigner die aktuelle Wahrheit ist.
 - Die neue Sponsorenliste und Sponsorengrafiken werden bewusst **nicht** integriert; sie bleiben ein spaeterer eigener Funktionsblock.
 - Lokale Save-/Serverdaten, `.env` und Import-Zwischenordner werden ueber `.gitignore` aus dem Repository gehalten.
+
+
+## 18. KF_0.27.2 - Repository-/Asset-Bereinigung
+
+KF_0.27.2 veraendert kein Gameplay. Die Version entfernt nachweislich obsolete Repository-/Assetreste, damit der neue GitHub-Stand nicht alte Wahrheiten weitertraegt.
+
+- Vereinswappen bleiben unter `assets/clubs/<clubId>/crest.png` die einzige club-spezifische Bilddatei.
+- `homeKitAsset` und `awayKitAsset` wurden aus DB3, StaticData und neuen Weltobjekten entfernt; alte Spielstaende verlieren diese zwei ungenutzten Legacy-Felder bei der Migration.
+- Heim-/Auswaertstrikots werden aus den bestehenden Trikotdesigner-Daten und den gemeinsamen Bases/Masken unter `assets/kits` gerendert.
+- alte 1x1-Trikotplatzhalter, tote Kit-Templates, doppelte Icons/Tiles und sonstige bestaetigte Altassets wurden entfernt.
+- reproduzierbare Test-JSONs werden nicht mehr versioniert; die fachlichen Release-/Validierungsberichte bleiben erhalten.
+- die groessere Doppelung unveraenderlicher Vereinsstammdaten zwischen StaticData und `world.clubs` ist bewusst **nicht** Teil dieses Fixes und bleibt ein spaeterer Strukturblock.
+- Bei der Regression wurde ein Legacy-Migrationsrandfall korrigiert: noch eingebettete KF_0.26.0-FinanceEvents werden fuer die eventKey-Nachmigration gelesen, bevor der Ledger in den CurrentSeasonFinanceRepository verschoben wird.
+
+Validierung KF_0.27.2: Kern-, Migrations-, UI-, Match-, Finance- und Mehrsaisontests bestanden. Der Trikotdesigner besitzt 20/20 Basisfarben, 5/5 Stilmasken und 3/3 Akzentmasken. Details: `reports/kf_0.27.2_validation_summary.md`.

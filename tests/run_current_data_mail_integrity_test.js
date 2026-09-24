@@ -8,7 +8,7 @@ const context=vm.createContext({window:windowObj,document,console,setTimeout,cle
 for(const f of ['src/static-data.js','src/db1-db2-data.js'])vm.runInContext(read(f),context,{filename:f});
 let code=read('src/app.bundle.js'); code=code.replace(/\n  function boot\(\)\{/,`\n  window.KFTest={AppState,startNewCareer,ensureKF021CoreContainers,kf021MigrateLegacyInjuryState,kf021PayInterClubBonus,assignTrainerClub};\n  function boot(){`);
 vm.runInContext(code,context,{filename:'src/app.bundle.js'}); if(document.cb)document.cb(); const T=windowObj.KFTest; T.startNewCareer(); const w=T.AppState.world;
-check('World schema carries explicit KF_0.26.2 schema version',w.meta.schemaVersion==='kf-core-0.27.1',{schemaVersion:w.meta.schemaVersion});
+check('World schema carries explicit KF_0.26.2 schema version',w.meta.schemaVersion==='kf-core-0.27.2',{schemaVersion:w.meta.schemaVersion});
 check('World schema documents central current/historical truths',w.meta.dataTruth&&w.meta.dataTruth.currentPlayers==='world.players.byId'&&w.meta.dataTruth.currentSquads==='world.squads'&&w.meta.dataTruth.currentSeasonMatches==='world.history.matches'&&w.meta.dataTruth.historicalResults==='world.history.seasonResults'&&w.meta.dataTruth.historicalPlayerSeasons==='world.history.playerSeasons',w.meta.dataTruth||{});
 check('Core top-level containers exist from career creation',!!(w.transferMarket&&w.transferMarket.futureMoves&&w.transferMarket.activeClauses&&w.transferMarket.loanedOutByClub&&w.negotiations&&w.mailbox&&w.seasonLifecycle&&w.scouting&&w.squadPlanning),{});
 const player=w.players.byId[w.players.order[0]]; player.injuryWeeksLeft=3; delete player.injurySlotsLeft; const slots=T.kf021MigrateLegacyInjuryState(player);

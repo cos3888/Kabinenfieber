@@ -16,7 +16,7 @@ function jsonBytes(v,seen){if(v===null)return 4;const t=typeof v;if(t==='string'
 function mib(n){return Math.round(n/1048576*100)/100;}
 function financeStats(w){const season=Number((w.meta||{}).seasonNumber||1);return{count:T.CurrentSeasonFinanceRepository.count(w,season),bytes:T.CurrentSeasonFinanceRepository.serializedBytes(w,season)};}
 const initStart=Date.now();T.startNewCareer();const initMs=Date.now()-initStart,w=T.AppState.world,r=T.AppState.worldRecord;T.AppState.session.activeClubId=null;
-check('Career initializes as KF_0.27.1',String((w.meta||{}).schemaVersion)==='kf-core-0.27.1',{schema:(w.meta||{}).schemaVersion,initMs});
+check('Career initializes as KF_0.27.2',String((w.meta||{}).schemaVersion)==='kf-core-0.27.2',{schema:(w.meta||{}).schemaVersion,initMs});
 const initialRecordBytes=jsonBytes(r);
 let steps=0,matches=0,guard=0,fatal=null;const simStart=Date.now();
 while(Number(w.meta.seasonNumber||0)===1&&guard++<1000){const next=T.nextCalendarSlot(w);if(!next){fatal='No next slot';break;}if(String(next.label||'').indexOf('Saisonübergang')===0)break;const stepStart=Date.now();const step=T.advanceCareerRound(w);const stepMs=Date.now()-stepStart;steps++;if(!step||!step.advanced){fatal='Advance stopped: '+(step&&step.reason);break;}matches+=(step.simulatedMatches||[]).length;if(steps%20===0)console.log(`[progress] steps=${steps} matches=${matches} stepMs=${stepMs} index=${((w.history||{}).matches||[]).length} matchStore=${T.CurrentSeasonMatchRepository.count(w,1)} financeStore=${T.CurrentSeasonFinanceRepository.count(w,1)}`);}

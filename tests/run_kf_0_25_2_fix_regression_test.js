@@ -12,11 +12,11 @@ const context=vm.createContext({window:windowObj,document,console,setTimeout,cle
 for(const f of ['src/static-data.js','src/db1-db2-data.js'])vm.runInContext(read(f),context,{filename:f});
 let code=read('src/app.bundle.js');
 code=code.replace(/\n  function boot\(\)\{/,`\n  window.KFTest={AppState,startNewCareer,simulateLeagueFixture,recordPlayedMatch,kf0251RuntimeCache,recentMatchesForClub,kf021ProcessMatchContractBonuses,kf021PaySeasonPlayerBonus,KF0252_SIM_TICK_BUDGET_MS,KF0252_PROGRESS_PAINT_INTERVAL_MS};\n  function boot(){`);
-code=code.replace(/\n\n  if \(document\.readyState === 'loading'\) \{/,`\n  window.KFCurrentBonusTest={kf021PaySeasonPlayerBonus,kf0261BonusKeySeen};\n\n  if (document.readyState === 'loading') {`);
+code=code.replace(/\n\n  if \(document\.readyState === 'loading'\) \{/,`\n  window.KFCurrentBonusTest={kf021PaySeasonPlayerBonus,kf0261BonusKeySeen,financeEventsForSeason};\n\n  if (document.readyState === 'loading') {`);
 vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();const T=windowObj.KFTest;
 function seeded(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
 
-check('Runtime enthaelt weiterhin den KF_0.25.2-Fix',JSON.parse(read('package.json')).version==='0.27.1'&&read('src/app.bundle.js').includes('KF0252_SIM_TICK_BUDGET_MS'),{runtimeVersion:JSON.parse(read('package.json')).version});
+check('Runtime enthaelt weiterhin den KF_0.25.2-Fix',JSON.parse(read('package.json')).version==='0.27.2'&&read('src/app.bundle.js').includes('KF0252_SIM_TICK_BUDGET_MS'),{runtimeVersion:JSON.parse(read('package.json')).version});
 check('Persistiertes Weltschema ist fuer KF_0.26.2 migriert',read('src/app.bundle.js').includes("kf-core-0.26.2"),{});
 check('Scheduler hat ein kleines Zeitbudget statt starrem 8er-Batch',Number(T.KF0252_SIM_TICK_BUDGET_MS)>0&&Number(T.KF0252_SIM_TICK_BUDGET_MS)<=16&&!code.includes('pendingSlot.fixtureIndex + 8'),{tickBudgetMs:T.KF0252_SIM_TICK_BUDGET_MS});
 check('Fortschritts-DOM wird gedrosselt',Number(T.KF0252_PROGRESS_PAINT_INTERVAL_MS)>=80&&Number(T.KF0252_PROGRESS_PAINT_INTERVAL_MS)<=250,{paintIntervalMs:T.KF0252_PROGRESS_PAINT_INTERVAL_MS});
@@ -48,15 +48,15 @@ const bonusPlayerId=Object.keys(w.players.byId).find(id=>w.players.byId[id]&&w.p
 let bonusOk=false,bonusDetails={};
 if(bonusPlayerId){
   const p=w.players.byId[bonusPlayerId],B=windowObj.KFCurrentBonusTest;
-  const beforeBonus=(w.history.bonusEvents||[]).length,beforeFinance=((w.clubFinances.byClub[p.clubId]||{}).financeEvents||[]).length;
+  const beforeBonus=(w.history.bonusEvents||[]).length,beforeFinance=B.financeEventsForSeason(w,p.clubId,Number(w.meta.seasonNumber||1)).length;
   const season=Number(w.meta.seasonNumber||1),key=['seasonbonus',season,p.clubId,p.id,'promotion'].join('|');
   const paid=B.kf021PaySeasonPlayerBonus(w,p,p.clubId,'promotion',0.01,season);
   const paidAgain=B.kf021PaySeasonPlayerBonus(w,p,p.clubId,'promotion',0.01,season);
-  const afterBonus=(w.history.bonusEvents||[]).length,afterFinance=((w.clubFinances.byClub[p.clubId]||{}).financeEvents||[]).length;
+  const afterBonus=(w.history.bonusEvents||[]).length,afterFinance=B.financeEventsForSeason(w,p.clubId,season).length;
   bonusOk=paid&&!paidAgain&&afterBonus===beforeBonus&&afterFinance===beforeFinance+1&&B.kf0261BonusKeySeen(w,key);
   bonusDetails={beforeBonus,afterBonus,beforeFinance,afterFinance,paid,paidAgain,keySeen:B.kf0261BonusKeySeen(w,key)};
 }
-check('Bonus-Deduplizierung bleibt schnell, nutzt aber ab KF_0.26.2 FinanceEvents statt Bonus-Historie',bonusOk,bonusDetails);
+check('Bonus-Deduplizierung bleibt schnell, nutzt aber ab KF_0.26.2 CurrentSeasonFinanceRepository statt Bonus-Historie',bonusOk,bonusDetails);
 
 const source=read('src/app.bundle.js');
 check('Slot bleibt staged und wird erst im Abschluss in die Historie geschrieben',source.includes('pendingSlot.stagedResults.push(simulateLeagueFixture(world, fixture))')&&source.includes('scheduledFixtures.forEach(function(fixture, index){\n      recordPlayedMatch(world, fixture, results[index]);'),{});

@@ -3,8 +3,7 @@
 Dieses Paket enthält die echte DB3-Vereinsdatenbank für die Integration ins Spiel.
 
 ## Enthalten
-- `db3_vereine_final.js` – direkt im Spiel importierbare JS-Datei
-- `db3_vereine_final.json` – dieselben Daten als JSON
+- `db3_vereine_final.json` – kanonischer strukturierter Export fuer Runtime-Build, Tests und Asset-Werkzeuge
 - `db3_field_rules.json` – zentrale Feldregeln/Formelbeschreibung
 - `Vereine_v3_budgetlogik.xlsx` – Autoren-/Kontrolldatei als Quelle
 

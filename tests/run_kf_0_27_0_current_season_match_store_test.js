@@ -11,7 +11,7 @@ for(const f of ['src/static-data.js','src/db1-db2-data.js'])vm.runInContext(read
 let code=read('src/app.bundle.js');
 code=code.replace(/\n\n  if \(document\.readyState === 'loading'\) \{/,`\nwindow.KFTest={AppState,createEmptyWorld,createWorldRecord,registerWorldRecord,WorldRepository,CurrentSeasonMatchRepository,recordPlayedMatch,matchById,renderMatchInfoModalBody,kf0270LoadFullCurrentSeasonMatch,kf0270CompactCurrentMatch,kf0270ArchiveExistingCurrentSeasonMatches,migrateWorldDataTruthToCurrent};\n\n  if (document.readyState === 'loading') {`);
 vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();const T=windowObj.KFTest;
-check('Runtime meldet KF_0.27.0',code.includes("var KF_VERSION = '0.27.1';")&&read('index.html').includes('KF_0.27.1')&&JSON.parse(read('package.json')).version==='0.27.1');
+check('Runtime meldet KF_0.27.0',code.includes("var KF_VERSION = '0.27.2';")&&read('index.html').includes('KF_0.27.2')&&JSON.parse(read('package.json')).version==='0.27.2');
 function sampleWorld(id){
   const w=T.createEmptyWorld({seasonNumber:1});w.meta.id=id;w.meta.initialized=true;
   w.clubs.byId.c1={id:'c1',name:'Heim',leagueKey:'Test 1',leagueLevel:1,countryName:'Testland'};w.clubs.byId.c2={id:'c2',name:'Gast',leagueKey:'Test 1',leagueLevel:1,countryName:'Testland'};w.clubs.order=['c1','c2'];
@@ -34,6 +34,6 @@ check('WorldRepository Save/Load bleibt vom Vollmatch getrennt',loaded&&loaded.g
 T.AppState.worldRecord=loaded;T.AppState.world=loaded.gameState;const reloadHtml=T.renderMatchInfoModalBody('m1','events');
 check('Spielbericht bleibt nach WorldRecord-Reload verfügbar',reloadHtml.includes('Max Heim')&&reloadHtml.includes('Spielbericht'),{htmlLength:reloadHtml.length});
 const legacy=sampleWorld('world-0270-migration');legacy.meta.schemaVersion='kf-core-0.26.2';const lm=sampleMatch();lm.id='legacy-m1';lm.fixtureId='f1';legacy.history.matches=[lm];legacy.calendar.fixtures[0].status='played';legacy.calendar.fixtures[0].playedMatchId='legacy-m1';const migration=T.migrateWorldDataTruthToCurrent(legacy);
-check('0.26.2-Migration lagert vorhandene Vollmatches ohne Informationsverlust aus',migration.matchStoreMigration.archived===1&&legacy.meta.schemaVersion==='kf-core-0.27.1'&&legacy.history.matches[0].storageKind==='current-season-summary'&&T.CurrentSeasonMatchRepository.load(legacy,'legacy-m1',1).events.length===1,{migration:migration.matchStoreMigration});
+check('0.26.2-Migration lagert vorhandene Vollmatches ohne Informationsverlust aus',migration.matchStoreMigration.archived===1&&legacy.meta.schemaVersion==='kf-core-0.27.2'&&legacy.history.matches[0].storageKind==='current-season-summary'&&T.CurrentSeasonMatchRepository.load(legacy,'legacy-m1',1).events.length===1,{migration:migration.matchStoreMigration});
 report.metrics={fullMatchBytes:JSON.stringify(full).length,compactMatchBytes:JSON.stringify(compact).length,worldPayloadBytes,storeBytes,compactRatio:Math.round(JSON.stringify(compact).length/JSON.stringify(full).length*10000)/100};
 const out=path.join(root,'reports','kf_0.27.0_current_season_match_store_test.json');fs.writeFileSync(out,JSON.stringify(report,null,2));console.log(JSON.stringify({...report,reportFile:out},null,2));process.exit(report.passed?0:1);

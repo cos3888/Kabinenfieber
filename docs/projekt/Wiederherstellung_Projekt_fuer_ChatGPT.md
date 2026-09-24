@@ -1,19 +1,19 @@
-# Wiederherstellung Kabinenfieber - KF_0.27.1
+# Wiederherstellung Kabinenfieber - KF_0.27.2
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.27.1`
+Version: `KF_0.27.2`
 
 Build-Label:
 
-`KF_0.27.1 - Current-Season Finance Store`
+`KF_0.27.2 - Repository / Asset Cleanup`
 
 Persistierte Schemas:
 
-- `kf-core-0.27.1`
-- `kf-world-record-0.27.1`
+- `kf-core-0.27.2`
+- `kf-world-record-0.27.2`
 
 Kanonischer Runtime-Einstieg:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.27.1.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.27.2.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -443,7 +443,7 @@ Ziel: neue saubere GitHub-Basis auf dem vollstaendig abgeschlossenen KF_0.27.1-S
 Ergaenzte Werkzeuge:
 
 - `tools/import_club_crests.js`: rekursiver PNG-Import aus einem externen Wappenordner. Matcht Quelldateiname gegen `clubName` Unicode-/Umlaut-tolerant und schreibt nach `assets/clubs/<clubId>/crest.png`.
-- `tools/check_club_assets.js`: prueft alle 432 Clubs gegen `crestAsset`, `homeKitAsset`, `awayKitAsset`.
+- `tools/check_club_assets.js`: prueft alle 432 Clubs gegen `crestAsset` sowie die gemeinsam genutzten Trikotdesigner-Bases und -Masken.
 - npm-Skripte: `assets:crests:import` und `assets:check`.
 - `.gitignore` schliesst lokale Runtime-/Save-/Serverdaten, `.env`, Importstaging und Release-ZIPs aus.
 
@@ -454,7 +454,7 @@ Aktueller Assetbefund vor Import der Drive-Wappen:
 - Drive-Wappenquelle: 24 Ligaordner x 18 PNG = 432 Dateien
 - davon 424 nach Vereinsname eindeutig den aktuellen Clubs zuordenbar
 - acht Tuerkei-3-Clubs fehlen in der Quelle; stattdessen liegen dort acht abweichende Vereinsnamen. Keine Reihenfolgen-Zuordnung vornehmen.
-- bestehende Trikotluecken: Deutschland 3 hat 18 fehlende home.png und 17 fehlende away.png. Nicht Teil dieses Umbaus.
+- club-spezifische home.png/away.png-Dateien sind seit KF_0.27.2 bewusst entfernt; Trikots werden dynamisch aus dem Trikotdesigner gerendert.
 
 Bekannte acht Wappen-Fallbacks:
 
@@ -469,4 +469,30 @@ Bekannte acht Wappen-Fallbacks:
 
 Die neue Sponsorenbasis aus Google Sheets/Drive wurde analysiert, aber auf Nutzerentscheidung bewusst noch nicht in StaticData oder Gameplay uebernommen. Die KF_0.27.1-Sponsoren-Zwischenloesung bleibt technische Wahrheit, bis ein eigener Sponsorenblock freigegeben wird.
 
-Naechster GitHub-Schritt: neues Repository bzw. GitHub-Verbindung herstellen und diesen bereinigten KF_0.27.1-Root als Ausgangsstand veroeffentlichen. Danach GitHub Pages auf denselben statischen Root legen. Server-/API-Code spaeter daneben entwickeln; der lokale ZIP-/Standalone-Testpfad bleibt erhalten.
+GitHub-Stand: Repository `cos3888/Kabinenfieber` ist verbunden und dient ab KF_0.27.2 als zentrale Codebasis. Der Server-/API-Block folgt spaeter; der lokale Standalone-Testpfad bleibt erhalten.
+
+
+## KF_0.27.2 - Repository-/Asset-Bereinigung
+
+Ziel: den neuen GitHub-Ausgangsstand von bestaetigten Altlasten bereinigen, ohne Gameplay oder Simulation zu veraendern.
+
+Zentrale Wahrheiten:
+- Vereinswappen: DB3/StaticData `crestAsset` -> `assets/clubs/<clubId>/crest.png`.
+- Trikotdesign: aktuelle `home*`/`away*`-KitDesigner-Felder in `world.clubs.byId[clubId]`; Rendering aus `assets/kits/bases`, `masks_2`, `masks_3`.
+- Finance-Ledger: `CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]`.
+
+Entfernt:
+- `homeKitAsset`/`awayKitAsset` sowie club-spezifische 1x1-`home.png`/`away.png`.
+- club-spezifische README-Platzhaltertexte.
+- alte ungenutzte Kit-Template-Grafiken/CSS, doppelte Icons/Tiles, `sponsor_placeholder.png`, leere Nation-Flag-Struktur, `base_lime.png`.
+- redundanter `db3_vereine_final.js`-Export und `data/source_archives`.
+- temporaerer Profiling-Test und versionierte, reproduzierbare Test-JSONs.
+
+Bewusst nicht veraendert:
+- bestehende Trikotdesigner-Logik und deren dynamische Bases/Masken.
+- Sponsoren-Zwischenloesung.
+- StaticData↔World-Doppelung der allgemeinen Vereinsstammdaten; dies bleibt ein spaeterer Architekturblock.
+
+Zusaetzlicher Kompatibilitaetsfix: `kf0261FinanceEventsForClub` muss bei noch nicht migrierten Altwelten ein vorhandenes eingebettetes `financeEvents`-Array bevorzugen und darf erst danach auf `CurrentSeasonFinanceRepository` zurueckfallen. Sonst koennen KF_0.26.0-Transferklausel-`eventKey`s vor der 0.27.1-Ledgerauslagerung nicht mehr nachgetragen werden.
+
+Validierung: siehe `reports/kf_0.27.2_validation_summary.md`; Kern-, Migrations-, UI-, Match-, Finance- und Mehrsaisontests sind gruen.

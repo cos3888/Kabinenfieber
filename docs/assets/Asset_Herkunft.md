@@ -24,3 +24,7 @@ Bekannter Stand der Quelle: 24 Ligaordner mit je 18 Dateien (= 432 Dateien). Ach
 ## Sponsoren
 
 Die neue Sponsorenliste und die dazu erstellten Sponsorengrafiken werden **noch nicht** in diesen Repository-Neustart integriert. Sie gelten als vorbereitete Quelle für einen späteren eigenständigen Entwicklungsblock. Die derzeitige Sponsoren-Zwischenlösung von KF_0.27.1 bleibt unverändert.
+
+## Trikots
+
+Trikots werden nicht als fertige club-spezifische home.png/away.png gespeichert. Die aktuelle Wahrheit sind die Trikotdesigner-Werte im Weltzustand; gerendert wird aus den gemeinsam genutzten Bases und Masken unter `assets/kits/`. Die statischen Vereinsfarben aus DB3 dienen nur zur Initialisierung eines neuen Vereinszustands.

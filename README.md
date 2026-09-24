@@ -1,8 +1,18 @@
-# Kabinenfieber KF_0.27.1
+# Kabinenfieber KF_0.27.2
 
-KF_0.27.1 setzt den Server-/Persistenzumbau aus KF_0.27.0 fort. Nach den Vollmatches werden nun auch die Finanzbuchungen der laufenden Saison aus dem staendig serialisierten `WorldRecord` ausgelagert.
+KF_0.27.2 bereinigt auf Basis des abgeschlossenen KF_0.27.1-Stands die Repository- und Assetstruktur, ohne Gameplay oder Simulation zu veraendern. Die Match- und Finance-Segmentierung aus KF_0.27.0/0.27.1 bleibt unveraendert aktiv.
 
-## Neu in KF_0.27.1
+## Neu in KF_0.27.2
+
+- club-spezifische 1x1-Platzhalter `home.png` / `away.png` und ihre `homeKitAsset`/`awayKitAsset`-Felder entfernt; Trikots kommen ausschliesslich aus dem Trikotdesigner.
+- nachweislich tote alte Kit-Templates, doppelte Icons/Tiles, Sponsor-/Nation-Platzhalter und ein ungenutztes Base-Asset entfernt.
+- redundanten DB3-JS-Export und alte Source-Archive entfernt; JSON bleibt kanonische DB3-Entwicklungsquelle.
+- generierte Test-JSONs werden nicht mehr versioniert. Release Notes und Validation Summaries bleiben im Repository.
+- Build-/Finance-Architekturmetadaten auf den tatsaechlichen KF_0.27.2-Stand korrigiert.
+- bestehende Trikotdesigner-Bases/Masken bleiben vollstaendig erhalten.
+- Legacy-Migration fuer KF_0.26.0-FinanceEvents abgesichert.
+
+## Grundlage aus KF_0.27.1
 
 - `world.clubFinances.byClub[clubId]` enthaelt nur noch den kompakten aktuellen Finanzzustand eines Vereins.
 - Vollstaendige Finanzbuchungen der laufenden Saison liegen genau einmal im separaten `CurrentSeasonFinanceRepository`, getrennt nach Welt, Saison, Verein und Event-ID.
@@ -65,7 +75,7 @@ Release- und Validierungsdetails: `reports/kf_0.27.1_release_notes.md` und `repo
 
 ## Repository- und Asset-Workflow
 
-KF_0.27.1 dient zugleich als technische Ausgangsbasis fuer den neuen GitHub-Stand. Die Spielstruktur wurde fuer diesen Neustart bewusst nicht umgebaut, damit lokale Tests und GitHub Pages denselben Codepfad behalten.
+KF_0.27.2 dient als bereinigte technische Ausgangsbasis fuer den neuen GitHub-Stand. Die Spielstruktur wurde fuer diesen Neustart bewusst nicht umgebaut, damit lokale Tests und GitHub Pages denselben Codepfad behalten.
 
 Hilfsbefehle:
 

@@ -30,6 +30,6 @@ Nur prüfen, ohne Dateien zu kopieren:
 
 `npm run assets:crests:import -- <pfad-zum-wappenordner> --dry-run`
 
-Vollständigkeit des aktuellen Repository-Assetstands:
+Vollständigkeit des aktuellen Repository-Assetstands (Wappen plus gemeinsame Trikotdesigner-Assets):
 
 `npm run assets:check`
