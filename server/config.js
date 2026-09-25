@@ -12,7 +12,12 @@ function loadConfig(env = process.env) {
     gcsBucket: env.KF_GCS_BUCKET || '',
     dataDir,
     metadataFile: path.resolve(env.KF_METADATA_FILE || path.join(dataDir, 'metadata.json')),
-    collectionPrefix: env.KF_FIRESTORE_PREFIX || 'kf_dev'
+    authFile: path.resolve(env.KF_AUTH_FILE || path.join(dataDir, 'auth.json')),
+    collectionPrefix: env.KF_FIRESTORE_PREFIX || 'kf_dev',
+    allowedOrigins: String(env.KF_ALLOWED_ORIGINS || 'https://cos3888.github.io,http://localhost:8000,http://127.0.0.1:8000')
+      .split(',').map(value => value.trim()).filter(Boolean),
+    maxRequestBytes: Math.max(1024 * 1024, Number(env.KF_MAX_REQUEST_BYTES || 30 * 1024 * 1024)),
+    runtimeIdleMs: Math.max(60 * 1000, Number(env.KF_RUNTIME_IDLE_MS || 15 * 60 * 1000))
   };
 }
 
