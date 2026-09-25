@@ -12,8 +12,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
       - run: npm run test:0290
       - run: node --check server/index.js
       - run: node --check server/services/auth-service.js
