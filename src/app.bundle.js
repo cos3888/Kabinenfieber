@@ -24877,6 +24877,10 @@ function kf029ExitWorldToList(forceDiscard){
     renderApp();
     return Promise.resolve(null);
   }
+  if(KF029Remote.checkpointFailed && !forceDiscard){
+    kf029ShowCheckpointFailure(KF029Remote.checkpointReason||'checkpoint',new Error('Der letzte Fortschritt ist noch nicht bestätigt.'));
+    return Promise.resolve(null);
+  }
   return kf029DiscardLoadedWorldToList();
 }
 function kf029RetryCheckpoint(){
@@ -24894,9 +24898,12 @@ var KF029_AUTOSAVE_ACTIONS={
   'player-profile-scout-toggle':1,'cup-draw-continue':1,'delete-mail':1,'delete-all-mail':1,'toggle-mail-read':1
 };
 async function kf029Logout(){
-  if(KF029Remote.checkpointPending){
-    KF029Remote.error='Abmelden ist erst möglich, wenn der laufende Fortschritts-Speicherpunkt abgeschlossen ist.';
-    renderApp();
+  if(KF029Remote.checkpointPending || KF029Remote.checkpointFailed){
+    KF029Remote.error=KF029Remote.checkpointPending
+      ? 'Abmelden ist erst möglich, wenn der laufende Fortschritts-Speicherpunkt abgeschlossen ist.'
+      : 'Der letzte Fortschritt ist noch nicht gespeichert. Bitte erneut versuchen oder den unbestätigten Stand bewusst über die Weltliste verwerfen.';
+    if(KF029Remote.checkpointFailed) kf029ShowCheckpointFailure(KF029Remote.checkpointReason||'checkpoint',new Error('Der letzte Fortschritt ist noch nicht bestätigt.'));
+    else renderApp();
     return;
   }
   KF029Remote.busy = true; KF029Remote.error = ''; renderApp();
