@@ -24760,8 +24760,9 @@ handleAction = function(action, actionEl){
 var kf029BaseBoot = boot;
 boot = function(){
   kf029BaseBoot();
-  if (!document.documentElement.dataset.kf029AutosaveBound) {
-    document.documentElement.dataset.kf029AutosaveBound='1';
+  var autosaveRoot = document && document.documentElement ? document.documentElement : null;
+  if (autosaveRoot && autosaveRoot.dataset && !autosaveRoot.dataset.kf029AutosaveBound && typeof document.addEventListener === 'function') {
+    autosaveRoot.dataset.kf029AutosaveBound='1';
     document.addEventListener('change', function(){
       if (!KF029Remote.user || !AppState.worldRecord) return;
       if (['lineup','contracts','squad-planning','finance','sponsoring'].indexOf(AppState.ui.currentView) >= 0) kf029ScheduleAutosave('form-change', false);
