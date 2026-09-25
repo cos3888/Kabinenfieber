@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.29.2
+# Wiederherstellung Kabinenfieber - KF_0.29.3
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.29.2`
+Version: `KF_0.29.3`
 
 Build-Label:
 
-`KF_0.29.2 - Save Integrity & World Navigation`
+`KF_0.29.3 - Backend Compatibility`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.29.2.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.29.3.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,18 @@ Aktuelle ZIP nach Export soll `KF_0.29.2.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.29.3 – Backend Compatibility
+
+- `/healthz` darf Login, Session-Restore und Weltladen nicht blockieren.
+- App-Version: `KF_VERSION = 0.29.3`.
+- Remote-Vertrag für Create/Snapshot: `KF029_REMOTE_CONTRACT_VERSION = 0.29.2`.
+- Servercode trennt `SERVICE_VERSION = 0.29.3` und `API_VERSION = 0.29.2`.
+- 0.29.1-Backends bleiben kompatibel, weil sie `clientVersion` ignorieren; 0.29.2-Backends akzeptieren weiterhin `clientVersion = 0.29.2`.
+- Save-Integrity-Logik aus 0.29.2 bleibt bestehen.
+- Regressionstest: `tests/run_kf_0_29_3_backend_compatibility_test.js`.
+
+Cloud-Deployment ist bei reinen Browser-/Spielbuild-Fixes nicht mehr automatisch erforderlich; entscheidend ist der tatsächliche Remote-/API-Vertrag.
 
 ## KF_0.29.2 – Save Integrity & World Navigation
 

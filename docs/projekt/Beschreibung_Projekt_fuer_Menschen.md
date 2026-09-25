@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.29.2
+# Kabinenfieber - Stand KF_0.29.3
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.29.2`
+App-Version: `KF_0.29.3`
 
 Persistierte Schemas:
 
@@ -17,6 +17,19 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.29.3 – Backend Compatibility
+
+Der 0.29.2-Praxistest zeigte beim Login sofort „Backend nicht erreichbar“, obwohl der gleiche Cloud-Run-Dienst vorher funktionierte. Ursache war die neue vorgeschaltete `/healthz`-Prüfung.
+
+- Login, Session-Restore und Weltladen greifen wieder direkt auf die produktiven Auth-/World-Endpunkte zu.
+- `/healthz` ist nur noch Diagnose und keine Zugangsvoraussetzung.
+- Spielversion und Remote-Vertrag sind getrennt: `KF_VERSION = 0.29.3`, `KF029_REMOTE_CONTRACT_VERSION = 0.29.2`.
+- Create/Save senden weiterhin `clientVersion`, aber mit der Remote-Vertragsversion statt der Spielversion.
+- Ein kompatibles 0.29.1-Backend ignoriert dieses Feld; ein 0.29.2-Backend akzeptiert weiterhin den Vertrag `0.29.2`.
+- Hard Checkpoints, Takeover-Commit, Save-Recovery und Weltlisten-Rückweg aus 0.29.2 bleiben unverändert.
+
+Zentrale Datenquellen bleiben unverändert: committed `WorldRecord`, `WorldRecord.memberships`, CurrentSeasonMatchRepository, CurrentSeasonFinanceRepository sowie World Registry/Firestore. Es entsteht keine doppelte Datenhaltung.
 
 ## KF_0.29.2 – Save Integrity & World Navigation
 

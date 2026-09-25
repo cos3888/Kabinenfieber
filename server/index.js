@@ -11,6 +11,7 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
+const SERVICE_VERSION = '0.29.3';
 const API_VERSION = '0.29.2';
 
 let persistenceVerificationState = {
@@ -211,7 +212,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && pathname === '/healthz') {
-      await sendJson(req, res, 200, { ok: true, service: 'kabinenfieber-backend', version: API_VERSION });
+      await sendJson(req, res, 200, { ok: true, service: 'kabinenfieber-backend', version: SERVICE_VERSION, apiVersion: API_VERSION });
       return;
     }
 
@@ -219,7 +220,8 @@ const server = http.createServer(async (req, res) => {
       const verification = getPersistenceVerificationState();
       await sendJson(req, res, 200, {
         ok: verification.status === 'ok',
-        version: API_VERSION,
+        version: SERVICE_VERSION,
+        apiVersion: API_VERSION,
         objectStore: config.objectStoreDriver,
         metadataStore: config.metadataDriver,
         projectConfigured: Boolean(config.googleProjectId),

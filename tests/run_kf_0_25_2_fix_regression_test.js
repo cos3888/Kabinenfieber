@@ -16,7 +16,7 @@ code=code.replace(/\n\n  if \(document\.readyState === 'loading'\) \{/,`\n  wind
 vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();const T=windowObj.KFTest;
 function seeded(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
 
-check('Runtime enthaelt weiterhin den KF_0.25.2-Fix',JSON.parse(read('package.json')).version==='0.29.2'&&read('src/app.bundle.js').includes('KF0252_SIM_TICK_BUDGET_MS'),{runtimeVersion:JSON.parse(read('package.json')).version});
+check('Runtime enthaelt weiterhin den KF_0.25.2-Fix',JSON.parse(read('package.json')).version==='0.29.3'&&read('src/app.bundle.js').includes('KF0252_SIM_TICK_BUDGET_MS'),{runtimeVersion:JSON.parse(read('package.json')).version});
 check('Persistiertes Weltschema ist fuer KF_0.26.2 migriert',read('src/app.bundle.js').includes("kf-core-0.26.2"),{});
 check('Scheduler hat ein kleines Zeitbudget statt starrem 8er-Batch',Number(T.KF0252_SIM_TICK_BUDGET_MS)>0&&Number(T.KF0252_SIM_TICK_BUDGET_MS)<=16&&!code.includes('pendingSlot.fixtureIndex + 8'),{tickBudgetMs:T.KF0252_SIM_TICK_BUDGET_MS});
 check('Fortschritts-DOM wird gedrosselt',Number(T.KF0252_PROGRESS_PAINT_INTERVAL_MS)>=80&&Number(T.KF0252_PROGRESS_PAINT_INTERVAL_MS)<=250,{paintIntervalMs:T.KF0252_PROGRESS_PAINT_INTERVAL_MS});

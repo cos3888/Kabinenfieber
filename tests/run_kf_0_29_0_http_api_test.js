@@ -48,7 +48,7 @@ const path=require('path');
 
   const worldId='http-world';
   const record={
-    id:worldId,schemaVersion:'kf-world-record-0.27.2',gameVersion:'0.29.2',
+    id:worldId,schemaVersion:'kf-world-record-0.27.2',gameVersion:'0.29.3',
     createdAt:new Date().toISOString(),createdByUserId:userId,
     progression:{status:'waiting',readyTrainerIds:[],lastHumanActivityAt:new Date().toISOString()},
     memberships:{byTrainerId:{'trainer-http':{

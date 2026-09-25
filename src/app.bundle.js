@@ -61,8 +61,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.29.2';
-  var KF_BUILD_LABEL = 'KF_0.29.2 - Save Integrity & World Navigation';
+  var KF_VERSION = '0.29.3';
+  var KF_BUILD_LABEL = 'KF_0.29.3 - Backend Compatibility';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -24305,6 +24305,8 @@ migrateWorldDataTruthToCurrent=function(world){
  */
 
 var KF029_BACKEND_BASE_URL = String(window.KF_BACKEND_BASE_URL || 'https://kabinenfieber-backend-458781449503.us-central1.run.app').replace(/\/+$/,'');
+// Remote contract stays independent from the browser/game build. 0.29.1 backends ignore this field; 0.29.2+ use it to guard incompatible snapshot writes.
+var KF029_REMOTE_CONTRACT_VERSION = '0.29.2';
 var KF029_AUTH_STORAGE_KEY = 'kf.auth.token';
 var KF029_AUTOSAVE_DEBOUNCE_MS = 1400;
 var KF029Remote = {
@@ -24399,10 +24401,12 @@ async function kf029Request(path, options){
   return data;
 }
 async function kf029EnsureBackendCompatible(){
+  // Diagnostic only: login, session restore and world loading must not depend on /healthz.
   var health=await kf029Request('/healthz',{auth:false});
   KF029Remote.backendVersion=String((health||{}).version||'');
-  if(KF029Remote.backendVersion!==String(KF_VERSION)){
-    var mismatch=new Error('Browser und Backend haben unterschiedliche Versionen (Browser '+KF_VERSION+', Backend '+(KF029Remote.backendVersion||'unbekannt')+'). Bitte zuerst den Backend-Stand aktualisieren.');
+  var backendContractVersion=String((health||{}).apiVersion||(health||{}).remoteContractVersion||'');
+  if(backendContractVersion && backendContractVersion!==String(KF029_REMOTE_CONTRACT_VERSION)){
+    var mismatch=new Error('Browser und Backend verwenden unterschiedliche Remote-Vertraege (Browser '+KF029_REMOTE_CONTRACT_VERSION+', Backend '+backendContractVersion+').');
     mismatch.code='BACKEND_VERSION_MISMATCH';
     mismatch.status=409;
     throw mismatch;
@@ -24421,7 +24425,6 @@ async function kf029RestoreRemoteSession(){
   KF029Remote.error = '';
   renderApp();
   try {
-    await kf029EnsureBackendCompatible();
     var me = await kf029Request('/api/v1/auth/me');
     kf029SetUser(me.user);
     await kf029RefreshWorldList();
@@ -24448,7 +24451,6 @@ async function kf029Login(registerMode){
   var displayName = displayInput ? displayInput.value.trim() : '';
   KF029Remote.busy = true; KF029Remote.error = ''; KF029Remote.message = ''; renderApp();
   try {
-    await kf029EnsureBackendCompatible();
     var data = await kf029Request(registerMode ? '/api/v1/auth/register' : '/api/v1/auth/login', {
       method:'POST',
       auth:false,
@@ -24542,7 +24544,6 @@ function kf029InstallLoadedWorld(data){
 async function kf029LoadWorld(worldId){
   KF029Remote.busy = true; KF029Remote.error = ''; KF029Remote.message = 'Welt wird geladen ...'; renderApp();
   try {
-    await kf029EnsureBackendCompatible();
     var data = await kf029Request('/api/v1/worlds/' + encodeURIComponent(worldId));
     kf029InstallLoadedWorld(data);
     KF029Remote.message = 'Welt geladen.';
@@ -24560,7 +24561,7 @@ async function kf029CreateRemoteWorld(){
   var config = KF029Remote.pendingWorldConfig || {};
   var data = await kf029Request('/api/v1/worlds', {
     method:'POST',
-    body:{ clientVersion:KF_VERSION, worldRecord:record, worldName:config.worldName, visibility:config.visibility, joinPolicy:config.joinPolicy, matches:kf029CurrentMatches(), financeEvents:kf029CurrentFinanceEvents() }
+    body:{ clientVersion:KF029_REMOTE_CONTRACT_VERSION, worldRecord:record, worldName:config.worldName, visibility:config.visibility, joinPolicy:config.joinPolicy, matches:kf029CurrentMatches(), financeEvents:kf029CurrentFinanceEvents() }
   });
   KF029Remote.revision = Number(data.revision);
   KF029Remote.currentSeason = Number(data.currentSeason || (((record.gameState||{}).meta||{}).seasonNumber)||1);
@@ -24643,7 +24644,7 @@ function kf029SaveRemoteWorld(reason){
       method:'PUT',
       body:{
         expectedRevision:KF029Remote.revision,
-        clientVersion:KF_VERSION,
+        clientVersion:KF029_REMOTE_CONTRACT_VERSION,
         worldRecord:record,
         matches:kf029CurrentMatches(),
         financeEvents:kf029CurrentFinanceEvents(),
