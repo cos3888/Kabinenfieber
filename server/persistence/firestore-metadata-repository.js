@@ -121,6 +121,27 @@ class FirestoreMetadataRepository {
     });
   }
 
+  async deleteWorldRegistration({ worldId, expectedCreatedByUserId = null }) {
+    const worldRef = this._world(worldId);
+    const worldDoc = await worldRef.get();
+    if (!worldDoc.exists) return { deleted: false };
+    const world = worldDoc.data();
+    if (expectedCreatedByUserId && String(world.createdByUserId) !== String(expectedCreatedByUserId)) {
+      throw new DomainRuleError('World creator does not match rollback request', { worldId });
+    }
+    const [participations, invitations] = await Promise.all([
+      this.db.collection(this.names.participation).where('worldId', '==', worldId).get(),
+      this.db.collection(this.names.invitations).where('worldId', '==', worldId).get()
+    ]);
+    const batch = this.db.batch();
+    batch.delete(worldRef);
+    batch.delete(this._slot(world.slotId));
+    participations.docs.forEach(doc => batch.delete(doc.ref));
+    invitations.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    return { deleted: true, worldId };
+  }
+
   async createInvitation({ worldId, invitedByUserId, invitedUserId = null, inviteId = crypto.randomUUID(), expiresAt = null }) {
     const worldDoc = await this._world(worldId).get();
     if (!worldDoc.exists || worldDoc.data().status !== 'ACTIVE') throw new PersistenceNotFoundError('Active world not found', { worldId });
