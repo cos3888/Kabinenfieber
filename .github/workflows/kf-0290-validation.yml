@@ -17,7 +17,7 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run test:0290
-      - run: npm test
+      - run: npm test -- --full
       - run: node --check server/index.js
       - run: node --check server/services/auth-service.js
       - run: node --check server/services/world-runtime-manager.js
