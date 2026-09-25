@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.29.4
+# Kabinenfieber - Stand KF_0.29.5
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.29.4`
+App-Version: `KF_0.29.5`
 
 Persistierte Schemas:
 
@@ -17,6 +17,44 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.29.5 – Progress Checkpoints & Save Performance
+
+Der Praxistest mit KF_0.29.4 zeigte, dass nicht die Matchsimulation, sondern der anschliessende Save-Pfad das Spiel ausbremste: Vereinsuebernahme und Kalenderfortschritt konnten lange warten oder mit einem Schreibfehler enden; waehrend eines offenen/fehlgeschlagenen Checkpoints blockierte die globale UI-Sperre sogar den normalen Weg durch Ergebnisse, Statistiken und Team des Tages zurueck ins Buero.
+
+Die Cloud-Run-Entwicklungsumgebung ist weiterhin auf maximal eine Instanz begrenzt. Der Mehrinstanz-Cachefix aus 0.29.4 bleibt richtig und wichtig fuer spaetere Skalierung, war aber nicht die Ursache dieses konkreten Produktionsproblems.
+
+### Neues Speicherprinzip
+
+- Gespeichert wird an klaren Fortschrittsgrenzen: Welterstellung, Vereinsuebernahme und abgeschlossener Kalenderfortschritt/Spieltag.
+- Aufstellung, Taktik, Vertrags-/Transferentscheidungen und sonstige Managementaktionen erzeugen keinen eigenen Debounce-Autosave mehr; sie werden mit dem naechsten Fortschritts-Checkpoint Bestandteil des committed WorldRecords.
+- Ein laufender oder fehlgeschlagener Save blockiert nicht mehr die normale Navigation im Matchday oder Buero. Gesperrt wird nur ein weiterer Welt-/Kalenderfortschritt, bis der letzte Checkpoint bestaetigt ist.
+- Die Vereinsuebernahme verwendet einen kleinen serverautoritativen `/club`-Command statt den kompletten WorldRecord vom Browser erneut hochzuladen.
+
+### Schnellerer Progress-Checkpoint
+
+- Der Browser sendet beim `/progress`-Checkpoint weiterhin den aktuellen WorldRecord als vollstaendige aktuelle Spielwahrheit, aber bei Match- und Finanzdetails nur die seit dem letzten bestaetigten Checkpoint neu hinzugekommenen Vollmatches bzw. FinanceEvents.
+- Bereits persistierte Current-Season-Details werden serverseitig ueber Manifest-Segmente weiterreferenziert und nicht bei jedem Spieltag erneut uebertragen oder neu geschrieben.
+- Der Server spart den vorherigen `openWorld()`-Roundtrip mit kompletter Deep-Copy vor einem Save.
+- Die Singleplayer-Kanonisierung kopiert den eingehenden WorldRecord nicht ein zweites Mal vollstaendig; die serverseitig geschuetzte Membership-Struktur wird weiterhin kanonisch eingesetzt.
+- Hot-WorldRecord-Kompression verwendet fuer Checkpoints gzip Level 1; neue Detailsegmente Level 3. Das priorisiert kurze Save-Latenz bei weiterhin komprimierter Speicherung.
+- GCS-Writes verzichten dort auf einen zusaetzlichen `getMetadata()`-Request, wo die Generation des neu geschriebenen Objekts nicht benoetigt wird.
+- Clientseitig werden Serialisierungs-, Komprimierungs- und Requestzeit sowie Payloadgroesse des letzten Checkpoints gemessen und in Welt & Optionen sichtbar gemacht.
+
+### Fehler- und Retry-Verhalten
+
+- Progress- und Vereinsuebernahme-Commits tragen eine stabile `requestId`.
+- Ein Retry desselben vorbereiteten Requests verwendet exakt denselben bereits serialisierten Payload und dieselbe `requestId`.
+- Hat der Server den ersten Versuch bereits committed und nur die Antwort ging verloren, erkennt er den Retry ueber `lastCommitRequestId` und erzeugt keine zweite Revision.
+- Requests besitzen nun ein Timeout; ein fehlgeschlagener Checkpoint bleibt sichtbar wiederholbar, ohne den Spieler im Kalender oder Spieltagsfenster festzusetzen.
+
+### Datenwahrheit
+
+Unveraendert bleiben `WorldRecord`/`world.calendar.fixtures` fuer aktuellen Spielzustand und Spielplan, `CurrentSeasonMatchRepository` fuer Vollmatches der laufenden Saison, `CurrentSeasonFinanceRepository` fuer laufende Finanzereignisse sowie `WorldRecord.memberships` als einzige Wahrheit fuer User-/Vereinszuordnung. Die Delta-Segmente sind nur die physische Persistenz dieser bereits bestehenden Wahrheiten und keine zweite fachliche Datenhaltung.
+
+Der Remote-Vertrag wird wegen der neuen `/club`- und `/progress`-Endpunkte auf `0.29.5` angehoben. Frontend und Cloud-Run-Backend muessen daher gemeinsam deployed werden.
+
+Regression: `tests/run_kf_0_29_5_progress_checkpoint_save_performance_test.js` prueft kleinen Takeover-Commit, idempotenten Retry, zwei aufeinanderfolgende Progress-Checkpoints mit nur neuen Detaildaten sowie den vollstaendigen Reload aus allen Segmenten.
 
 ## KF_0.29.4 – Authoritative World Reload
 
