@@ -5,15 +5,43 @@ on:
       - diagnostic-live-backend
 jobs:
   probe:
-    timeout-minutes: 2
+    timeout-minutes: 3
     runs-on: ubuntu-latest
     steps:
-      - name: Probe repeated persistence runtime
+      - name: Live create-save-reload roundtrip
+        env:
+          BASE: https://kabinenfieber-backend-458781449503.us-central1.run.app
         run: |
-          set -e
-          for i in $(seq 1 20); do
-            curl -sS -H 'Origin: https://cos3888.github.io' \
-              'https://kabinenfieber-backend-458781449503.us-central1.run.app/api/v1/persistence/status'
-            echo
-            sleep 0.15
-          done
+          set -euo pipefail
+          suffix="$(date +%s)-$RANDOM"
+          login="diag$(echo "$suffix" | tr -d '-')"
+          password="Diag-${suffix}-pass"
+          echo "Register diagnostic user"
+          reg=$(curl -sS -X POST "$BASE/api/v1/auth/register" \
+            -H 'Origin: https://cos3888.github.io' -H 'Content-Type: application/json' \
+            --data "$(jq -nc --arg l "$login" --arg p "$password" '{loginName:$l,password:$p,displayName:"Diagnostic"}')")
+          echo "$reg" | jq '{ok,user:.user}'
+          token=$(echo "$reg" | jq -r '.token')
+          uid=$(echo "$reg" | jq -r '.user.userId')
+          test "$token" != "null"
+          world="diag-world-$suffix"
+          trainer="diag-trainer-$suffix"
+          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          record=$(jq -nc \
+            --arg wid "$world" --arg uid "$uid" --arg tid "$trainer" --arg now "$now" \
+            '{id:$wid,schemaVersion:"kf-world-record-0.27.2",gameVersion:"0.29.3",createdAt:$now,createdByUserId:$uid,creationRules:{startVariant:"classic",leagueConfiguration:"default",clubSelection:"manual"},runtimeSettings:{roundDurationHours:null},progression:{status:"waiting",deadlineAt:null,readyTrainerIds:[],lastHumanActivityAt:$now},memberships:{byTrainerId:{($tid):{trainerId:$tid,userProfileId:$uid,clubId:null,status:"active",joinedAt:$now,lastActivityAt:$now,trainerDisplayName:"Diagnostic"}},order:[$tid]},gameState:{meta:{id:$wid,seasonNumber:1,schemaVersion:"kf-core-0.27.2"},clubs:{byId:{"club-a":{id:"club-a",name:"Club A"},"club-b":{id:"club-b",name:"Club B"}},order:["club-a","club-b"]},players:{byId:{},order:[]},squads:{},calendar:{currentSlotKey:"w1-middle",fixtures:[],slots:[]},history:{matches:[],seasonResults:{},seasonStandings:{},playerSeasons:{},playerMarketValues:{}},clubFinances:{byClub:{}}}}')
+          create=$(curl -sS -X POST "$BASE/api/v1/worlds" \
+            -H 'Origin: https://cos3888.github.io' -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
+            --data "$(jq -nc --argjson r "$record" '{clientVersion:"0.29.2",worldRecord:$r,worldName:"Diagnostic Roundtrip",visibility:"PRIVATE",joinPolicy:"INVITE_ONLY",matches:[],financeEvents:[]}' )")
+          echo "$create" | jq '{ok,revision,membership}'
+          rev=$(echo "$create" | jq -r '.revision')
+          savedRecord=$(echo "$record" | jq --arg tid "$trainer" '.memberships.byTrainerId[$tid].clubId="club-a" | .gameState.calendar.currentSlotKey="w2-end" | .gameState.history.matches=[{id:"diag-match",season:1,slotKey:"w2-end",homeClubId:"club-a",awayClubId:"club-b",status:"played"}]')
+          save=$(curl -sS -X PUT "$BASE/api/v1/worlds/$world/snapshot" \
+            -H 'Origin: https://cos3888.github.io' -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
+            --data "$(jq -nc --argjson r "$savedRecord" --argjson rev "$rev" '{expectedRevision:$rev,clientVersion:"0.29.2",worldRecord:$r,matches:[{id:"diag-match-full",season:1,slotKey:"w2-end",homeClubId:"club-a",awayClubId:"club-b",events:[{type:"goal"}]}],financeEvents:[]}' )")
+          echo "$save" | jq '{ok,revision,currentSeason,committedAt}'
+          opened=$(curl -sS "$BASE/api/v1/worlds/$world" \
+            -H 'Origin: https://cos3888.github.io' -H "Authorization: Bearer $token")
+          echo "$opened" | jq '{ok,revision,currentSeason,membership,slot:.worldRecord.gameState.calendar.currentSlotKey,matches:(.matches|length)}'
+          echo "$opened" | jq -e '.ok==true and .membership.clubId=="club-a" and .worldRecord.gameState.calendar.currentSlotKey=="w2-end" and (.matches|length)==1' >/dev/null
+          echo "LIVE ROUNDTRIP PASS"
