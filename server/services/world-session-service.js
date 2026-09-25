@@ -108,9 +108,15 @@ class WorldSessionService {
   }
 
   async saveWorld({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents }) {
-    const canonical = await this.runtime.openWorld({ userId, worldId });
-    if (!membershipForUser(canonical.worldRecord, userId)) throw new DomainRuleError('User is not a member of this world');
     return this.runtime.saveSnapshot({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents });
+  }
+
+  async saveSlot({ userId, worldId, worldRecord, expectedRevision, season, slotKey, matches, financeEvents }) {
+    return this.runtime.saveSlot({ userId, worldId, worldRecord, expectedRevision, season, slotKey, matches, financeEvents });
+  }
+
+  async assignClub({ userId, worldId, clubId, expectedRevision }) {
+    return this.runtime.assignClub({ userId, worldId, clubId, expectedRevision });
   }
 }
 

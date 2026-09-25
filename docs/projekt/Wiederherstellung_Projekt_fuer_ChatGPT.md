@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.29.4
+# Wiederherstellung Kabinenfieber - KF_0.29.5
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.29.4`
+Version: `KF_0.29.5`
 
 Build-Label:
 
-`KF_0.29.4 - Authoritative World Reload`
+`KF_0.29.5 - Progress Checkpoints & Save Performance`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.29.4.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.29.5.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,37 @@ Aktuelle ZIP nach Export soll `KF_0.29.4.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.29.5 – Progress Checkpoints & Save Performance
+
+Freigegebener Fixblock nach realem Browsertest von KF_0.29.4.
+
+Persistenzregeln:
+- Welterstellung bleibt harter Initialcommit.
+- Vereinsuebernahme: `PUT /api/v1/worlds/:id/club`, nur `clubId` + erwartete Revision; Server mutiert kanonische `WorldRecord.memberships` und committed den WorldRecord.
+- Kalender-/Spieltag-Fortschritt: `PUT /api/v1/worlds/:id/slot` mit WorldRecord + nur seit letztem bestaetigten Checkpoint neuen Current-Season-Matches/FinanceEvents.
+- Server nutzt `WorldRuntimeManager.saveSlot()` -> `WorldPersistenceService.commitSlot()`; Manifest sammelt Slotsegmente und Reload rekonstruiert die laufende Saison daraus.
+- Saisonwechsel darf weiter den Vollsnapshotpfad nutzen, da sich Season-Segmentgrenzen aendern.
+- normale UI-/Managemententscheidungen erzeugen keinen Debounce-Save mehr.
+- Exit erzeugt keinen neuen Save. Zeitfortschritt ist die bewusste Speichergrenze.
+
+Performance:
+- `WorldSessionService.saveWorld()` darf nicht vor jedem Save `runtime.openWorld()` aufrufen; Membership wird im Runtime-Save kanonisch validiert.
+- eingehender WorldRecord wird serverseitig nicht unnoetig per JSON stringify/parse geklont.
+- Match-/Finance-Arrays der gesamten Saison duerfen nicht bei jedem Slot erneut hochgeladen werden.
+- WorldRecord bleibt in 0.29.5 noch Vollcommit. Wenn das nach Praxismessung weiterhin zu langsam ist, ist der naechste Architekturblock serverautoritative Commands/Deltas oder weitere WorldRecord-Segmentierung; niemals einzelne fachliche Felder stillschweigend weglassen.
+
+Recovery/UI:
+- Browserrequest-Timeout aktuell 90 s.
+- nach unbekanntem Save-Ausgang GET auf die Welt; wenn Slot und alle Delta-IDs serverseitig vorhanden sind, Revision uebernehmen und Save als bestaetigt behandeln.
+- Vereinsuebernahme analog reconciliieren.
+- `checkpointPending/checkpointFailed` blockiert nur weitere Fortschrittsaktionen (`office-advance`, Kalendersimulationsstart und passende Autofix-Progresspfade), nicht `matchday-next` oder sonstige Navigation.
+- Retry-Dialog offen halten, bis Erfolg/Fehler feststeht.
+
+Versionen: Browser/Service `0.29.5`; Remote/API-Vertrag ist ebenfalls `0.29.5`, weil `/club` und `/slot` neue verpflichtende Endpunkte sind.
+Pflichttest: `tests/run_kf_0_29_5_progress_checkpoint_performance_test.js` plus alle 0.29.0-0.29.4 Regressionen.
+
+Wichtige Einordnung: Cloud Run ist weiterhin `max instances = 1`. Der 0.29.4-Mehrinstanz-Cachefix bleibt korrekt, war aber nicht die Erklaerung des produktiven Save-Haengers.
 
 ## KF_0.29.4 – Authoritative World Reload
 

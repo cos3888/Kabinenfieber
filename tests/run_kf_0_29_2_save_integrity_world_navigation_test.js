@@ -84,9 +84,9 @@ function makeWorldRecord(worldId,userId){
   const server=await fs.readFile(path.join(__dirname,'..','server','index.js'),'utf8');
 
   check('Club takeover is a confirmed server checkpoint before office entry',
-    app.includes("kf029SaveRemoteWorld('take-over-club').then(function()")&&
-    app.includes("KF029Remote.membership=assignResult.membership || KF029Remote.membership")&&
-    !app.includes("'take-over-club':1,'lineup-assistant"));
+    app.includes("'/club'")&&
+    app.includes("KF029Remote.membership=data.membership || assignResult.membership || KF029Remote.membership")&&
+    !app.includes("kf029SaveRemoteWorld('take-over-club')"));
 
   check('Calendar advance uses a blocking hard checkpoint instead of fire-and-forget autosave',
     app.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
@@ -101,12 +101,12 @@ function makeWorldRecord(worldId,userId){
 
   check('Remote contract diagnostic remains available without changing the 0.29.2 snapshot contract',
     app.includes('async function kf029EnsureBackendCompatible()')&&
-    app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.29.2';")&&
+    app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.29.5';")&&
     app.includes("mismatch.code='BACKEND_VERSION_MISMATCH'")&&
-    server.includes("const API_VERSION = '0.29.2';")&&server.includes('function requireClientVersion(body)'));
+    server.includes("const API_VERSION = '0.29.5';")&&server.includes('function requireClientVersion(body)'));
 
   check('Production entry cache-busts the current browser bundle',
-    index.includes('app.bundle.js?v=0.29.4')&&index.includes('app.css?v=0.29.4'));
+    index.includes('app.bundle.js?v=0.29.5')&&index.includes('app.css?v=0.29.5'));
 
   console.log(JSON.stringify(report,null,2));
   process.exit(report.passed?0:1);

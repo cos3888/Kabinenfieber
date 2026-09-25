@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.29.4
+# Kabinenfieber - Stand KF_0.29.5
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.29.4`
+App-Version: `KF_0.29.5`
 
 Persistierte Schemas:
 
@@ -17,6 +17,39 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.29.5 – Progress Checkpoints & Save Performance
+
+Der Praxistest von KF_0.29.4 zeigte: Simulation und Spieltag selbst liefen, aber Vereinsuebernahme und Kalenderfortschritt warteten sehr lange auf Server-Saves. Bei Save-Fehlern blockierte der globale Checkpoint-Zustand auch reine Navigation wie `matchday-next`, wodurch Kalender/Spieltag wie eingefroren wirkten.
+
+Wichtige Korrektur zur Ursachenanalyse von KF_0.29.4: Die produktive Cloud-Run-Konfiguration ist weiterhin auf `max instances = 1` begrenzt. Der 0.29.4-Cachefix schuetzt damit einen realen kuenftigen Mehrinstanzfall, war aber nicht die Ursache der beobachteten Produktionsprobleme.
+
+### Speichergrenzen
+
+- gespeichert wird bei Welterstellung, bestaetigter Vereinsuebernahme und vollstaendig verarbeitetem Kalender-/Spieltag-Fortschritt.
+- normale Managemententscheidungen wie Aufstellung, Taktik, Transfers oder Formularaenderungen loesen keinen Debounce-Server-Save mehr aus.
+- beim Verlassen der Welt wird kein zusaetzlicher Vollsnapshot erzwungen; ungespeicherte Managementaenderungen seit dem letzten Fortschritts-Checkpoint koennen damit bewusst verloren gehen.
+
+### Performancepfad
+
+- Vereinsuebernahme nutzt einen kleinen `/club`-Request statt eines Browser-Vollsnapshots.
+- Kalender-/Spieltag-Fortschritt nutzt `/slot` und `WorldPersistenceService.commitSlot(...)`.
+- Vollmatch- und Finance-Details werden clientseitig gegen die zuletzt bestaetigten IDs differenziert; pro Checkpoint werden nur neue Details uebertragen.
+- der komplette laufende Match-/Finance-Bestand wird nicht mehr bei jedem Spieltag erneut hochgeladen.
+- `WorldSessionService.saveWorld()` fuehrt vor dem eigentlichen Save kein zusaetzliches `openWorld()` mit Vollkopie mehr aus.
+- serverseitige Snapshot-/Slot-Pfade vermeiden vermeidbare JSON-Deep-Clones eingehender Requestdaten.
+- der WorldRecord selbst wird in 0.29.5 weiterhin vollstaendig committed. Eine weitere Verkleinerung erfordert einen eigenen serverautoritativen Command-/Delta-Architekturblock und darf nicht durch unvollstaendige Teilfelder erkauft werden.
+
+### Recovery und Bedienung
+
+- Save-Requests haben einen endlichen Timeout.
+- nach verlorener Save-Antwort prueft der Browser den committed Serverstand; ist der Club bzw. Slot bereits korrekt vorhanden, wird der Vorgang als erfolgreich reconciled statt doppelt geschrieben.
+- ein laufender/fehlgeschlagener Save blockiert nur weiteren **Fortschritt**, nicht Ergebnisse, Statistiken, Team des Tages, Buero oder andere reine Navigation.
+- der Retry-Dialog wird nicht mehr vorzeitig geschlossen; nach erfolgreicher Wiederholung wird er sauber beendet.
+
+Zentrale Wahrheiten bleiben unveraendert: `WorldRecord.memberships` fuer User/Verein/Rollen, `world.calendar.fixtures` fuer Kalenderzustand, `CurrentSeasonMatchRepository` fuer Vollmatches und `CurrentSeasonFinanceRepository` fuer laufende Finanzereignisse. Keine neue persistente Doppelwahrheit. Der Remote/API-Vertrag ist mit den neuen `/club`- und `/slot`-Endpunkten auf `0.29.5` angehoben.
+
+Regression: `tests/run_kf_0_29_5_progress_checkpoint_performance_test.js` prueft dedizierte Vereinsuebernahme, zwei aufeinanderfolgende Slot-Commits mit nur neuen Detaildaten, Rekonstruktion beider Slots nach Reload sowie die neue Browser-Sperr-/Autosave-Logik.
 
 ## KF_0.29.4 – Authoritative World Reload
 

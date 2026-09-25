@@ -11,8 +11,8 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const SERVICE_VERSION = '0.29.4';
-const API_VERSION = '0.29.2';
+const SERVICE_VERSION = '0.29.5';
+const API_VERSION = '0.29.5';
 
 let persistenceVerificationState = {
   status: 'pending',
@@ -285,6 +285,40 @@ const server = http.createServer(async (req, res) => {
         currentSeason: result.currentSeason,
         membership: result.membership
       });
+      return;
+    }
+
+    const clubWorldId = worldIdFromPath(pathname, '/club');
+    if (req.method === 'PUT' && clubWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.assignClub({
+        userId: auth.user.userId,
+        worldId: clubWorldId,
+        clubId: body.clubId,
+        expectedRevision: body.expectedRevision
+      });
+      await sendJson(req, res, 200, { ok: true, ...result });
+      return;
+    }
+
+    const slotWorldId = worldIdFromPath(pathname, '/slot');
+    if (req.method === 'PUT' && slotWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.saveSlot({
+        userId: auth.user.userId,
+        worldId: slotWorldId,
+        worldRecord: body.worldRecord,
+        expectedRevision: body.expectedRevision,
+        season: body.season,
+        slotKey: body.slotKey,
+        matches: body.matches || [],
+        financeEvents: body.financeEvents || []
+      });
+      await sendJson(req, res, 200, { ok: true, ...result });
       return;
     }
 

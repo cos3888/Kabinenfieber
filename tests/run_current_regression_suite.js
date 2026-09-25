@@ -35,7 +35,8 @@ const core=[
   'tests/run_kf_0_29_1_autosave_world_metadata_test.js',
   'tests/run_kf_0_29_2_save_integrity_world_navigation_test.js',
   'tests/run_kf_0_29_3_backend_compatibility_test.js',
-  'tests/run_kf_0_29_4_authoritative_world_reload_test.js'
+  'tests/run_kf_0_29_4_authoritative_world_reload_test.js',
+  'tests/run_kf_0_29_5_progress_checkpoint_performance_test.js'
 ];
 const extended=[
   'tests/run_current_ui_ownership_pipeline_test.js',
