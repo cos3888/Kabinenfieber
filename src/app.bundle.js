@@ -61,8 +61,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.29.4';
-  var KF_BUILD_LABEL = 'KF_0.29.4 - Authoritative World Reload';
+  var KF_VERSION = '0.29.5';
+  var KF_BUILD_LABEL = 'KF_0.29.5 - Progress Checkpoints & Save Performance';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -24305,10 +24305,11 @@ migrateWorldDataTruthToCurrent=function(world){
  */
 
 var KF029_BACKEND_BASE_URL = String(window.KF_BACKEND_BASE_URL || 'https://kabinenfieber-backend-458781449503.us-central1.run.app').replace(/\/+$/,'');
-// Remote contract stays independent from the browser/game build. 0.29.1 backends ignore this field; 0.29.2+ use it to guard incompatible snapshot writes.
-var KF029_REMOTE_CONTRACT_VERSION = '0.29.2';
+// KF_0.29.5 introduces dedicated club/progress endpoints. This is a real remote-contract change.
+var KF029_REMOTE_CONTRACT_VERSION = '0.29.5';
 var KF029_AUTH_STORAGE_KEY = 'kf.auth.token';
-var KF029_AUTOSAVE_DEBOUNCE_MS = 1400;
+var KF029_REQUEST_TIMEOUT_MS = 30000;
+var KF029_PROGRESS_TIMEOUT_MS = 60000;
 var KF029Remote = {
   token: null,
   user: null,
@@ -24326,15 +24327,20 @@ var KF029Remote = {
   lastSavedAt: null,
   lastCommittedSlotKey: null,
   pendingWorldConfig: null,
-  autosaveTimer: null,
-  autosaveReason: '',
   backendVersion: null,
   checkpointPending: false,
   checkpointFailed: false,
-  checkpointReason: ''
+  checkpointReason: '',
+  checkpointRequestId: null,
+  checkpointPreparedRequest: null,
+  committedMatchIds: new Set(),
+  committedFinanceKeys: new Set(),
+  detailSeason: null,
+  lastSaveMetrics: null
 };
 try { KF029Remote.token = window.localStorage.getItem(KF029_AUTH_STORAGE_KEY) || null; } catch (error) {}
 
+function kf029NowMs(){ return (window.performance && typeof window.performance.now === 'function') ? window.performance.now() : Date.now(); }
 function kf029SetToken(token){
   KF029Remote.token = token || null;
   try {
@@ -24357,39 +24363,66 @@ function kf029SetUser(user){
   }
 }
 async function kf029CompressedBody(value){
+  var serializeStarted=kf029NowMs();
   var text = JSON.stringify(value == null ? {} : value);
+  var serializeMs=Math.round((kf029NowMs()-serializeStarted)*10)/10;
+  var rawBytes=text.length;
   if (text.length < 256000 || typeof CompressionStream === 'undefined') {
-    return { body:text, encoding:null };
+    return { body:text, encoding:null, metrics:{serializeMs:serializeMs,compressMs:0,rawBytes:rawBytes,wireBytes:rawBytes} };
   }
   try {
+    var compressStarted=kf029NowMs();
     var stream = new Blob([text], { type:'application/json' }).stream().pipeThrough(new CompressionStream('gzip'));
     var buffer = await new Response(stream).arrayBuffer();
-    return { body:buffer, encoding:'gzip' };
+    return {
+      body:buffer,
+      encoding:'gzip',
+      metrics:{
+        serializeMs:serializeMs,
+        compressMs:Math.round((kf029NowMs()-compressStarted)*10)/10,
+        rawBytes:rawBytes,
+        wireBytes:buffer.byteLength
+      }
+    };
   } catch (error) {
-    return { body:text, encoding:null };
+    return { body:text, encoding:null, metrics:{serializeMs:serializeMs,compressMs:0,rawBytes:rawBytes,wireBytes:rawBytes} };
   }
 }
 async function kf029Request(path, options){
   options = options || {};
   var headers = { 'accept':'application/json' };
   if (options.auth !== false && KF029Remote.token) headers.authorization = 'Bearer ' + KF029Remote.token;
-  var body = null;
-  if (Object.prototype.hasOwnProperty.call(options,'body')) {
-    var encoded = await kf029CompressedBody(options.body);
+  var body = null, encoded = null;
+  if (options.encodedBody) {
+    encoded = options.encodedBody;
+    body = encoded.body;
+    headers['content-type'] = 'application/json';
+    if (encoded.encoding) headers['content-encoding'] = encoded.encoding;
+  } else if (Object.prototype.hasOwnProperty.call(options,'body')) {
+    encoded = await kf029CompressedBody(options.body);
     body = encoded.body;
     headers['content-type'] = 'application/json';
     if (encoded.encoding) headers['content-encoding'] = encoded.encoding;
   }
-  var response;
+
+  var timeoutMs=Math.max(1000,Number(options.timeoutMs||KF029_REQUEST_TIMEOUT_MS));
+  var controller=typeof AbortController!=='undefined'?new AbortController():null;
+  var timer=controller?setTimeout(function(){controller.abort();},timeoutMs):null;
+  var requestStarted=kf029NowMs(),response;
   try {
     response = await fetch(KF029_BACKEND_BASE_URL + path, {
       method:options.method || 'GET',
       headers:headers,
-      body:body
+      body:body,
+      signal:controller?controller.signal:undefined
     });
   } catch (error) {
+    if(timer)clearTimeout(timer);
+    if(error && error.name==='AbortError') throw new Error('Serverantwort hat zu lange gedauert.');
     throw new Error('Backend nicht erreichbar.');
   }
+  if(timer)clearTimeout(timer);
+  var requestMs=Math.round((kf029NowMs()-requestStarted)*10)/10;
   var data = null;
   try { data = await response.json(); } catch (error) {}
   if (!response.ok || !data || data.ok === false) {
@@ -24397,6 +24430,15 @@ async function kf029Request(path, options){
     var failure = new Error(message);
     failure.status = response.status;
     throw failure;
+  }
+  if(data && typeof data==='object'){
+    data.__clientTransport={
+      serializeMs:encoded&&encoded.metrics?encoded.metrics.serializeMs:0,
+      compressMs:encoded&&encoded.metrics?encoded.metrics.compressMs:0,
+      rawBytes:encoded&&encoded.metrics?encoded.metrics.rawBytes:0,
+      wireBytes:encoded&&encoded.metrics?encoded.metrics.wireBytes:0,
+      requestMs:requestMs
+    };
   }
   return data;
 }
@@ -24484,6 +24526,61 @@ function kf029CurrentFinanceEvents(){
   });
   return rows;
 }
+function kf029FinanceEventKey(event, clubId){
+  return String((event&&event.clubId)||clubId||'')+'|'+String((event&&event.id)||'');
+}
+function kf029ResetCommittedDetailIndex(matches,financeEvents,season){
+  KF029Remote.committedMatchIds=new Set();
+  KF029Remote.committedFinanceKeys=new Set();
+  (matches||[]).forEach(function(match){if(match&&match.id)KF029Remote.committedMatchIds.add(String(match.id));});
+  (financeEvents||[]).forEach(function(event){if(event&&event.id)KF029Remote.committedFinanceKeys.add(kf029FinanceEventKey(event,event.clubId));});
+  KF029Remote.detailSeason=Number(season||1);
+}
+function kf029EnsureDetailSeason(){
+  var world=AppState.world;
+  var season=Number((((world||{}).meta||{}).seasonNumber)||1);
+  if(Number(KF029Remote.detailSeason||0)!==season){
+    KF029Remote.committedMatchIds=new Set();
+    KF029Remote.committedFinanceKeys=new Set();
+    KF029Remote.detailSeason=season;
+  }
+  return season;
+}
+function kf029CollectProgressDelta(){
+  var world=AppState.world;
+  if(!world)return {season:1,matchesDelta:[],financeEventsDelta:[],matchIds:[],financeKeys:[]};
+  var season=kf029EnsureDetailSeason(),matchesDelta=[],matchIds=[],financeEventsDelta=[],financeKeys=[];
+  CurrentSeasonMatchRepository.listIds(world,season).forEach(function(id){
+    var key=String(id);
+    if(KF029Remote.committedMatchIds.has(key))return;
+    var match=CurrentSeasonMatchRepository.load(world,id,season);
+    if(match){matchesDelta.push(match);matchIds.push(key);}
+  });
+  (((world.clubs||{}).order)||[]).forEach(function(clubId){
+    CurrentSeasonFinanceRepository.listClubEvents(world,clubId,season).forEach(function(event){
+      if(!event||!event.id)return;
+      var key=kf029FinanceEventKey(event,clubId);
+      if(KF029Remote.committedFinanceKeys.has(key))return;
+      if(!event.clubId)event.clubId=clubId;
+      financeEventsDelta.push(event);financeKeys.push(key);
+    });
+  });
+  return {season:season,matchesDelta:matchesDelta,financeEventsDelta:financeEventsDelta,matchIds:matchIds,financeKeys:financeKeys};
+}
+function kf029MarkProgressDeltaCommitted(prepared){
+  if(!prepared)return;
+  if(Number(KF029Remote.detailSeason||0)!==Number(prepared.season||1)){
+    KF029Remote.committedMatchIds=new Set();
+    KF029Remote.committedFinanceKeys=new Set();
+    KF029Remote.detailSeason=Number(prepared.season||1);
+  }
+  (prepared.matchIds||[]).forEach(function(id){KF029Remote.committedMatchIds.add(String(id));});
+  (prepared.financeKeys||[]).forEach(function(key){KF029Remote.committedFinanceKeys.add(String(key));});
+}
+function kf029NewRequestId(prefix){
+  return String(prefix||'commit')+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+}
+
 function kf029RestoreCurrentDetails(world, matches, financeEvents){
   CurrentSeasonMatchRepository.deleteWorld(world);
   CurrentSeasonFinanceRepository.deleteWorld(world);
