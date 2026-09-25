@@ -88,7 +88,7 @@ function makeWorldRecord({ worldId, userId, trainerId='trainer-a', clubId=null }
 
   const worldId='world-one';
   const initial=makeWorldRecord({worldId,userId:registered.user.userId});
-  const created=await sessions.createWorld({userId:registered.user.userId,worldRecord:initial});
+  const created=await sessions.createWorld({userId:registered.user.userId,worldRecord:initial,worldName:'Testwelt',visibility:'PRIVATE',joinPolicy:'INVITE_ONLY'});
   check('World creation assigns slot and creator WORLD_ADMIN from WorldRecord.memberships',
     created.registration.slotId===1 && created.membership.role===ROLE_WORLD_ADMIN);
 
@@ -137,7 +137,7 @@ function makeWorldRecord({ worldId, userId, trainerId='trainer-a', clubId=null }
   ));
 
   const secondWorld=makeWorldRecord({worldId:'world-two',userId:registered.user.userId,trainerId:'trainer-two'});
-  await sessions.createWorld({userId:registered.user.userId,worldRecord:secondWorld});
+  await sessions.createWorld({userId:registered.user.userId,worldRecord:secondWorld,worldName:'Zweite Testwelt',visibility:'PUBLIC',joinPolicy:'APPLICATION'});
   check('Multiple worlds can be loaded simultaneously', runtime.status().loadedWorldCount===2);
 
   const firstRuntime=runtime.runtimes.get(worldId);
