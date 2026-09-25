@@ -11,7 +11,7 @@ for(const f of ['src/static-data.js','src/db1-db2-data.js'])vm.runInContext(read
 let code=read('src/app.bundle.js');
 code=code.replace(/\n\n  if \(document\.readyState === 'loading'\) \{/,`\nwindow.KFTest={AppState,createEmptyWorld,createWorldRecord,registerWorldRecord,WorldRepository,CurrentSeasonFinanceRepository,ensureClubFinance,addFinanceEvent,financeEventsForSeason,financeCurrentCash,financeEventSum,kf0261BonusKeySeen,kf0261RegisterBonusKey,kf0271ArchiveExistingFinanceEvents,migrateWorldDataTruthToCurrent};\n\n  if (document.readyState === 'loading') {`);
 vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();const T=windowObj.KFTest;
-check('Runtime meldet KF_0.29.0',code.includes("var KF_VERSION = '0.29.0';"));
+check('Runtime meldet KF_0.29.1',code.includes("var KF_VERSION = '0.29.1';"));
 function world(id){const w=T.createEmptyWorld({seasonNumber:1});w.meta.id=id;w.meta.initialized=true;w.clubs.byId.c1={id:'c1',name:'Testclub',leagueKey:'Test 1',leagueLevel:1,countryName:'Deutschland'};w.clubs.order=['c1'];return w;}
 const w=world('world-fin-0271'),record=T.createWorldRecord({id:w.meta.id,gameState:w});T.registerWorldRecord(record);T.AppState.worldRecord=record;T.AppState.world=w;
 w.clubFinances={byClub:{c1:{clubId:'c1',seasonId:1,seasonStartCash:10,financeEvents:[
