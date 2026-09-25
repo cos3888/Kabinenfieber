@@ -48,7 +48,7 @@ const path=require('path');
 
   const worldId='http-world';
   const record={
-    id:worldId,schemaVersion:'kf-world-record-0.27.2',gameVersion:'0.29.0',
+    id:worldId,schemaVersion:'kf-world-record-0.27.2',gameVersion:'0.29.2',
     createdAt:new Date().toISOString(),createdByUserId:userId,
     progression:{status:'waiting',readyTrainerIds:[],lastHumanActivityAt:new Date().toISOString()},
     memberships:{byTrainerId:{'trainer-http':{
@@ -62,7 +62,7 @@ const path=require('path');
     }
   };
   const created=await request('/api/v1/worlds',{
-    method:'POST',headers:authHeaders,body:JSON.stringify({worldRecord:record,worldName:'HTTP Welt',visibility:'PUBLIC',joinPolicy:'OPEN',matches:[],financeEvents:[]})
+    method:'POST',headers:authHeaders,body:JSON.stringify({clientVersion:'0.29.2',worldRecord:record,worldName:'HTTP Welt',visibility:'PUBLIC',joinPolicy:'OPEN',matches:[],financeEvents:[]})
   });
   check('Authenticated HTTP world creation returns compact revision/membership response',
     created.res.status===201&&created.data.revision===1&&created.data.membership.role==='WORLD_ADMIN'&&!Object.prototype.hasOwnProperty.call(created.data,'worldRecord'),
@@ -79,6 +79,7 @@ const path=require('path');
   const saved=await request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/snapshot',{
     method:'PUT',headers:authHeaders,body:JSON.stringify({
       expectedRevision:opened.data.revision,
+      clientVersion:'0.29.2',
       worldRecord:opened.data.worldRecord,
       matches:[{id:'m-http',season:1}],
       financeEvents:[{id:'f-http',clubId:'club-x',seasonId:1,amount:1}]
