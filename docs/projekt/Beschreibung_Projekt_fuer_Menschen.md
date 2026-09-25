@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.28.1
+# Kabinenfieber - Stand KF_0.29.0
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.28.1`
+App-Version: `KF_0.29.0`
 
 Persistierte Schemas:
 
@@ -16,6 +16,52 @@ Persistierte Schemas:
 - WorldRecord: `kf-world-record-0.27.2`
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
+
+
+## KF_0.29.0 – User Identity, World Runtime & Save/Load
+
+Der Browser ist erstmals an den Backend-Spielstand angebunden. Ein Benutzer registriert sich mit Benutzername und Passwort oder meldet sich wieder an. E-Mail ist bewusst noch nicht erforderlich; damit gibt es in diesem Block auch noch keinen automatischen Passwort-Reset.
+
+### Identitaet und Sicherheit
+
+- Auth-Wahrheit: serverseitiger Account mit stabiler `userId`, normalisiert eindeutigem Loginname und gesalzenem `scrypt`-Passwort-Hash.
+- sichtbarer Anzeigename ist vom Loginname getrennt.
+- eine Session verwendet ein zufaelliges Bearer-Token; der Server persistiert nur dessen SHA-256-Hash.
+- Auth-Daten enthalten keine Vereins- oder Weltrollenwahrheit.
+- Club und Weltrolle bleiben ausschliesslich in `WorldRecord.memberships`.
+
+### Weltlaufzeit
+
+`WorldRuntimeManager` haelt geladene Welten als temporaere Arbeitskopien im RAM:
+
+- `Map<worldId, runtime>` ermoeglicht mehrere gleichzeitig geladene Welten.
+- jede Welt besitzt eine eigene Promise-/Mutation-Queue; Aktionen derselben Welt werden serialisiert, andere Welten bleiben fachlich getrennt.
+- bei Inaktivitaet wird eine Welt nach aktuell 15 Minuten aus dem RAM entladen. Persistente Cloud-Daten werden dabei nicht geloescht.
+- nach Prozessneustart oder Unload wird die committed Manifest-Revision neu aus dem Object Store geladen.
+- Cloud Run bleibt vorerst auf maximal einer Instanz, bis verteilte Locks/Revisionsteuerung fuer mehrere Instanzen umgesetzt sind.
+
+### Save/Load-Bruecke
+
+GitHub Pages kommuniziert nur mit Cloud Run, niemals direkt mit Firestore oder Cloud Storage. Der Browser kann:
+
+1. registrieren/anmelden,
+2. die eigenen Welten ueber den rebuildbaren Teilnahmeindex auflisten,
+3. eine neue Welt anlegen,
+4. eine Welt inklusive Current-Season-Match-/Finance-Details laden,
+5. den Einzelspielerstand revisionsgesichert speichern.
+
+Der Vollsnapshot ist eine bewusst begrenzte Uebergangsloesung fuer Singleplayer. Sobald mehr als ein menschlicher User in einer Welt aktiv ist, lehnt der Server Vollsnapshot-Saves ab. Multiplayer-Mutationen muessen spaeter ueber das serverautoritative Command Gateway laufen; dadurch kann kein Browser die gesamte gemeinsame Welt frei ersetzen.
+
+### Datenquellen / keine doppelte Wahrheit
+
+- Auth-Identitaet: UserAccount/`userId`
+- Profil: UserProfile
+- menschlicher Club + Rolle: **nur `WorldRecord.memberships`**
+- persistierte Welt: committed WorldRecord-Revision im Object Store
+- Weltliste/5-Welten-Regel: rebuildbarer Firestore-Teilnahmeindex
+- geladene Runtime: temporaere RAM-Kopie, keine zweite persistente Wahrheit
+- Current-Season-Vollmatches und FinanceEvents: weiterhin fachlich getrennte Detailwahrheiten; der Runtime-Snapshot speichert sie als aktuelle Detailsegmente und der Browser stellt die bestehenden Repositories beim Laden daraus wieder her.
+
 
 ## KF_0.28.1 – Cloud Persistence Verification
 
