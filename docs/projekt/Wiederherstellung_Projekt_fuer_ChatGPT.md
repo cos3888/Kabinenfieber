@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.29.0
+# Wiederherstellung Kabinenfieber - KF_0.29.1
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.29.0`
+Version: `KF_0.29.1`
 
 Build-Label:
 
-`KF_0.29.0 - User Identity, World Runtime & Save/Load`
+`KF_0.29.1 - Autosave & World Metadata`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.29.0.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.29.1.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,34 @@ Aktuelle ZIP nach Export soll `KF_0.29.0.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.29.1 – Autosave & World Metadata
+
+Fixblock auf KF_0.29.0:
+
+- manueller Save-Knopf im Browser entfernt; Persistenz ist als Autosave-Modell zu behandeln.
+- `office-advance` erzeugt nach der vollständig verarbeiteten Aktion einen unmittelbaren `calendar-slot`-Checkpoint.
+- der Abschluss der asynchronen Kalenderschnellsimulation erzeugt einen unmittelbaren `calendar-simulation-checkpoint`.
+- relevante Entscheidungen verwenden einen kurzen Debounce-Autosave; `change`/`drop` in den zentralen Managementansichten fangen zusätzliche Formular-/Lineupänderungen ab.
+- Exit/Logout wartet auf einen Flush der Save-Queue.
+- neuer Regressionstest: `tests/run_kf_0_29_1_autosave_world_metadata_test.js`.
+- Reload-Test muss Saison, `world.calendar.currentSlotKey`, Current-Season-Matches und Current-Season-FinanceEvents nach Unload identisch wiederherstellen.
+
+Neue Welt-Metadaten:
+
+- `worldName`: Pflicht bei Neuanlage, 3–40 Zeichen.
+- `visibility`: `PUBLIC` oder `PRIVATE`.
+- `joinPolicy`: `OPEN`, `APPLICATION` oder `INVITE_ONLY`.
+- zugelassene Kombinationen: `PUBLIC+OPEN`, `PUBLIC+APPLICATION`, `PRIVATE+INVITE_ONLY`.
+- zentrale Wahrheit dafür ist das World Registry / Firestore-Metadatum.
+- **nicht** in den WorldRecord kopieren.
+- bestehende 0.29.0-Welten ohne `worldName` bleiben kompatibel; die Weltliste darf einen Fallbacknamen anzeigen.
+
+Weiterhin gilt:
+
+- `WorldRecord.memberships` = einzige Wahrheit für tatsächliche Mitgliedschaft, `clubId`, `PLAYER` und `WORLD_ADMIN`.
+- Public Search, Bewerbungsworkflow und Open-Join sind noch nicht implementiert.
+- Vollsnapshot-Save bleibt Singleplayer-Übergangspfad und ist in Mehrspielerwelten gesperrt.
 
 ## KF_0.29.0 – User Identity, World Runtime & Save/Load
 
