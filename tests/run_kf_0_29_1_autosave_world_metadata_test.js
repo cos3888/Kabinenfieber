@@ -93,8 +93,8 @@ function makeWorldRecord(worldId,userId){
     reopened.financeEvents[0].id==='finance-checkpoint');
 
   const app=await fs.readFile(path.join(__dirname,'..','src','app.bundle.js'),'utf8');
-  check('Browser uses automatic slot checkpoints and debounced decision autosave',
-    app.includes("kf029ScheduleAutosave('calendar-slot', true)")&&
+  check('Browser uses confirmed normal-slot checkpoints plus quick-sim and debounced decision autosave',
+    app.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
     app.includes("kf029ScheduleAutosave('calendar-simulation-checkpoint', true)")&&
     app.includes('KF029_AUTOSAVE_DEBOUNCE_MS = 1400'));
 
