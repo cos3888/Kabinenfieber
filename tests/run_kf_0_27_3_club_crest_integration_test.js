@@ -19,7 +19,7 @@ for(const club of db.clubs){
 }
 const totalBytes=sizes.reduce((a,b)=>a+b,0);
 const app=read('src/app.bundle.js');
-const passed=db.clubs.length===432&&sizes.length===424&&JSON.stringify(missing.sort())===JSON.stringify(expectedMissing)&&badDimensions.length===0&&notPng.length===0&&app.includes("var KF_VERSION = '0.27.3';");
+const passed=db.clubs.length===432&&sizes.length===424&&JSON.stringify(missing.sort())===JSON.stringify(expectedMissing)&&badDimensions.length===0&&notPng.length===0&&app.includes("var KF_VERSION = '0.29.0';");
 const report={passed,totalClubs:db.clubs.length,present:sizes.length,missing:missing.sort(),badDimensions,notPng,totalBytes,totalMiB:Number((totalBytes/1024/1024).toFixed(2)),maxBytes:sizes.length?Math.max(...sizes):0};
 console.log(JSON.stringify(report,null,2));
 process.exit(passed?0:1);
