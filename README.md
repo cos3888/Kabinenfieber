@@ -1,11 +1,22 @@
-# Kabinenfieber KF_0.29.1
+# Kabinenfieber KF_0.29.2
 
 KF_0.27.2 bereinigt auf Basis des abgeschlossenen KF_0.27.1-Stands die Repository- und Assetstruktur, ohne Gameplay oder Simulation zu veraendern. Die Match- und Finance-Segmentierung aus KF_0.27.0/0.27.1 bleibt unveraendert aktiv.
 
 
+## Neu in KF_0.29.2 – Save Integrity & World Navigation
+
+KF_0.29.2 schließt die im realen Browsertest sichtbaren Persistenzlücken.
+
+- Vereinsübernahme wird erst nach bestätigtem Servercommit abgeschlossen.
+- normaler Kalenderfortschritt wird nach vollständiger Verarbeitung serverseitig bestätigt, bevor weitere Eingaben zugelassen werden.
+- Save-Fehler sperren nicht mehr still die Navigation; der Spieler bekommt Retry und einen bewussten Rückweg zur Weltliste.
+- Browser und Backend müssen dieselbe Version melden; Create/Save tragen zusätzlich die Clientversion.
+- GitHub Pages lädt Bundle/CSS mit Versionsparameter gegen alte Browser-Caches.
+- neuer Regressionstest prüft Vereinsübernahme, Spieltag, Runtime-Unload und exakten Reload inklusive Match-/Finance-Details.
+
 ## Neu in KF_0.29.1 – Autosave & benannte Spielwelten
 
-KF_0.29.1 korrigiert den ersten Save/Load-Praxistest und richtet Kabinenfieber auf ein persistentes Online-Weltmodell aus.
+KF_0.29.2 korrigiert den ersten Save/Load-Praxistest und richtet Kabinenfieber auf ein persistentes Online-Weltmodell aus.
 
 - kein manueller „Jetzt speichern“-Knopf mehr als normale Spielfunktion.
 - garantierter serverseitiger Autosave-Checkpoint nach normalem Kalenderfortschritt und nach abgeschlossener Kalenderschnellsimulation.
@@ -17,7 +28,7 @@ KF_0.29.1 korrigiert den ersten Save/Load-Praxistest und richtet Kabinenfieber a
 - vorbereitete Zugangsmodelle: `PUBLIC + OPEN` (offen), `PUBLIC + APPLICATION` (Bewerbung) und `PRIVATE + INVITE_ONLY` (nur Einladung).
 - bestehende KF_0.29.0-Welten ohne Namen bleiben ladbar und erhalten in der Weltliste einen technischen Fallbacknamen.
 
-Öffentliche Weltsuche, Bewerbungsworkflow und Direktbeitritt sind weiterhin **nicht** Bestandteil dieses Fixes; KF_0.29.1 bereitet nur die Metadaten dafür sauber vor.
+Öffentliche Weltsuche, Bewerbungsworkflow und Direktbeitritt sind weiterhin **nicht** Bestandteil dieses Fixes; KF_0.29.2 bereitet nur die Metadaten dafür sauber vor.
 
 ## Neu in KF_0.29.0 – User Identity, World Runtime & Save/Load
 

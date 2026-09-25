@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.29.1
+# Wiederherstellung Kabinenfieber - KF_0.29.2
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.29.1`
+Version: `KF_0.29.2`
 
 Build-Label:
 
-`KF_0.29.1 - Autosave & World Metadata`
+`KF_0.29.2 - Save Integrity & World Navigation`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.29.1.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.29.2.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,29 @@ Aktuelle ZIP nach Export soll `KF_0.29.1.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.29.2 – Save Integrity & World Navigation
+
+Fixblock auf KF_0.29.1 nach realem Browser-Praxistest:
+
+- Vereinsübernahme ist ein harter Commit: `WorldRecord.memberships[trainerId].clubId` muss serverseitig bestätigt sein, bevor der Client ins Büro wechselt.
+- bei fehlgeschlagener Vereinsübernahme wird die lokale Clubzuordnung zurückgerollt; kein scheinbar erfolgreicher Takeover mehr.
+- normaler `office-advance` erzeugt nach vollständiger Slotverarbeitung einen Hard Checkpoint und blockiert weitere Aktionen, bis Save erfolgreich oder bewusst verworfen wurde.
+- Save-Fehler beim Wechsel zur Weltliste werden angezeigt; Recovery bietet „Erneut versuchen“ oder „Zur Weltliste“ mit bewusstem Verwerfen nur der unbestätigten lokalen Änderungen.
+- kein leerer `catch` mehr, der den Spieler unsichtbar in der Welt festhält.
+- Browser prüft Backend-Version über `/healthz`; Login, Restore und Weltladen laufen nicht mit einem inkompatiblen Backend.
+- Create-/Snapshot-Requests tragen `clientVersion`; der Server verlangt exakt `0.29.2`.
+- `index.html` verwendet Cache-Busting `?v=0.29.2`.
+- Regressionstest: `tests/run_kf_0_29_2_save_integrity_world_navigation_test.js`.
+
+Kanonische Wahrheit bleibt:
+- Spielstand: committed `WorldRecord` + Current-Season-Match-/Finance-Details.
+- Mitgliedschaft, `clubId`, `PLAYER`, `WORLD_ADMIN`: nur `WorldRecord.memberships`.
+- Weltname/Visibility/JoinPolicy: nur World Registry / Firestore.
+- keine neue doppelte persistierte Wahrheit.
+
+Cloud-Deployment-Hinweis:
+- Frontend und Cloud-Run-Backend müssen gemeinsam auf KF_0.29.2 gebracht werden; der Client blockiert sonst absichtlich mit Versionskonflikt.
 
 ## KF_0.29.1 – Autosave & World Metadata
 

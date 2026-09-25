@@ -11,7 +11,7 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const API_VERSION = '0.29.1';
+const API_VERSION = '0.29.2';
 
 let persistenceVerificationState = {
   status: 'pending',
@@ -171,6 +171,15 @@ function publicError(error, statusCode) {
   return String(error && error.message || 'request_failed');
 }
 
+function requireClientVersion(body) {
+  const clientVersion=String(body && body.clientVersion || '');
+  if (clientVersion !== API_VERSION) {
+    const error=new Error('client_version_mismatch');
+    error.statusCode=409;
+    throw error;
+  }
+}
+
 function worldIdFromPath(pathname, suffix = '') {
   const prefix = '/api/v1/worlds/';
   if (!pathname.startsWith(prefix)) return null;
@@ -257,6 +266,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && pathname === '/api/v1/worlds') {
       const auth = await requireAuth(req);
       const body = await readJsonBody(req);
+      requireClientVersion(body);
       const result = await persistence.worldSessions.createWorld({
         userId: auth.user.userId,
         worldRecord: body.worldRecord,
@@ -280,6 +290,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'PUT' && snapshotWorldId) {
       const auth = await requireAuth(req);
       const body = await readJsonBody(req);
+      requireClientVersion(body);
       const result = await persistence.worldSessions.saveWorld({
         userId: auth.user.userId,
         worldId: snapshotWorldId,

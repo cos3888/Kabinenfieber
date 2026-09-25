@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.29.1
+# Kabinenfieber - Stand KF_0.29.2
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.29.1`
+App-Version: `KF_0.29.2`
 
 Persistierte Schemas:
 
@@ -18,9 +18,34 @@ Persistierte Schemas:
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
 
+## KF_0.29.2 – Save Integrity & World Navigation
+
+Der zweite Browser-Praxistest zeigte zwei kritische Lücken: Nach Vereinsübernahme und absolviertem Spieltag konnte eine ältere committed Revision geladen werden, und ein fehlgeschlagener Flush beim Wechsel zur Weltliste wurde im Browser still geschluckt.
+
+### Harte Persistenzgrenzen
+
+- die Vereinsübernahme gilt im Browser erst nach erfolgreichem Servercommit als abgeschlossen; vorher wird nicht ins Büro gewechselt.
+- schlägt der Commit der Vereinsübernahme fehl, wird die lokale `clubId` zurückgesetzt und die Vereinsauswahl bleibt aktiv.
+- ein normaler Kalenderfortschritt sperrt weitere Aktionen, bis der vollständig verarbeitete Slot serverseitig bestätigt wurde.
+- ein fehlgeschlagener Checkpoint wird sichtbar angezeigt; der Spieler kann erneut speichern oder bewusst zur Weltliste zurückkehren und dabei nur nicht bestätigte lokale Änderungen verwerfen.
+- der Rückweg zur Weltliste schluckt Save-Fehler nicht mehr.
+
+### Versionssicherheit
+
+- Browser und Backend müssen dieselbe App/API-Version melden.
+- Login, Session-Restore und Weltladen prüfen `/healthz`; ein Versionskonflikt stoppt den Vorgang mit verständlicher Meldung.
+- Create/Save senden zusätzlich `clientVersion`; der Server lehnt abweichende Versionen mit Konflikt ab.
+- `index.html` lädt Bundle und CSS mit Versionsparameter, damit GitHub-Pages-/Browser-Caches beim Test keinen alten Client weiterverwenden.
+
+### Datenwahrheit
+
+Unverändert: aktuelle Spielwahrheit = committed `WorldRecord` plus Current-Season-Match-/Finance-Stores. Vereinszuordnung ausschließlich `WorldRecord.memberships`. Weltname und Zugangsmodell ausschließlich World Registry / Firestore. Es entsteht keine zusätzliche persistierte Wahrheit.
+
+Regressionstest: `tests/run_kf_0_29_2_save_integrity_world_navigation_test.js` prüft den Roundtrip „Welt ohne Verein → Vereinsübernahme committen → Runtime entladen → gleicher Verein → Spieltag committen → Runtime entladen → gleicher Verein + exakter Slot + Match-/Finance-Details“.
+
 ## KF_0.29.1 – Autosave & benannte Spielwelten
 
-Der erste Praxistest von KF_0.29.0 zeigte, dass ein klassischer manueller Save-Knopf für Kabinenfieber nicht zum vorgesehenen dauerhaften Weltmodell passt. KF_0.29.1 stellt deshalb auf Autosave um und prüft den Reload explizit gegen den committed Kalenderstand.
+Der erste Praxistest von KF_0.29.0 zeigte, dass ein klassischer manueller Save-Knopf für Kabinenfieber nicht zum vorgesehenen dauerhaften Weltmodell passt. KF_0.29.2 stellt deshalb auf Autosave um und prüft den Reload explizit gegen den committed Kalenderstand.
 
 ### Autosave
 
@@ -50,7 +75,7 @@ Die eigentliche öffentliche Weltsuche, Bewerbungen und der Direktbeitritt werde
 
 ### Reload-Wahrheit
 
-Beim Öffnen wird die committed WorldRecord-Revision zusammen mit Current-Season-Match- und Finance-Details geladen. Der Regressionstest für KF_0.29.1 vergleicht insbesondere Saison und `world.calendar.currentSlotKey` vor dem Commit und nach einem Runtime-Unload/Reload.
+Beim Öffnen wird die committed WorldRecord-Revision zusammen mit Current-Season-Match- und Finance-Details geladen. Der Regressionstest für KF_0.29.2 vergleicht insbesondere Saison und `world.calendar.currentSlotKey` vor dem Commit und nach einem Runtime-Unload/Reload.
 
 ## KF_0.29.0 – User Identity, World Runtime & Save/Load
 
