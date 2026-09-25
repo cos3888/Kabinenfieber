@@ -10105,7 +10105,7 @@ function runCalendarSimulationUntil(requestedSlotKey){
     pendingSlot = null;
     try { flushDeferredClubAggregates(9999); } catch (error) { console.warn('club aggregate flush failed', error); }
     ensureOfficeMailbox();
-    if (typeof kf029ScheduleAutosave === 'function' && typeof KF029Remote !== 'undefined' && KF029Remote.user && AppState.worldRecord) kf029ScheduleAutosave('calendar-simulation-checkpoint', true);
+    if (typeof kf029CommitHardCheckpoint === 'function' && typeof KF029Remote !== 'undefined' && KF029Remote.user && AppState.worldRecord) void kf029CommitHardCheckpoint('calendar-simulation-checkpoint').catch(function(){});
     var requiredAfterAdvance=officeRequiredActionMail(AppState.world);
     renderApp();
     if(requiredAfterAdvance){setSelectedMailId(requiredAfterAdvance.id);markMailRead(requiredAfterAdvance.id);openModal({type:'mail-center'},{preserveCurrent:false});renderModal();return;}

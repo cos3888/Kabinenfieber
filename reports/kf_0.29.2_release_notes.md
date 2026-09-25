@@ -8,7 +8,7 @@ Im Browser-Praxistest wurde nach absolviertem Spieltag beim erneuten Laden wiede
 
 - Vereinsübernahme wird zum bestätigten Servercheckpoint.
 - Bei Takeover-Savefehler wird die lokale Clubzuordnung zurückgesetzt.
-- Normaler Kalenderfortschritt verwendet einen Hard Checkpoint nach vollständiger Slotverarbeitung.
+- Normaler Kalenderfortschritt und abgeschlossene Kalenderschnellsimulation verwenden einen Hard Checkpoint nach vollständiger Verarbeitung.
 - Während eines Hard Checkpoints werden weitere Aktionen blockiert.
 - Checkpointfehler zeigen Retry und bewusstes Verwerfen unbestätigter lokaler Änderungen.
 - Weltlisten-Navigation verschluckt Save-Fehler nicht mehr.

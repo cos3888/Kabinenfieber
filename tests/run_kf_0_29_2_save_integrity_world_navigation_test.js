@@ -90,6 +90,7 @@ function makeWorldRecord(worldId,userId){
 
   check('Calendar advance uses a blocking hard checkpoint instead of fire-and-forget autosave',
     app.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
+    app.includes("kf029CommitHardCheckpoint('calendar-simulation-checkpoint')")&&
     !app.includes("if (action === 'office-advance') kf029ScheduleAutosave('calendar-slot', true)")&&
     app.includes('KF029Remote.checkpointPending || KF029Remote.checkpointFailed'));
 

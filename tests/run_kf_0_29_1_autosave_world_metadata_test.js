@@ -95,7 +95,7 @@ function makeWorldRecord(worldId,userId){
   const app=await fs.readFile(path.join(__dirname,'..','src','app.bundle.js'),'utf8');
   check('Browser uses confirmed normal-slot checkpoints plus quick-sim and debounced decision autosave',
     app.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
-    app.includes("kf029ScheduleAutosave('calendar-simulation-checkpoint', true)")&&
+    app.includes("kf029CommitHardCheckpoint('calendar-simulation-checkpoint')")&&
     app.includes('KF029_AUTOSAVE_DEBOUNCE_MS = 1400'));
 
   check('Manual save control was removed from the browser UI',

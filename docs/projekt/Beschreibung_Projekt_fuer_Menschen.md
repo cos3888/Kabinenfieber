@@ -26,7 +26,7 @@ Der zweite Browser-Praxistest zeigte zwei kritische Lücken: Nach Vereinsüberna
 
 - die Vereinsübernahme gilt im Browser erst nach erfolgreichem Servercommit als abgeschlossen; vorher wird nicht ins Büro gewechselt.
 - schlägt der Commit der Vereinsübernahme fehl, wird die lokale `clubId` zurückgesetzt und die Vereinsauswahl bleibt aktiv.
-- ein normaler Kalenderfortschritt sperrt weitere Aktionen, bis der vollständig verarbeitete Slot serverseitig bestätigt wurde.
+- normaler Kalenderfortschritt und abgeschlossene Kalenderschnellsimulation sperren weitere Aktionen, bis der vollständig verarbeitete Stand serverseitig bestätigt wurde.
 - ein fehlgeschlagener Checkpoint wird sichtbar angezeigt; der Spieler kann erneut speichern oder bewusst zur Weltliste zurückkehren und dabei nur nicht bestätigte lokale Änderungen verwerfen.
 - der Rückweg zur Weltliste schluckt Save-Fehler nicht mehr.
 

@@ -43,7 +43,7 @@ Fixblock auf KF_0.29.1 nach realem Browser-Praxistest:
 
 - Vereinsübernahme ist ein harter Commit: `WorldRecord.memberships[trainerId].clubId` muss serverseitig bestätigt sein, bevor der Client ins Büro wechselt.
 - bei fehlgeschlagener Vereinsübernahme wird die lokale Clubzuordnung zurückgerollt; kein scheinbar erfolgreicher Takeover mehr.
-- normaler `office-advance` erzeugt nach vollständiger Slotverarbeitung einen Hard Checkpoint und blockiert weitere Aktionen, bis Save erfolgreich oder bewusst verworfen wurde.
+- normaler `office-advance` und der Abschluss der Kalenderschnellsimulation erzeugen nach vollständiger Verarbeitung einen Hard Checkpoint und blockieren weitere Aktionen, bis Save erfolgreich oder bewusst verworfen wurde.
 - Save-Fehler beim Wechsel zur Weltliste werden angezeigt; Recovery bietet „Erneut versuchen“ oder „Zur Weltliste“ mit bewusstem Verwerfen nur der unbestätigten lokalen Änderungen.
 - kein leerer `catch` mehr, der den Spieler unsichtbar in der Welt festhält.
 - Browser prüft Backend-Version über `/healthz`; Login, Restore und Weltladen laufen nicht mit einem inkompatiblen Backend.
