@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.28.1
+# Wiederherstellung Kabinenfieber - KF_0.29.0
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.28.1`
+Version: `KF_0.29.0`
 
 Build-Label:
 
-`KF_0.28.1 - Cloud Persistence Verification`
+`KF_0.29.0 - User Identity, World Runtime & Save/Load`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.28.1.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.29.0.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -35,6 +35,38 @@ Aktuelle ZIP nach Export soll `KF_0.28.1.zip` heissen.
 - Bestehende Systeme vor neuen Features sauber abschliessen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
+
+
+## KF_0.29.0 – User Identity, World Runtime & Save/Load
+
+Neue Kernbausteine:
+
+- `server/auth/file-auth-repository.js` und `server/auth/firestore-auth-repository.js`: getrennte Auth-/Profil-/Session-Persistenz.
+- `server/services/auth-service.js`: Username/Passwort-Registrierung und Login, `scrypt`-Hashing, opaque Session-Token, serverseitig nur Token-Hash.
+- `server/services/world-runtime-manager.js`: mehrere geladene Welten, per-world Queue, Revisionspruefung und Inaktivitaets-Unload.
+- `server/services/world-session-service.js`: authentifizierte Weltliste, Weltanlage, Open und Singleplayer-Snapshot-Save.
+- `WorldPersistenceService.loadCurrentSeasonDetails`, `commitRuntimeSnapshot` und `deleteWorld`.
+- REST-API in `server/index.js`: Auth und Weltzugriff; CORS fuer GitHub Pages/localhost; gzip fuer grosse JSON-Payloads.
+- `src/app.bundle.js`: Login-/Registrierungsmaske, Token-Wiederherstellung, Weltliste sowie Remote Create/Open/Save.
+- `src/styles/app.css`: Login-/Weltlistenlayout.
+
+Wichtige Sicherheits-/Wahrheitsregel:
+
+- `userId` ist die unveraenderliche Benutzeridentitaet.
+- Loginname ist case-insensitive eindeutig; Anzeigename ist davon getrennt.
+- kein Klartextpasswort wird gespeichert.
+- `WorldRecord.memberships` ist weiterhin die **einzige** persistente Wahrheit fuer `clubId` und `PLAYER`/`WORLD_ADMIN`.
+- AuthProfile und Firestore-Teilnahmeindex enthalten diese Felder absichtlich nicht.
+- ein vollstaendiger Browser-WorldRecord-Snapshot ist nur bei exakt einem menschlichen Mitglied erlaubt. Bei mehreren menschlichen Usern muss der spaetere Command-Pfad verwendet werden.
+
+Remote-Client-Ablauf:
+
+`Registrieren/Login -> Weltliste -> Welt erstellen/oeffnen -> Runtime laden -> spielen -> Save -> Logout/Reload -> gleiche committed Revision laden`.
+
+Die eigentliche Multiplayer-Lobby, Einladungsbedienung, Join/Leave-Orchestrierung, Ready/Deadline/Countdown und Live-Match-Steuerung sind weiterhin offen.
+
+Cloud-Run-Regel: vorerst `max instances = 1`. Erst nach verteilter Lock-/Lease-Logik darf horizontal skaliert werden.
+
 
 ## KF_0.28.1 – Cloud Persistence Verification
 
