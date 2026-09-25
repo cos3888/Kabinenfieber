@@ -44,7 +44,7 @@ class WorldPersistenceService {
     if (existing) throw new PersistenceConflictError('World is already initialized', { worldId });
     const revision = 1, prefix = this.revisionPrefix(worldId, revision);
     const worldPath = `${prefix}/world.json.gz`;
-    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+    await this.store.write(worldPath, await encodeJsonGzip(worldRecord, { level: 1 }), { contentType: 'application/gzip', readGeneration: false });
     const manifest = {
       schemaVersion: MANIFEST_SCHEMA,
       storageSchema: STORAGE_SCHEMA,
@@ -57,7 +57,7 @@ class WorldPersistenceService {
       financeSegments: {}
     };
     try {
-      await this.store.write(this.manifestKey(worldId), encodeJson(manifest), { ifGenerationMatch: 0, contentType: 'application/json' });
+      await this.store.write(this.manifestKey(worldId), encodeJson(manifest), { ifGenerationMatch: 0, contentType: 'application/json', readGeneration: false });
     } catch (error) {
       await this.store.delete(worldPath).catch(() => {});
       throw error;
@@ -151,7 +151,7 @@ class WorldPersistenceService {
     const staged = [worldPath, matchPath, financePath];
 
     try {
-      await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+      await this.store.write(worldPath, await encodeJsonGzip(worldRecord, { level: 1 }), { contentType: 'application/gzip', readGeneration: false });
       await this.store.write(matchPath, await encodeJsonGzip({ season, kind: 'runtime-snapshot', matches }), { contentType: 'application/gzip' });
       await this.store.write(financePath, await encodeJsonGzip({ season, kind: 'runtime-snapshot', events: financeEvents }), { contentType: 'application/gzip' });
       const next = {
@@ -165,7 +165,8 @@ class WorldPersistenceService {
       };
       await this.store.write(this.manifestKey(worldId), encodeJson(next), {
         ifGenerationMatch: envelope.generation,
-        contentType: 'application/json'
+        contentType: 'application/json',
+        readGeneration: false
       });
 
       if (current.worldRecordPath && current.worldRecordPath !== worldPath) {
@@ -189,28 +190,138 @@ class WorldPersistenceService {
     }
   }
 
+  async commitProgressCheckpoint({
+    worldRecord,
+    season,
+    matchesDelta = [],
+    financeEventsDelta = [],
+    expectedRevision,
+    requestId = null
+  }) {
+    const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
+    const envelope = await this._readManifestEnvelope(worldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const current = envelope.manifest;
+    if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
+      if (requestId && String(current.lastCommitRequestId || '') === String(requestId)) {
+        return { ...current, deduplicated: true };
+      }
+      throw new PersistenceConflictError('World revision mismatch', {
+        worldId,
+        expectedRevision,
+        actualRevision: current.revision
+      });
+    }
+
+    season = Number(season || (worldRecord.gameState && worldRecord.gameState.meta && worldRecord.gameState.meta.seasonNumber) || current.currentSeason || 1);
+    if (!Number.isFinite(season) || season < 1) throw new Error('Invalid current season');
+
+    const revision = Number(current.revision) + 1;
+    const revisionKey = `r${String(revision).padStart(8, '0')}`;
+    const revisionPrefix = this.revisionPrefix(worldId, revision);
+    const detailPrefix = `${this.seasonPrefix(worldId, season)}/revisions/${String(revision).padStart(8, '0')}/progress`;
+    const worldPath = `${revisionPrefix}/world.json.gz`;
+    const matchPath = matchesDelta.length ? `${detailPrefix}/matches.json.gz` : null;
+    const financePath = financeEventsDelta.length ? `${detailPrefix}/finances.json.gz` : null;
+    const staged = [worldPath, matchPath, financePath].filter(Boolean);
+
+    try {
+      const worldPayload = await encodeJsonGzip(worldRecord, { level: 1 });
+      await this.store.write(worldPath, worldPayload, {
+        contentType: 'application/gzip',
+        readGeneration: false
+      });
+
+      if (matchPath || financePath) {
+        const detailWrites = [];
+        if (matchPath) {
+          detailWrites.push(
+            encodeJsonGzip({ season, kind: 'progress-delta', matches: matchesDelta }, { level: 3 })
+              .then(body => this.store.write(matchPath, body, { contentType: 'application/gzip', readGeneration: false }))
+          );
+        }
+        if (financePath) {
+          detailWrites.push(
+            encodeJsonGzip({ season, kind: 'progress-delta', events: financeEventsDelta }, { level: 3 })
+              .then(body => this.store.write(financePath, body, { contentType: 'application/gzip', readGeneration: false }))
+          );
+        }
+        await Promise.all(detailWrites);
+      }
+
+      const seasonChanged = Number(current.currentSeason || 1) !== season;
+      const nextMatchSegments = seasonChanged ? {} : { ...(current.matchSegments || {}) };
+      const nextFinanceSegments = seasonChanged ? {} : { ...(current.financeSegments || {}) };
+      if (matchPath) nextMatchSegments[revisionKey] = matchPath;
+      if (financePath) nextFinanceSegments[revisionKey] = financePath;
+
+      const next = {
+        ...current,
+        revision,
+        committedAt: new Date().toISOString(),
+        worldRecordPath: worldPath,
+        currentSeason: season,
+        matchSegments: nextMatchSegments,
+        financeSegments: nextFinanceSegments,
+        lastCommitRequestId: requestId || null,
+        lastCommitKind: 'progress'
+      };
+      await this.store.write(this.manifestKey(worldId), encodeJson(next), {
+        ifGenerationMatch: envelope.generation,
+        contentType: 'application/json',
+        readGeneration: false
+      });
+
+      if (current.worldRecordPath && current.worldRecordPath !== worldPath) {
+        await this.store.delete(current.worldRecordPath).catch(() => {});
+      }
+      const previousSeason = Number(current.currentSeason);
+      if (seasonChanged && Number.isFinite(previousSeason)) {
+        await this.store.deletePrefix(this.seasonPrefix(worldId, previousSeason)).catch(() => {});
+      }
+      return next;
+    } catch (error) {
+      for (const path of staged) await this.store.delete(path).catch(() => {});
+      throw error;
+    }
+  }
+
   async deleteWorld(worldId) {
     const id = safeKey(worldId, 'worldId');
     await this.store.deletePrefix(`worlds/${id}/`);
     return true;
   }
 
-  async commitWorldRecord({ worldRecord, expectedRevision }) {
+  async commitWorldRecord({ worldRecord, expectedRevision, requestId = null }) {
     const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
     const envelope = await this._readManifestEnvelope(worldId);
     if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId });
     const current = envelope.manifest;
     if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
+      if (requestId && String(current.lastCommitRequestId || '') === String(requestId)) {
+        return { ...current, deduplicated: true };
+      }
       throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: current.revision });
     }
     const revision = Number(current.revision) + 1;
     const worldPath = `${this.revisionPrefix(worldId, revision)}/world.json.gz`;
-    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
-    const next = { ...current, revision, committedAt: new Date().toISOString(), worldRecordPath: worldPath };
+    await this.store.write(worldPath, await encodeJsonGzip(worldRecord, { level: 1 }), {
+      contentType: 'application/gzip',
+      readGeneration: false
+    });
+    const next = {
+      ...current,
+      revision,
+      committedAt: new Date().toISOString(),
+      worldRecordPath: worldPath,
+      lastCommitRequestId: requestId || null,
+      lastCommitKind: 'world-record'
+    };
     try {
       await this.store.write(this.manifestKey(worldId), encodeJson(next), {
         ifGenerationMatch: envelope.generation,
-        contentType: 'application/json'
+        contentType: 'application/json',
+        readGeneration: false
       });
     } catch (error) {
       await this.store.delete(worldPath).catch(() => {});
@@ -244,7 +355,7 @@ class WorldPersistenceService {
     const staged = [worldPath, matchPath, financePath];
 
     try {
-      await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+      await this.store.write(worldPath, await encodeJsonGzip(worldRecord, { level: 1 }), { contentType: 'application/gzip', readGeneration: false });
       await this.store.write(matchPath, await encodeJsonGzip({ season: Number(season), slotKey, matches }), { contentType: 'application/gzip' });
       await this.store.write(financePath, await encodeJsonGzip({ season: Number(season), slotKey, events: financeEvents }), { contentType: 'application/gzip' });
       const next = {
@@ -258,7 +369,8 @@ class WorldPersistenceService {
       };
       await this.store.write(this.manifestKey(worldId), encodeJson(next), {
         ifGenerationMatch: envelope.generation,
-        contentType: 'application/json'
+        contentType: 'application/json',
+        readGeneration: false
       });
       if (current.worldRecordPath && current.worldRecordPath !== worldPath) {
         await this.store.delete(current.worldRecordPath).catch(() => {});
@@ -282,7 +394,7 @@ class WorldPersistenceService {
     const revision = Number(current.revision) + 1;
     const prefix = this.revisionPrefix(worldId, revision);
     const worldPath = `${prefix}/world.json.gz`;
-    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+    await this.store.write(worldPath, await encodeJsonGzip(worldRecord, { level: 1 }), { contentType: 'application/gzip', readGeneration: false });
     const next = {
       ...current,
       revision,
@@ -295,7 +407,8 @@ class WorldPersistenceService {
     try {
       await this.store.write(this.manifestKey(worldId), encodeJson(next), {
         ifGenerationMatch: envelope.generation,
-        contentType: 'application/json'
+        contentType: 'application/json',
+        readGeneration: false
       });
     } catch (error) {
       await this.store.delete(worldPath).catch(() => {});
