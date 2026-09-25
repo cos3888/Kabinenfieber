@@ -65,11 +65,16 @@ class WorldPersistenceService {
     return manifest;
   }
 
+  async loadWorldRecordFromManifest(manifest) {
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found');
+    const object = await this.store.read(manifest.worldRecordPath);
+    return decodeJsonGzip(object.body);
+  }
+
   async loadWorldRecord(worldId) {
     const manifest = await this.getManifest(worldId);
     if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
-    const object = await this.store.read(manifest.worldRecordPath);
-    return decodeJsonGzip(object.body);
+    return this.loadWorldRecordFromManifest(manifest);
   }
 
   async loadMatchSegment(worldId, slotKey) {
@@ -89,9 +94,8 @@ class WorldPersistenceService {
   }
 
 
-  async loadCurrentSeasonDetails(worldId) {
-    const manifest = await this.getManifest(worldId);
-    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+  async loadCurrentSeasonDetailsFromManifest(manifest) {
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found');
     const matchPaths = Array.from(new Set(Object.values(manifest.matchSegments || {}).filter(Boolean)));
     const financePaths = Array.from(new Set(Object.values(manifest.financeSegments || {}).filter(Boolean)));
     const [matchSegments, financeSegments] = await Promise.all([
@@ -102,6 +106,28 @@ class WorldPersistenceService {
       season: Number(manifest.currentSeason || 1),
       matches: matchSegments.flatMap(segment => Array.isArray(segment && segment.matches) ? segment.matches : []),
       financeEvents: financeSegments.flatMap(segment => Array.isArray(segment && segment.events) ? segment.events : [])
+    };
+  }
+
+  async loadCurrentSeasonDetails(worldId) {
+    const manifest = await this.getManifest(worldId);
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    return this.loadCurrentSeasonDetailsFromManifest(manifest);
+  }
+
+  async loadRuntimeSnapshot(worldId, manifest = null) {
+    const committedManifest = manifest || await this.getManifest(worldId);
+    if (!committedManifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const [worldRecord, details] = await Promise.all([
+      this.loadWorldRecordFromManifest(committedManifest),
+      this.loadCurrentSeasonDetailsFromManifest(committedManifest)
+    ]);
+    return {
+      manifest: committedManifest,
+      worldRecord,
+      currentSeason: Number(committedManifest.currentSeason || details.season || 1),
+      matches: details.matches || [],
+      financeEvents: details.financeEvents || []
     };
   }
 
