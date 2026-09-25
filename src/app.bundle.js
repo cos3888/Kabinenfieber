@@ -24516,7 +24516,7 @@ async function kf029CreateRemoteWorld(){
 }
 function kf029SaveRemoteWorld(reason){
   if (!KF029Remote.user || !AppState.worldRecord) return Promise.resolve(null);
-  KF029Remote.saveChain = KF029Remote.saveChain.then(async function(){
+  var run = KF029Remote.saveChain.catch(function(){}).then(async function(){
     if (KF029Remote.createPromise) await KF029Remote.createPromise;
     if (!AppState.worldRecord || KF029Remote.revision == null) return null;
     KF029Remote.message = 'Speichert ...';
@@ -24539,7 +24539,9 @@ function kf029SaveRemoteWorld(reason){
     KF029Remote.error = '';
     renderApp();
     return data;
-  }).catch(function(error){
+  });
+  KF029Remote.saveChain = run.catch(function(){});
+  return run.catch(function(error){
     KF029Remote.error = error && error.status === 409
       ? 'Die Welt wurde zwischenzeitlich veraendert. Bitte lade sie neu, statt den Serverstand zu ueberschreiben.'
       : ('Speichern fehlgeschlagen: ' + (error.message || 'Unbekannter Fehler'));
@@ -24547,7 +24549,6 @@ function kf029SaveRemoteWorld(reason){
     renderApp();
     throw error;
   });
-  return KF029Remote.saveChain;
 }
 async function kf029Logout(){
   KF029Remote.busy = true; KF029Remote.error = ''; renderApp();
