@@ -20483,16 +20483,31 @@ function handleAction(action, actionEl){
       ensureOfficeMailbox();
       goToView('office');
     };
-    if (typeof kf029SaveRemoteWorld === 'function' && typeof KF029Remote !== 'undefined' && KF029Remote.user) {
+    if (typeof kf029AssignClubRemote === 'function' && typeof KF029Remote !== 'undefined' && KF029Remote.user) {
       KF029Remote.checkpointPending=true;
       KF029Remote.checkpointFailed=false;
       KF029Remote.checkpointReason='take-over-club';
-      void kf029SaveRemoteWorld('take-over-club').then(function(){
+      void kf029AssignClubRemote(selectedId).then(function(data){
         KF029Remote.checkpointPending=false;
         KF029Remote.checkpointReason='';
-        KF029Remote.membership=assignResult.membership || KF029Remote.membership;
+        if(data&&data.membership&&assignResult.membership)Object.assign(assignResult.membership,data.membership);
+        KF029Remote.membership=(data&&data.membership)||assignResult.membership||KF029Remote.membership;
         KF029Remote.message='Vereinsübernahme gespeichert.';
         finishTakeover();
+      }).catch(function(error){
+        if(assignResult.membership)assignResult.membership.clubId=previousTakeoverClubId;
+        if(AppState.session)AppState.session.activeClubId=previousTakeoverClubId;
+        KF029Remote.checkpointPending=false;
+        KF029Remote.checkpointReason='';
+        KF029Remote.message='';
+        KF029Remote.error='Vereinsübernahme konnte nicht sicher gespeichert werden: '+(error.message||'Unbekannter Fehler');
+        setCurrentView('club-selection');
+        openModal({title:'Vereinsübernahme nicht gespeichert',body:'Der Server hat die Vereinsübernahme nicht bestätigt. Bitte wähle denselben Verein erneut; ein bereits ausgeführter Server-Commit wird dabei erkannt.'});
+        renderApp();renderModal();
+      });
+      return;
+    }
+    finishTakeover();
       }).catch(function(error){
         if(assignResult.membership) assignResult.membership.clubId=previousTakeoverClubId;
         if(AppState.session) AppState.session.activeClubId=previousTakeoverClubId;
@@ -24589,6 +24604,7 @@ function kf029RestoreCurrentDetails(world, matches, financeEvents){
     if(event && event.id && event.clubId) CurrentSeasonFinanceRepository.saveEvent(world, event.clubId, event);
   });
   if (typeof kf0261ResetBonusRuntimeIndex === 'function') kf0261ResetBonusRuntimeIndex(world);
+  kf029ResetCommittedDetailIndex(matches,financeEvents,Number((((world||{}).meta||{}).seasonNumber)||1));
 }
 function kf029InstallLoadedWorld(data){
   var record = data.worldRecord;
@@ -24663,6 +24679,7 @@ async function kf029CreateRemoteWorld(){
   KF029Remote.revision = Number(data.revision);
   KF029Remote.currentSeason = Number(data.currentSeason || (((record.gameState||{}).meta||{}).seasonNumber)||1);
   KF029Remote.membership = data.membership || null;
+  kf029ResetCommittedDetailIndex(kf029CurrentMatches(),kf029CurrentFinanceEvents(),KF029Remote.currentSeason);
   if (data.membership && record.memberships && record.memberships.byTrainerId && record.memberships.byTrainerId[data.membership.trainerId]) {
     record.memberships.byTrainerId[data.membership.trainerId].role = data.membership.role || record.memberships.byTrainerId[data.membership.trainerId].role;
   }
@@ -24717,6 +24734,7 @@ function kf029ConfirmWorldCreate(){
   closeModal();renderModal();
   KF029Remote.revision=null;
   KF029Remote.membership=null;
+  KF029Remote.takeoverRetry=null;
   KF029Remote.error='';
   KF029Remote.message='Neue Welt wird vorbereitet ...';
   startNewCareer();
@@ -24731,86 +24749,141 @@ function kf029ConfirmWorldCreate(){
     throw error;
   }).finally(function(){KF029Remote.createPromise=null;});
 }
-function kf029SaveRemoteWorld(reason){
-  if (!KF029Remote.user || !AppState.worldRecord) return Promise.resolve(null);
-  var run = KF029Remote.saveChain.catch(function(){}).then(async function(){
-    if (KF029Remote.createPromise) await KF029Remote.createPromise;
-    if (!AppState.worldRecord || KF029Remote.revision == null) return null;
-    var record = AppState.worldRecord;
-    var data = await kf029Request('/api/v1/worlds/' + encodeURIComponent(record.id) + '/snapshot', {
-      method:'PUT',
-      body:{
-        expectedRevision:KF029Remote.revision,
-        clientVersion:KF029_REMOTE_CONTRACT_VERSION,
-        worldRecord:record,
-        matches:kf029CurrentMatches(),
-        financeEvents:kf029CurrentFinanceEvents(),
-        reason:reason || 'autosave'
-      }
-    });
-    KF029Remote.revision = Number(data.revision);
-    KF029Remote.currentSeason = Number(data.currentSeason || (((record.gameState||{}).meta||{}).seasonNumber)||1);
-    KF029Remote.lastSavedAt = data.committedAt || new Date().toISOString();
-    KF029Remote.lastCommittedSlotKey = (((record.gameState||{}).calendar||{}).currentSlotKey) || null;
-    KF029Remote.error = '';
+function kf029AssignClubRemote(clubId){
+  if(!KF029Remote.user||!AppState.worldRecord||KF029Remote.revision==null)return Promise.reject(new Error('Serverwelt ist noch nicht bereit.'));
+  var existing=KF029Remote.takeoverRetry;
+  var request=(existing&&String(existing.clubId)===String(clubId))?existing:{
+    clubId:String(clubId),
+    requestId:kf029NewRequestId('club'),
+    expectedRevision:Number(KF029Remote.revision)
+  };
+  KF029Remote.takeoverRetry=request;
+  return kf029Request('/api/v1/worlds/'+encodeURIComponent(AppState.worldRecord.id)+'/club',{
+    method:'POST',
+    timeoutMs:KF029_PROGRESS_TIMEOUT_MS,
+    body:{
+      clientVersion:KF029_REMOTE_CONTRACT_VERSION,
+      clubId:request.clubId,
+      expectedRevision:request.expectedRevision,
+      requestId:request.requestId
+    }
+  }).then(function(data){
+    KF029Remote.revision=Number(data.revision);
+    KF029Remote.currentSeason=Number(data.currentSeason||KF029Remote.currentSeason||1);
+    KF029Remote.membership=data.membership||KF029Remote.membership;
+    KF029Remote.lastSavedAt=data.committedAt||new Date().toISOString();
+    KF029Remote.takeoverRetry=null;
+    KF029Remote.lastSaveMetrics=data.__clientTransport||null;
     return data;
   });
-  KF029Remote.saveChain = run.catch(function(){});
+}
+async function kf029PrepareProgressRequest(reason){
+  if(KF029Remote.checkpointPreparedRequest)return KF029Remote.checkpointPreparedRequest;
+  if(KF029Remote.createPromise)await KF029Remote.createPromise;
+  if(!AppState.worldRecord||KF029Remote.revision==null)return null;
+  var delta=kf029CollectProgressDelta();
+  var requestId=KF029Remote.checkpointRequestId||kf029NewRequestId('progress');
+  KF029Remote.checkpointRequestId=requestId;
+  var payload={
+    clientVersion:KF029_REMOTE_CONTRACT_VERSION,
+    expectedRevision:Number(KF029Remote.revision),
+    requestId:requestId,
+    worldRecord:AppState.worldRecord,
+    matchesDelta:delta.matchesDelta,
+    financeEventsDelta:delta.financeEventsDelta,
+    reason:reason||'progress'
+  };
+  var encoded=await kf029CompressedBody(payload);
+  var prepared={
+    worldId:String(AppState.worldRecord.id),
+    reason:reason||'progress',
+    requestId:requestId,
+    expectedRevision:Number(KF029Remote.revision),
+    season:delta.season,
+    matchIds:delta.matchIds,
+    financeKeys:delta.financeKeys,
+    matchCount:delta.matchesDelta.length,
+    financeCount:delta.financeEventsDelta.length,
+    encodedBody:encoded
+  };
+  KF029Remote.checkpointPreparedRequest=prepared;
+  return prepared;
+}
+function kf029SaveProgressCheckpoint(reason){
+  if(!KF029Remote.user||!AppState.worldRecord)return Promise.resolve(null);
+  var run=KF029Remote.saveChain.catch(function(){}).then(async function(){
+    var prepared=await kf029PrepareProgressRequest(reason);
+    if(!prepared)return null;
+    var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(prepared.worldId)+'/progress',{
+      method:'PUT',
+      timeoutMs:KF029_PROGRESS_TIMEOUT_MS,
+      encodedBody:prepared.encodedBody
+    });
+    KF029Remote.revision=Number(data.revision);
+    KF029Remote.currentSeason=Number(data.currentSeason||prepared.season||1);
+    KF029Remote.lastSavedAt=data.committedAt||new Date().toISOString();
+    KF029Remote.lastCommittedSlotKey=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
+    kf029MarkProgressDeltaCommitted(prepared);
+    KF029Remote.lastSaveMetrics={
+      serializeMs:(data.__clientTransport||{}).serializeMs||0,
+      compressMs:(data.__clientTransport||{}).compressMs||0,
+      requestMs:(data.__clientTransport||{}).requestMs||0,
+      rawBytes:(data.__clientTransport||{}).rawBytes||0,
+      wireBytes:(data.__clientTransport||{}).wireBytes||0,
+      matches:prepared.matchCount,
+      financeEvents:prepared.financeCount,
+      deduplicated:!!data.deduplicated
+    };
+    KF029Remote.checkpointPreparedRequest=null;
+    KF029Remote.checkpointRequestId=null;
+    KF029Remote.error='';
+    return data;
+  });
+  KF029Remote.saveChain=run.catch(function(){});
   return run.catch(function(error){
-    KF029Remote.error = error && error.status === 409
-      ? 'Die Welt wurde zwischenzeitlich veraendert. Bitte lade sie neu, statt den Serverstand zu ueberschreiben.'
-      : ('Autosave fehlgeschlagen: ' + (error.message || 'Unbekannter Fehler'));
+    KF029Remote.error=error&&error.status===409
+      ? 'Der Serverstand hat eine andere Revision. Bitte lade die Welt neu, statt ihn zu überschreiben.'
+      : ('Fortschrittssicherung fehlgeschlagen: '+(error.message||'Unbekannter Fehler'));
     renderApp();
     throw error;
   });
 }
-function kf029ScheduleAutosave(reason, immediate){
-  if(!KF029Remote.user||!AppState.worldRecord)return;
-  KF029Remote.autosaveReason=reason||'decision';
-  if(KF029Remote.autosaveTimer){clearTimeout(KF029Remote.autosaveTimer);KF029Remote.autosaveTimer=null;}
-  if(immediate){
-    void kf029SaveRemoteWorld(KF029Remote.autosaveReason).catch(function(){});
-    return;
-  }
-  KF029Remote.autosaveTimer=setTimeout(function(){
-    KF029Remote.autosaveTimer=null;
-    void kf029SaveRemoteWorld(KF029Remote.autosaveReason||'decision').catch(function(){});
-  },KF029_AUTOSAVE_DEBOUNCE_MS);
-}
-function kf029FlushAutosave(reason){
-  if(KF029Remote.autosaveTimer){clearTimeout(KF029Remote.autosaveTimer);KF029Remote.autosaveTimer=null;}
-  if(!KF029Remote.user||!AppState.worldRecord)return KF029Remote.saveChain.catch(function(){});
-  return kf029SaveRemoteWorld(reason||'checkpoint');
-}
 function kf029CheckpointFailureMessage(reason){
-  if(reason==='calendar-slot') return 'Der vollständig verarbeitete Kalenderslot wurde noch nicht vom Server bestätigt.';
-  if(reason==='exit') return 'Die letzten lokalen Änderungen konnten vor dem Verlassen nicht gespeichert werden.';
-  return 'Der aktuelle Spielstand konnte nicht sicher auf dem Server bestätigt werden.';
+  if(reason==='calendar-slot'||reason==='calendar-simulation-checkpoint')return 'Der vollständig verarbeitete Kalenderfortschritt wurde noch nicht vom Server bestätigt.';
+  return 'Der aktuelle Fortschritt konnte nicht sicher auf dem Server bestätigt werden.';
 }
 function kf029ShowCheckpointFailure(reason,error){
   KF029Remote.checkpointPending=false;
   KF029Remote.checkpointFailed=true;
   KF029Remote.checkpointReason=reason||'checkpoint';
   KF029Remote.message='';
-  KF029Remote.error='Spielstand nicht bestätigt: '+(error && error.message ? error.message : 'Unbekannter Fehler');
+  KF029Remote.error='Fortschritt nicht bestätigt: '+(error&&error.message?error.message:'Unbekannter Fehler');
   openModal({
-    title:'Spielstand nicht gespeichert',
-    bodyHtml:'<div class="notice kf-auth-error">'+escapeHtml(kf029CheckpointFailureMessage(reason))+'<br><br>Du kannst erneut speichern oder zur Weltliste zurückkehren. Beim Zurückkehren werden nur die noch nicht serverseitig bestätigten lokalen Änderungen verworfen.</div>'+
-      '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-retry-checkpoint">Erneut versuchen</button><button class="ghost-btn" type="button" data-action="kf-exit-world-discard">Zur Weltliste</button></div>'
+    title:'Fortschritt nicht gespeichert',
+    bodyHtml:'<div class="notice kf-auth-error">'+escapeHtml(kf029CheckpointFailureMessage(reason))+'<br><br>Du kannst erneut speichern, im Spiel bleiben oder zur Weltliste zurückkehren. Nur ein weiterer Kalenderfortschritt bleibt gesperrt, bis der Checkpoint bestätigt ist.</div>'+
+      '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-retry-checkpoint">Erneut versuchen</button><button class="ghost-btn" type="button" data-action="kf-close-checkpoint-notice">Im Spiel bleiben</button><button class="ghost-btn" type="button" data-action="kf-exit-world-discard">Zur Weltliste</button></div>'
   },{preserveCurrent:!!AppState.ui.modal});
   renderApp();renderModal();
 }
 function kf029CommitHardCheckpoint(reason){
   if(!KF029Remote.user||!AppState.worldRecord)return Promise.resolve(null);
+  if(KF029Remote.checkpointPending)return KF029Remote.saveChain;
   KF029Remote.checkpointPending=true;
   KF029Remote.checkpointFailed=false;
   KF029Remote.checkpointReason=reason||'checkpoint';
   KF029Remote.error='';
-  return kf029SaveRemoteWorld(KF029Remote.checkpointReason).then(function(data){
+  KF029Remote.message='Fortschritt wird gespeichert ...';
+  renderApp();
+  var beforeSave=(KF029Remote.checkpointPreparedRequest||typeof window.requestAnimationFrame!=='function')
+    ? Promise.resolve()
+    : new Promise(function(resolve){window.requestAnimationFrame(function(){resolve();});});
+  var operation=beforeSave.then(function(){return kf029SaveProgressCheckpoint(KF029Remote.checkpointReason);});
+  KF029Remote.saveChain=operation.catch(function(){});
+  return operation.then(function(data){
     KF029Remote.checkpointPending=false;
     KF029Remote.checkpointFailed=false;
     KF029Remote.checkpointReason='';
-    KF029Remote.message='Spielstand gespeichert.';
+    KF029Remote.message='Fortschritt gespeichert.';
     renderApp();renderModal();
     return data;
   }).catch(function(error){
@@ -24819,15 +24892,20 @@ function kf029CommitHardCheckpoint(reason){
   });
 }
 function kf029DiscardLoadedWorldToList(){
-  if(KF029Remote.autosaveTimer){clearTimeout(KF029Remote.autosaveTimer);KF029Remote.autosaveTimer=null;}
   KF029Remote.checkpointPending=false;
   KF029Remote.checkpointFailed=false;
   KF029Remote.checkpointReason='';
+  KF029Remote.checkpointRequestId=null;
+  KF029Remote.checkpointPreparedRequest=null;
   KF029Remote.revision=null;
   KF029Remote.currentSeason=null;
   KF029Remote.membership=null;
   KF029Remote.lastSavedAt=null;
   KF029Remote.lastCommittedSlotKey=null;
+  KF029Remote.committedMatchIds=new Set();
+  KF029Remote.committedFinanceKeys=new Set();
+  KF029Remote.detailSeason=null;
+  KF029Remote.takeoverRetry=null;
   KF029Remote.error='';
   KF029Remote.message='';
   returnToStart();
@@ -24838,50 +24916,52 @@ function kf029DiscardLoadedWorldToList(){
 }
 function kf029ExitWorldToList(forceDiscard){
   if(forceDiscard)return kf029DiscardLoadedWorldToList();
-  KF029Remote.checkpointPending=true;
-  KF029Remote.checkpointFailed=false;
-  KF029Remote.checkpointReason='exit';
-  return kf029FlushAutosave('exit').then(function(){
-    return kf029DiscardLoadedWorldToList();
-  }).catch(function(error){
-    kf029ShowCheckpointFailure('exit',error);
-    throw error;
-  });
+  if(KF029Remote.checkpointFailed){
+    kf029ShowCheckpointFailure(KF029Remote.checkpointReason||'checkpoint',new Error('Der letzte Fortschritt ist noch nicht bestätigt.'));
+    return Promise.reject(new Error('checkpoint_failed'));
+  }
+  if(KF029Remote.checkpointPending){
+    return KF029Remote.saveChain.then(function(){return kf029DiscardLoadedWorldToList();}).catch(function(error){
+      kf029ShowCheckpointFailure(KF029Remote.checkpointReason||'checkpoint',error);
+      throw error;
+    });
+  }
+  return kf029DiscardLoadedWorldToList();
 }
 function kf029RetryCheckpoint(){
   var reason=KF029Remote.checkpointReason||'checkpoint';
-  if(reason==='exit')return kf029ExitWorldToList(false);
   if(AppState.ui.modal){closeModal();renderModal();}
   return kf029CommitHardCheckpoint(reason);
 }
-var KF029_AUTOSAVE_ACTIONS={
-  'lineup-assistant-apply-lineup-proposal':1,'lineup-formation-change':1,'lineup-formation-select':1,
-  'lineup-goalkeeper-autofix':1,'lineup-goalkeeper-self-change':1,'lineup-tactic-set':1,
-  'club-transfer-submit-offer':1,'club-transfer-submit-anyway':1,'club-transfer-insist-offer':1,'club-transfer-cancel-negotiation':1,
-  'player-contract-apply-offer':1,'player-contract-submit-anyway':1,'player-contract-insist-offer':1,'start-player-contract-after-club-agreement':1,
-  'squad-planning-offer':1,'squad-planning-adjust-negotiation':1,'squad-planning-cancel-negotiation':1,
-  'finance-sponsor-accept-request':1,'finance-sponsor-counter-request':1,'finance-sponsor-create-extension':1,
-  'finance-sponsor-decline-request':1,'finance-sponsor-reserve-request':1,'kit-designer-apply':1,
-  'player-profile-scout-toggle':1,'cup-draw-continue':1,'delete-mail':1,'delete-all-mail':1,'toggle-mail-read':1
-};
+function kf029ActionAdvancesWorld(action,actionEl){
+  if(action==='office-advance'||action==='calendar-sim-until-confirm')return true;
+  if(action==='lineup-goalkeeper-autofix'){
+    var mode=actionEl&&actionEl.getAttribute?actionEl.getAttribute('data-mode'):'';
+    return mode==='advance'||mode==='sim-until';
+  }
+  return false;
+}
 async function kf029Logout(){
-  KF029Remote.busy = true; KF029Remote.error = ''; renderApp();
-  try {
-    if (AppState.worldRecord) await kf029FlushAutosave('logout');
-    await kf029Request('/api/v1/auth/logout', { method:'POST' });
+  KF029Remote.busy=true;KF029Remote.error='';renderApp();
+  try{
+    if(KF029Remote.checkpointFailed)throw new Error('Der letzte Fortschritt ist noch nicht bestätigt.');
+    if(KF029Remote.checkpointPending)await KF029Remote.saveChain;
+    await kf029Request('/api/v1/auth/logout',{method:'POST'});
     kf029SetToken(null);
     kf029SetUser(null);
-    KF029Remote.worlds = [];
-    KF029Remote.revision = null;
-    KF029Remote.membership = null;
-    KF029Remote.showWorldList = false;
+    KF029Remote.worlds=[];
+    KF029Remote.revision=null;
+    KF029Remote.membership=null;
+    KF029Remote.showWorldList=false;
+    KF029Remote.checkpointPreparedRequest=null;
+    KF029Remote.checkpointRequestId=null;
     resetState();
-    renderApp(); renderModal();
-  } catch (error) {
-    KF029Remote.error = 'Abmelden gestoppt, weil der aktuelle Stand nicht sicher gespeichert werden konnte.';
+    renderApp();renderModal();
+  }catch(error){
+    KF029Remote.error='Abmelden gestoppt, weil der letzte Kalenderfortschritt nicht sicher bestätigt ist.';
     renderApp();
-  } finally {
-    KF029Remote.busy = false;
+  }finally{
+    KF029Remote.busy=false;
   }
 }
 function kf029AuthNotice(){
