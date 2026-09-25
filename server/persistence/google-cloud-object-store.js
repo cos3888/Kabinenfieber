@@ -30,7 +30,7 @@ class GoogleCloudObjectStore {
     return exists;
   }
 
-  async write(key, body, { ifGenerationMatch = undefined, contentType = 'application/octet-stream' } = {}) {
+  async write(key, body, { ifGenerationMatch = undefined, contentType = 'application/octet-stream', readGeneration = true } = {}) {
     const file = this.bucket.file(key);
     try {
       await file.save(Buffer.isBuffer(body) ? body : Buffer.from(body), {
@@ -41,6 +41,7 @@ class GoogleCloudObjectStore {
           ? { preconditionOpts: { ifGenerationMatch: Number(ifGenerationMatch) } }
           : {})
       });
+      if (!readGeneration) return { generation: null };
       const [metadata] = await file.getMetadata();
       return { generation: String(metadata.generation || '') };
     } catch (error) {
