@@ -12,7 +12,7 @@ const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
 const SERVICE_VERSION = '0.29.5';
-const API_VERSION = '0.29.2';
+const API_VERSION = '0.29.5';
 
 let persistenceVerificationState = {
   status: 'pending',
