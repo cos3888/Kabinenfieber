@@ -102,7 +102,7 @@ class FileMetadataRepository {
     return true;
   }
 
-  async createWorldRegistration({ slotId, worldId, createdByUserId, createdAt = nowIso() }) {
+  async createWorldRegistration({ slotId, worldId, createdByUserId, worldName = null, visibility = 'PRIVATE', joinPolicy = 'INVITE_ONLY', createdAt = nowIso() }) {
     return this._mutate(data => {
       slotId = Number(slotId);
       if (!Number.isInteger(slotId) || slotId < 1 || slotId > MAX_WORLD_SLOTS) throw new DomainRuleError('slotId must be between 1 and 1000');
@@ -112,7 +112,7 @@ class FileMetadataRepository {
       const slot = data.slots[String(slotId)];
       if (slot && slot.status === 'OCCUPIED') throw new DomainRuleError('World slot is already occupied', { slotId });
       if (data.worlds[worldId] && data.worlds[worldId].status === 'ACTIVE') throw new DomainRuleError('World already exists', { worldId });
-      const world = { worldId, slotId, status: 'ACTIVE', createdAt, createdByUserId };
+      const world = { worldId, slotId, status: 'ACTIVE', createdAt, createdByUserId, worldName, visibility, joinPolicy };
       data.slots[String(slotId)] = { slotId, status: 'OCCUPIED', worldId, createdAt };
       data.worlds[worldId] = world;
       data.participationIndex[participationKey(worldId, createdByUserId)] = {
