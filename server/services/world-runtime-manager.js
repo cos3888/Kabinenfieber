@@ -90,7 +90,7 @@ class WorldRuntimeManager {
         String(incomingMembership.userProfileId) !== String(active[0].userProfileId)) {
       throw new DomainRuleError('World membership identity cannot be changed by a snapshot');
     }
-    const next = clone(incoming);
+    const next = incoming;
     next.createdByUserId = runtime.worldRecord.createdByUserId;
     next.memberships = clone(runtime.worldRecord.memberships);
     const serverMembership = next.memberships.byTrainerId[active[0].trainerId];
@@ -123,14 +123,65 @@ class WorldRuntimeManager {
       runtime.worldRecord = nextRecord;
       runtime.revision = Number(manifest.revision);
       runtime.currentSeason = Number(manifest.currentSeason);
-      runtime.matches = clone(matches || []);
-      runtime.financeEvents = clone(financeEvents || []);
+      runtime.matches = matches || [];
+      runtime.financeEvents = financeEvents || [];
       this._touch(runtime);
       return {
         revision: runtime.revision,
         currentSeason: runtime.currentSeason,
         committedAt: manifest.committedAt
       };
+    });
+  }
+
+  async assignClub({ worldId, userId, clubId, expectedRevision }) {
+    return this._enqueue(worldId, async () => {
+      const runtime = await this._load(worldId);
+      if (Number(expectedRevision) !== Number(runtime.revision)) {
+        throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: runtime.revision });
+      }
+      const membership = membershipForUser(runtime.worldRecord, userId);
+      if (!membership) throw new DomainRuleError('User is not a member of this world');
+      const clubs = runtime.worldRecord.gameState && runtime.worldRecord.gameState.clubs;
+      if (!clubs || !clubs.byId || !clubs.byId[clubId]) throw new DomainRuleError('Club does not exist');
+      const occupied = activeMemberships(runtime.worldRecord).some(row => row !== membership && String(row.clubId || '') === String(clubId));
+      if (occupied) throw new DomainRuleError('Club is already assigned');
+      membership.clubId = clubId;
+      membership.lastActivityAt = new Date(this.now()).toISOString();
+      const manifest = await this.worldPersistence.commitWorldRecord({ worldRecord: runtime.worldRecord, expectedRevision: runtime.revision });
+      runtime.revision = Number(manifest.revision);
+      this._touch(runtime);
+      return { revision: runtime.revision, currentSeason: runtime.currentSeason, committedAt: manifest.committedAt, membership: clone(membership) };
+    });
+  }
+
+  async saveSlot({ worldId, userId, worldRecord, expectedRevision, season, slotKey, matches = [], financeEvents = [] }) {
+    return this._enqueue(worldId, async () => {
+      const runtime = await this._load(worldId);
+      if (Number(expectedRevision) !== Number(runtime.revision)) {
+        throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: runtime.revision });
+      }
+      const nextRecord = this._canonicalizeSingleUserSnapshot(runtime, userId, worldRecord);
+      const manifest = await this.worldPersistence.commitSlot({
+        worldRecord: nextRecord,
+        season,
+        slotKey,
+        matches,
+        financeEvents,
+        expectedRevision: runtime.revision
+      });
+      runtime.worldRecord = nextRecord;
+      runtime.revision = Number(manifest.revision);
+      runtime.currentSeason = Number(manifest.currentSeason);
+      const mergeById = (current, delta) => {
+        const byId = new Map((current || []).filter(Boolean).map(row => [String(row.id || ''), row]));
+        (delta || []).filter(Boolean).forEach(row => byId.set(String(row.id || ''), row));
+        return Array.from(byId.values());
+      };
+      runtime.matches = mergeById(runtime.matches, matches);
+      runtime.financeEvents = mergeById(runtime.financeEvents, financeEvents);
+      this._touch(runtime);
+      return { revision: runtime.revision, currentSeason: runtime.currentSeason, committedAt: manifest.committedAt };
     });
   }
 
