@@ -13,7 +13,7 @@ function normalizeLoginName(value) {
 function validateLoginName(value) {
   const display = String(value || '').normalize('NFKC').trim();
   const key = normalizeLoginName(display);
-  if (!/^[a-z0-9._-]{3,24}$/.test(key)) {
+  if (!/^[\\p{L}\\p{N}._-]{3,24}$/u.test(key)) {
     throw new DomainRuleError('Login name must contain 3-24 letters, numbers, dot, underscore or hyphen');
   }
   return { display, key };
