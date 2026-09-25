@@ -16,7 +16,7 @@ KF_0.29.2 schließt die im realen Browsertest sichtbaren Persistenzlücken.
 
 ## Neu in KF_0.29.1 – Autosave & benannte Spielwelten
 
-KF_0.29.2 korrigiert den ersten Save/Load-Praxistest und richtet Kabinenfieber auf ein persistentes Online-Weltmodell aus.
+KF_0.29.1 korrigiert den ersten Save/Load-Praxistest und richtet Kabinenfieber auf ein persistentes Online-Weltmodell aus.
 
 - kein manueller „Jetzt speichern“-Knopf mehr als normale Spielfunktion.
 - garantierter serverseitiger Autosave-Checkpoint nach normalem Kalenderfortschritt und nach abgeschlossener Kalenderschnellsimulation.
@@ -28,7 +28,7 @@ KF_0.29.2 korrigiert den ersten Save/Load-Praxistest und richtet Kabinenfieber a
 - vorbereitete Zugangsmodelle: `PUBLIC + OPEN` (offen), `PUBLIC + APPLICATION` (Bewerbung) und `PRIVATE + INVITE_ONLY` (nur Einladung).
 - bestehende KF_0.29.0-Welten ohne Namen bleiben ladbar und erhalten in der Weltliste einen technischen Fallbacknamen.
 
-Öffentliche Weltsuche, Bewerbungsworkflow und Direktbeitritt sind weiterhin **nicht** Bestandteil dieses Fixes; KF_0.29.2 bereitet nur die Metadaten dafür sauber vor.
+Öffentliche Weltsuche, Bewerbungsworkflow und Direktbeitritt sind weiterhin **nicht** Bestandteil dieses Fixes; KF_0.29.1 bereitet nur die Metadaten dafür sauber vor.
 
 ## Neu in KF_0.29.0 – User Identity, World Runtime & Save/Load
 
