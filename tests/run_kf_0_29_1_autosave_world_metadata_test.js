@@ -93,10 +93,11 @@ function makeWorldRecord(worldId,userId){
     reopened.financeEvents[0].id==='finance-checkpoint');
 
   const app=await fs.readFile(path.join(__dirname,'..','src','app.bundle.js'),'utf8');
-  check('Browser uses confirmed normal-slot checkpoints plus quick-sim and debounced decision autosave',
+  check('Browser keeps calendar checkpoints but no longer saves ordinary management decisions immediately',
     app.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
     app.includes("kf029CommitHardCheckpoint('calendar-simulation-checkpoint')")&&
-    app.includes('KF029_AUTOSAVE_DEBOUNCE_MS = 1400'));
+    !app.includes('KF029_AUTOSAVE_DEBOUNCE_MS')&&
+    !app.includes('kf029ScheduleAutosave'));
 
   check('Manual save control was removed from the browser UI',
     !app.includes('data-action="kf-save-world"')&&!app.includes("kf029SaveRemoteWorld('manual')"));
