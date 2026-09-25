@@ -83,30 +83,30 @@ function makeWorldRecord(worldId,userId){
   const index=await fs.readFile(path.join(__dirname,'..','index.html'),'utf8');
   const server=await fs.readFile(path.join(__dirname,'..','server','index.js'),'utf8');
 
-  check('Club takeover is a confirmed server checkpoint before office entry',
-    app.includes("kf029SaveRemoteWorld('take-over-club').then(function()")&&
-    app.includes("KF029Remote.membership=assignResult.membership || KF029Remote.membership")&&
-    !app.includes("'take-over-club':1,'lineup-assistant"));
+  check('Club takeover is a confirmed small server command before office entry',
+    app.includes('kf029AssignClubRemote(selectedId).then(function(data)')&&
+    app.includes("'/club'")&&
+    app.includes("KF029Remote.message='Vereinsübernahme gespeichert.'"));
 
-  check('Calendar advance uses a blocking hard checkpoint instead of fire-and-forget autosave',
+  check('Calendar advance keeps a hard checkpoint while ordinary navigation stays available',
     app.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
     app.includes("kf029CommitHardCheckpoint('calendar-simulation-checkpoint')")&&
-    !app.includes("if (action === 'office-advance') kf029ScheduleAutosave('calendar-slot', true)")&&
-    app.includes('KF029Remote.checkpointPending || KF029Remote.checkpointFailed'));
+    app.includes('kf029ActionAdvancesWorld(action,actionEl)')&&
+    !app.includes('kf029ScheduleAutosave'));
 
   check('World-list exit exposes retry/discard recovery instead of swallowing save errors',
     app.includes('function kf029ExitWorldToList(forceDiscard)')&&
     app.includes('data-action="kf-retry-checkpoint"')&&
     app.includes('data-action="kf-exit-world-discard"'));
 
-  check('Remote contract diagnostic remains available without changing the 0.29.2 snapshot contract',
+  check('Remote contract diagnostic tracks the dedicated 0.29.5 progress API',
     app.includes('async function kf029EnsureBackendCompatible()')&&
-    app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.29.2';")&&
+    app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.29.5';")&&
     app.includes("mismatch.code='BACKEND_VERSION_MISMATCH'")&&
-    server.includes("const API_VERSION = '0.29.2';")&&server.includes('function requireClientVersion(body)'));
+    server.includes("const API_VERSION = '0.29.5';")&&server.includes('function requireClientVersion(body)'));
 
   check('Production entry cache-busts the current browser bundle',
-    index.includes('app.bundle.js?v=0.29.4')&&index.includes('app.css?v=0.29.4'));
+    index.includes('app.bundle.js?v=0.29.5')&&index.includes('app.css?v=0.29.5'));
 
   console.log(JSON.stringify(report,null,2));
   process.exit(report.passed?0:1);
