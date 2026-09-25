@@ -3,6 +3,7 @@
 const { DomainRuleError } = require('../persistence/errors');
 const { ensureWorldMembershipRoles, activeMemberships, membershipForUser } = require('../domain/world-memberships');
 const { MAX_WORLD_SLOTS } = require('../persistence/file-metadata-repository');
+const { normalizeWorldName, normalizeWorldAccess } = require('../domain/world-metadata');
 
 function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
 
@@ -27,14 +28,17 @@ class WorldSessionService {
     return record;
   }
 
-  async _claimFreeSlot(worldId, userId, createdAt) {
+  async _claimFreeSlot(worldId, userId, createdAt, worldMetadata) {
     let lastError = null;
     for (let slotId = 1; slotId <= MAX_WORLD_SLOTS; slotId += 1) {
       const slot = await this.metadata.getSlot(slotId);
       if (slot && slot.status === 'OCCUPIED') continue;
       try {
         return await this.metadata.createWorldRegistration({
-          slotId, worldId, createdByUserId: userId, createdAt
+          slotId, worldId, createdByUserId: userId, createdAt,
+          worldName: worldMetadata.worldName,
+          visibility: worldMetadata.visibility,
+          joinPolicy: worldMetadata.joinPolicy
         });
       } catch (error) {
         lastError = error;
@@ -46,10 +50,16 @@ class WorldSessionService {
     throw new DomainRuleError('No free world slot available');
   }
 
-  async createWorld({ userId, worldRecord, matches = [], financeEvents = [] }) {
+  async createWorld({ userId, worldRecord, worldName, visibility, joinPolicy, matches = [], financeEvents = [] }) {
     const record = this._prepareInitialWorld(worldRecord, userId);
+    const access = normalizeWorldAccess({ visibility, joinPolicy });
+    const worldMetadata = {
+      worldName: normalizeWorldName(worldName),
+      visibility: access.visibility,
+      joinPolicy: access.joinPolicy
+    };
     const createdAt = record.createdAt || new Date().toISOString();
-    const registration = await this._claimFreeSlot(record.id, userId, createdAt);
+    const registration = await this._claimFreeSlot(record.id, userId, createdAt, worldMetadata);
     try {
       const manifest = await this.worlds.initializeWorld({ worldRecord: record });
       if ((matches && matches.length) || (financeEvents && financeEvents.length)) {
@@ -82,6 +92,9 @@ class WorldSessionService {
       worlds.push({
         worldId,
         slotId: meta.slotId,
+        worldName: meta.worldName || `Welt ${meta.slotId}`,
+        visibility: meta.visibility || 'PRIVATE',
+        joinPolicy: meta.joinPolicy || 'INVITE_ONLY',
         createdAt: meta.createdAt,
         revision: Number(manifest.revision),
         currentSeason: Number(manifest.currentSeason || 1)
