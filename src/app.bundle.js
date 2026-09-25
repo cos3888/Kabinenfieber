@@ -24795,9 +24795,9 @@ async function kf029PrepareProgressRequest(reason){
   KF029Remote.checkpointPreparedRequest=prepared;
   return prepared;
 }
-function kf029SaveProgressCheckpoint(reason){
-  if(!KF029Remote.user||!AppState.worldRecord)return Promise.resolve(null);
-  var run=KF029Remote.saveChain.catch(function(){}).then(async function(){
+async function kf029SaveProgressCheckpoint(reason){
+  if(!KF029Remote.user||!AppState.worldRecord)return null;
+  try{
     var prepared=await kf029PrepareProgressRequest(reason);
     if(!prepared)return null;
     var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(prepared.worldId)+'/progress',{
@@ -24824,15 +24824,13 @@ function kf029SaveProgressCheckpoint(reason){
     KF029Remote.checkpointRequestId=null;
     KF029Remote.error='';
     return data;
-  });
-  KF029Remote.saveChain=run.catch(function(){});
-  return run.catch(function(error){
+  }catch(error){
     KF029Remote.error=error&&error.status===409
       ? 'Der Serverstand hat eine andere Revision. Bitte lade die Welt neu, statt ihn zu überschreiben.'
       : ('Fortschrittssicherung fehlgeschlagen: '+(error.message||'Unbekannter Fehler'));
     renderApp();
     throw error;
-  });
+  }
 }
 function kf029CheckpointFailureMessage(reason){
   if(reason==='calendar-slot'||reason==='calendar-simulation-checkpoint')return 'Der vollständig verarbeitete Kalenderfortschritt wurde noch nicht vom Server bestätigt.';
