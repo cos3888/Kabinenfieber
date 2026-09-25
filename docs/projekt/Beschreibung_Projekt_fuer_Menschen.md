@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.29.3
+# Kabinenfieber - Stand KF_0.29.4
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.29.3`
+App-Version: `KF_0.29.4`
 
 Persistierte Schemas:
 
@@ -17,6 +17,22 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.29.4 – Authoritative World Reload
+
+Der reale Browser-Praxistest nach KF_0.29.3 zeigte weiterhin, dass eine erfolgreich gespeicherte Welt beim erneuten Oeffnen auf einen aelteren Stand zurueckfallen konnte. Die Ursache lag im serverseitigen Runtime-Cache: eine bereits geladene Runtime wurde ohne Vergleich mit der aktuell committed Manifest-Revision wiederverwendet. In einer Umgebung mit mehreren Backend-Instanzen konnte dadurch eine Instanz Revision N+1 speichern, waehrend eine andere Instanz weiterhin Revision N aus ihrem RAM auslieferte.
+
+Aenderungen:
+
+- `WorldRuntimeManager` prueft vor Wiederverwendung einer gecachten Welt die aktuelle Manifest-Revision.
+- weicht die Runtime-Revision ab, wird die Runtime aus dem zuletzt committed Snapshot neu aufgebaut.
+- WorldRecord, Current-Season-Matches und Current-Season-FinanceEvents werden fuer den Runtime-Reload nun aus **einem einzigen Manifest-Snapshot** geladen.
+- der Runtime-Cache bleibt damit reine Beschleunigung und ist nie autoritativer als die persistierte Welt.
+- der Remote-Vertrag bleibt `0.29.2`; das ist ein Server-/Ladefix und kein neues Multiplayer-API-Modell.
+
+Zentrale Datenquelle bleibt unveraendert: committed Manifest + WorldRecord + CurrentSeasonMatchRepository + CurrentSeasonFinanceRepository. Vereinszuordnung bleibt ausschliesslich `WorldRecord.memberships`. Es entsteht keine doppelte persistente Wahrheit.
+
+Neue Regression: `tests/run_kf_0_29_4_authoritative_world_reload_test.js` verwendet zwei voneinander getrennte `WorldRuntimeManager`-Instanzen mit demselben Persistenzspeicher. Instanz B cached zunaechst einen alten Stand, Instanz A committed anschliessend Vereinsuebernahme und Spieltag. B muss beim erneuten Oeffnen ohne explizites Unload jeweils auf die neueste Manifest-Revision wechseln und Club, Slot, Fixturestatus, kompakte Matchhistorie, Vollmatch und FinanceEvent gemeinsam korrekt laden.
 
 ## KF_0.29.3 – Backend Compatibility
 

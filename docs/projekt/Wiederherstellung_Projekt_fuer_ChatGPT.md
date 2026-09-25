@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.29.3
+# Wiederherstellung Kabinenfieber - KF_0.29.4
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.29.3`
+Version: `KF_0.29.4`
 
 Build-Label:
 
-`KF_0.29.3 - Backend Compatibility`
+`KF_0.29.4 - Authoritative World Reload`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.29.3.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.29.4.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,22 @@ Aktuelle ZIP nach Export soll `KF_0.29.3.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.29.4 – Authoritative World Reload
+
+Kritischer Persistenzfix auf KF_0.29.3:
+
+- `WorldRuntimeManager._load()` darf einen vorhandenen RAM-Cache nicht mehr ungeprueft zurueckgeben.
+- zuerst die aktuelle `manifest.revision` lesen; nur bei identischer Runtime-Revision darf der Cache weiterverwendet werden.
+- bei abweichender Revision muss `WorldPersistenceService.loadRuntimeSnapshot(worldId, manifest)` den kompletten aktuellen Runtime-Snapshot aus genau diesem Manifest laden.
+- `loadRuntimeSnapshot` bindet WorldRecord, aktuelle Vollmatches und aktuelle FinanceEvents an denselben Manifest-Snapshot. Keine drei voneinander unabhaengigen Manifest-Reads fuer einen Runtime-Reload.
+- nach erfolgreichem `saveSnapshot()` wird die lokale Runtime weiterhin sofort auf die neue Revision gesetzt.
+- der Cache bleibt pro Prozess/Cloud-Run-Instanz lokal und ist niemals persistente Wahrheit.
+- Datenwahrheit unveraendert: Manifest/WorldRecord + CurrentSeasonMatchRepository + CurrentSeasonFinanceRepository; `WorldRecord.memberships` allein fuer Club-/Rollen-Zuordnung.
+- `SERVICE_VERSION = 0.29.4`, aber `API_VERSION` und `KF029_REMOTE_CONTRACT_VERSION` bleiben `0.29.2`.
+
+Pflichtregression: `tests/run_kf_0_29_4_authoritative_world_reload_test.js`.
+Der Test muss zwei Runtime-Manager auf demselben Persistenzspeicher verwenden und beweisen, dass eine zuvor stale Runtime ohne explizites Unload nach einem fremden Commit die neueste Revision laedt. Danach Club, `calendar.currentSlotKey`, Fixturestatus, `history.matches`, Vollmatch und FinanceEvents gemeinsam pruefen.
 
 ## KF_0.29.3 – Backend Compatibility
 
