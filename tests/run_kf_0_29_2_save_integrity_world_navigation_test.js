@@ -101,9 +101,9 @@ function makeWorldRecord(worldId,userId){
 
   check('Remote contract diagnostic remains available without changing the 0.29.2 snapshot contract',
     app.includes('async function kf029EnsureBackendCompatible()')&&
-    app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.29.2';")&&
+    app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.29.5';")&&
     app.includes("mismatch.code='BACKEND_VERSION_MISMATCH'")&&
-    server.includes("const API_VERSION = '0.29.2';")&&server.includes('function requireClientVersion(body)'));
+    server.includes("const API_VERSION = '0.29.5';")&&server.includes('function requireClientVersion(body)'));
 
   check('Production entry cache-busts the current browser bundle',
     index.includes('app.bundle.js?v=0.29.5')&&index.includes('app.css?v=0.29.5'));
