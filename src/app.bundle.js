@@ -24660,6 +24660,7 @@ async function kf029CreateRemoteWorld(){
   var config = KF029Remote.pendingWorldConfig || {};
   var data = await kf029Request('/api/v1/worlds', {
     method:'POST',
+    timeoutMs:KF029_PROGRESS_TIMEOUT_MS,
     body:{ clientVersion:KF029_REMOTE_CONTRACT_VERSION, worldRecord:record, worldName:config.worldName, visibility:config.visibility, joinPolicy:config.joinPolicy, matches:kf029CurrentMatches(), financeEvents:kf029CurrentFinanceEvents() }
   });
   KF029Remote.revision = Number(data.revision);
@@ -24862,7 +24863,7 @@ function kf029CommitHardCheckpoint(reason){
     ? Promise.resolve()
     : new Promise(function(resolve){window.requestAnimationFrame(function(){resolve();});});
   var operation=beforeSave.then(function(){return kf029SaveProgressCheckpoint(KF029Remote.checkpointReason);});
-  KF029Remote.saveChain=operation.catch(function(){});
+  KF029Remote.saveChain=operation;
   return operation.then(function(data){
     KF029Remote.checkpointPending=false;
     KF029Remote.checkpointFailed=false;
@@ -24918,7 +24919,7 @@ function kf029RetryCheckpoint(){
   return kf029CommitHardCheckpoint(reason);
 }
 function kf029ActionAdvancesWorld(action,actionEl){
-  if(action==='office-advance'||action==='calendar-sim-until-confirm')return true;
+  if(action==='take-over-club'||action==='office-advance'||action==='calendar-sim-until-confirm')return true;
   if(action==='lineup-goalkeeper-autofix'){
     var mode=actionEl&&actionEl.getAttribute?actionEl.getAttribute('data-mode'):'';
     return mode==='advance'||mode==='sim-until';
