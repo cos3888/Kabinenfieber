@@ -263,7 +263,13 @@ const server = http.createServer(async (req, res) => {
         matches: body.matches || [],
         financeEvents: body.financeEvents || []
       });
-      await sendJson(req, res, 201, { ok: true, ...result });
+      await sendJson(req, res, 201, {
+        ok: true,
+        registration: result.registration,
+        revision: result.revision,
+        currentSeason: result.currentSeason,
+        membership: result.membership
+      });
       return;
     }
 
