@@ -31,7 +31,8 @@ const core=[
   'tests/run_kf_0_28_0_backend_persistence_foundation_test.js',
   'tests/run_kf_0_28_1_cloud_persistence_verification_test.js',
   'tests/run_kf_0_29_0_user_world_runtime_test.js',
-  'tests/run_kf_0_29_0_http_api_test.js'
+  'tests/run_kf_0_29_0_http_api_test.js',
+  'tests/run_kf_0_29_1_autosave_world_metadata_test.js'
 ];
 const extended=[
   'tests/run_current_ui_ownership_pipeline_test.js',
