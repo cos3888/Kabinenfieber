@@ -29,3 +29,7 @@ Keine neue persistierte Wahrheit:
 ## Deployment
 
 Frontend und Cloud-Run-Backend müssen gemeinsam auf KF_0.29.2 deployt werden. Bei gemischten Versionen blockiert der Client absichtlich weitere Remote-Aktionen.
+
+## Validierung
+
+Der Fix-Branch wird vor dem Merge vollständig über die 0.29.x- und Vollregression geprüft.
