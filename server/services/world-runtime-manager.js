@@ -146,9 +146,19 @@ class WorldRuntimeManager {
       if (!clubs || !clubs.byId || !clubs.byId[clubId]) throw new DomainRuleError('Club does not exist');
       const occupied = activeMemberships(runtime.worldRecord).some(row => row !== membership && String(row.clubId || '') === String(clubId));
       if (occupied) throw new DomainRuleError('Club is already assigned');
+      if (membership.clubId && String(membership.clubId) !== String(clubId)) throw new DomainRuleError('Trainer already controls a club');
+      const previousClubId = membership.clubId || null;
+      const previousActivityAt = membership.lastActivityAt || null;
       membership.clubId = clubId;
       membership.lastActivityAt = new Date(this.now()).toISOString();
-      const manifest = await this.worldPersistence.commitWorldRecord({ worldRecord: runtime.worldRecord, expectedRevision: runtime.revision });
+      let manifest;
+      try {
+        manifest = await this.worldPersistence.commitWorldRecord({ worldRecord: runtime.worldRecord, expectedRevision: runtime.revision });
+      } catch (error) {
+        membership.clubId = previousClubId;
+        membership.lastActivityAt = previousActivityAt;
+        throw error;
+      }
       runtime.revision = Number(manifest.revision);
       this._touch(runtime);
       return { revision: runtime.revision, currentSeason: runtime.currentSeason, committedAt: manifest.committedAt, membership: clone(membership) };
