@@ -29,9 +29,10 @@ class WorldRuntimeManager {
     const key = String(worldId);
     const previous = this.queues.get(key) || Promise.resolve();
     const run = previous.then(task);
-    this.queues.set(key, run.catch(() => {}));
+    const tail = run.catch(() => {});
+    this.queues.set(key, tail);
     return run.finally(() => {
-      if (this.queues.get(key) === run) this.queues.delete(key);
+      if (this.queues.get(key) === tail) this.queues.delete(key);
     });
   }
 
