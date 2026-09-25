@@ -4,7 +4,7 @@ const read=r=>fs.readFileSync(path.join(root,r),'utf8');
 const report={passed:true,checks:[]};
 function check(name,ok,details={}){report.checks.push({name,ok:!!ok,details});if(!ok)report.passed=false;}
 const pkg=JSON.parse(read('package.json')),index=read('index.html'),app=read('src/app.bundle.js');
-check('Runtime version is consistently KF_0.27.3',pkg.version==='0.27.3'&&index.includes('KF_0.27.3')&&app.includes("var KF_VERSION = '0.27.3';"),{package:pkg.version});
+check('Runtime version is consistently KF_0.29.0',pkg.version==='0.29.0'&&index.includes('KF_0.29.0')&&app.includes("var KF_VERSION = '0.29.0';"),{package:pkg.version});
 const srcFiles=fs.readdirSync(path.join(root,'src')).filter(n=>fs.statSync(path.join(root,'src',n)).isFile());
 check('Active src has no backup bundles or version patch sources',!srcFiles.some(n=>/\.bak$/i.test(n)||/^kf\d+.*patch/i.test(n)||/stability-patch/i.test(n)),{srcFiles});
 const styleFiles=fs.readdirSync(path.join(root,'src','styles')).filter(n=>fs.statSync(path.join(root,'src','styles',n)).isFile());
@@ -15,7 +15,7 @@ check('Browser loads the canonical runtime source directly',index.includes('src/
 check('Unused world.tactics duplicate store is removed',!app.includes('world.tactics[')&&!app.includes('tactics: {},\n      calendar:'),{});
 check('Root contains only the production HTML entry',fs.readdirSync(root).filter(n=>/\.html$/i.test(n)).join(',')==='index.html',{htmlFiles:fs.readdirSync(root).filter(n=>/\.html$/i.test(n))});
 check('Legacy standalone kit designer prototype is removed',!fs.existsSync(path.join(root,'assets','kit_designer')),{});
-check('World schema is KF_0.27.3 with external finance ledger',app.includes("world.meta.schemaVersion='kf-core-0.27.2'"),{});
+check('World schema remains KF_0.27.2 while app is KF_0.29.0',app.includes("world.meta.schemaVersion='kf-core-0.27.2'"),{});
 check('Parallel suspensions have one canonical current container',app.includes('Canonical current truth: player.suspensions[]')&&app.includes('player.suspensions = entries'),{});
 check('Contract, formation and injury truths are declared canonically',app.includes("playerContracts: 'world.players.byId[playerId].contract'")&&app.includes("currentFormation: 'world.squads[clubId].lineupMaskState.formationKey'")&&app.includes("currentInjuries: 'world.players.byId[playerId].injurySlotsLeft'"),{});
 check('Current regression suite includes data-truth invariants',read('tests/run_current_regression_suite.js').includes('run_current_data_truth_invariants_test.js'),{});
