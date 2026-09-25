@@ -64,6 +64,7 @@ class WorldSessionService {
       const opened = await this.runtime.openWorld({ worldId: record.id, userId });
       return { registration, ...opened };
     } catch (error) {
+      await this.worlds.deleteWorld(record.id).catch(() => {});
       await this.metadata.deleteWorldRegistration({ worldId: record.id, expectedCreatedByUserId: userId }).catch(() => {});
       throw error;
     }
