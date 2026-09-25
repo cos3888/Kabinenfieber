@@ -140,7 +140,7 @@ function makeWorldRecord(worldId,userId){
   check('Retry reuses the exact prepared request and request id',
     app.includes('if(KF029Remote.checkpointPreparedRequest)return KF029Remote.checkpointPreparedRequest')&&
     app.includes('encodedBody:prepared.encodedBody')&&
-    app.includes('lastCommitRequestId'));
+    app.includes('checkpointRequestId'));
 
   check('Save failures block only further world progression, not matchday navigation',
     app.includes('kf029ActionAdvancesWorld(action,actionEl)')&&
