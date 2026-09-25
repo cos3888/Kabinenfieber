@@ -47,7 +47,7 @@ Wichtige Korrektur zur Ursachenanalyse von KF_0.29.4: Die produktive Cloud-Run-K
 - ein laufender/fehlgeschlagener Save blockiert nur weiteren **Fortschritt**, nicht Ergebnisse, Statistiken, Team des Tages, Buero oder andere reine Navigation.
 - der Retry-Dialog wird nicht mehr vorzeitig geschlossen; nach erfolgreicher Wiederholung wird er sauber beendet.
 
-Zentrale Wahrheiten bleiben unveraendert: `WorldRecord.memberships` fuer User/Verein/Rollen, `world.calendar.fixtures` fuer Kalenderzustand, `CurrentSeasonMatchRepository` fuer Vollmatches und `CurrentSeasonFinanceRepository` fuer laufende Finanzereignisse. Keine neue persistente Doppelwahrheit.
+Zentrale Wahrheiten bleiben unveraendert: `WorldRecord.memberships` fuer User/Verein/Rollen, `world.calendar.fixtures` fuer Kalenderzustand, `CurrentSeasonMatchRepository` fuer Vollmatches und `CurrentSeasonFinanceRepository` fuer laufende Finanzereignisse. Keine neue persistente Doppelwahrheit. Der Remote/API-Vertrag ist mit den neuen `/club`- und `/slot`-Endpunkten auf `0.29.5` angehoben.
 
 Regression: `tests/run_kf_0_29_5_progress_checkpoint_performance_test.js` prueft dedizierte Vereinsuebernahme, zwei aufeinanderfolgende Slot-Commits mit nur neuen Detaildaten, Rekonstruktion beider Slots nach Reload sowie die neue Browser-Sperr-/Autosave-Logik.
 
