@@ -9,7 +9,7 @@ check('DB3 has 432 clubs and only crestAsset as fixed club image asset',db.clubs
 const ctx={window:{},console};vm.createContext(ctx);vm.runInContext(read('src/static-data.js'),ctx);const sd=ctx.window.KFStaticData;
 check('StaticData mirrors kit-asset cleanup',sd.clubs.length===432&&sd.clubs.every(c=>c.crestAsset&&!('homeKitAsset' in c)&&!('awayKitAsset' in c)),{clubs:sd.clubs.length});
 const app=read('src/app.bundle.js');
-check('Runtime is KF_0.29.0 while cleanup schema remains 0.27.2',app.includes("var KF_VERSION = '0.29.0';")&&app.includes("world.meta.schemaVersion='kf-core-0.27.2'")&&app.includes("record.schemaVersion='kf-world-record-0.27.2'"),{});
+check('Runtime is KF_0.29.1 while cleanup schema remains 0.27.2',app.includes("var KF_VERSION = '0.29.1';")&&app.includes("world.meta.schemaVersion='kf-core-0.27.2'")&&app.includes("record.schemaVersion='kf-world-record-0.27.2'"),{});
 check('Finance architecture metadata points to external ledger',app.includes("processedFinancialEvents: 'CurrentSeasonFinanceRepository[worldId][season][clubId][eventId].eventKey (current season only)'"),{});
 check('Current kit renderer uses shared designer assets',app.includes("var DESIGNER_BASE_COLORS = ['white','black','navy'")&&app.includes("'./assets/kits/masks_2/'")&&app.includes("'./assets/kits/masks_3/'"),{});
 const legacyClubFiles=[];for(const ent of fs.readdirSync(path.join(root,'assets','clubs'),{withFileTypes:true})){if(!ent.isDirectory())continue;for(const n of ['home.png','away.png','README.md'])if(exists(path.join('assets','clubs',ent.name,n)))legacyClubFiles.push(path.join(ent.name,n));}
