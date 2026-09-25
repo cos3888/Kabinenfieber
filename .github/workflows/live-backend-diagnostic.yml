@@ -1,0 +1,15 @@
+name: Live backend diagnostic
+on:
+  push:
+    branches:
+      - diagnostic-live-backend
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe health endpoint
+        run: |
+          set -eux
+          curl --fail-with-body -sS -D - \
+            -H 'Origin: https://cos3888.github.io' \
+            'https://kabinenfieber-backend-458781449503.us-central1.run.app/healthz'
