@@ -12,7 +12,7 @@ function block(a,b){const x=app.indexOf(a),y=app.indexOf(b,x+a.length);return x>
 
 check('Game build and remote contract are independent',
   app.includes("var KF_VERSION = '0.29.5';")&&
-  app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.29.2';")&&
+  app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.29.5';")&&
   app.includes('clientVersion:KF029_REMOTE_CONTRACT_VERSION')&&
   !app.includes('clientVersion:KF_VERSION'));
 
@@ -31,7 +31,7 @@ check('Healthcheck is diagnostic and compares only remote contract when advertis
 
 check('Server separates service build from API contract',
   server.includes("const SERVICE_VERSION = '0.29.5';")&&
-  server.includes("const API_VERSION = '0.29.2';")&&
+  server.includes("const API_VERSION = '0.29.5';")&&
   server.includes('version: SERVICE_VERSION, apiVersion: API_VERSION'));
 
 check('Production cache busting is current',
