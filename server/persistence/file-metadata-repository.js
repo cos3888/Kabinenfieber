@@ -145,6 +145,26 @@ class FileMetadataRepository {
     });
   }
 
+  async deleteWorldRegistration({ worldId, expectedCreatedByUserId = null }) {
+    return this._mutate(data => {
+      const world = data.worlds[worldId];
+      if (!world) return { deleted: false };
+      if (expectedCreatedByUserId && String(world.createdByUserId) !== String(expectedCreatedByUserId)) {
+        throw new DomainRuleError('World creator does not match rollback request', { worldId });
+      }
+      const slotId = String(Number(world.slotId));
+      if (data.slots[slotId] && data.slots[slotId].worldId === worldId) delete data.slots[slotId];
+      delete data.worlds[worldId];
+      Object.keys(data.participationIndex).forEach(key => {
+        if (data.participationIndex[key] && data.participationIndex[key].worldId === worldId) delete data.participationIndex[key];
+      });
+      Object.keys(data.invitations).forEach(key => {
+        if (data.invitations[key] && data.invitations[key].worldId === worldId) delete data.invitations[key];
+      });
+      return { deleted: true, worldId };
+    });
+  }
+
   async createInvitation({ worldId, invitedByUserId, invitedUserId = null, inviteId = crypto.randomUUID(), expiresAt = null }) {
     return this._mutate(data => {
       const world = data.worlds[worldId];
