@@ -45,7 +45,7 @@ Regressionstest: `tests/run_kf_0_29_2_save_integrity_world_navigation_test.js` p
 
 ## KF_0.29.1 – Autosave & benannte Spielwelten
 
-Der erste Praxistest von KF_0.29.0 zeigte, dass ein klassischer manueller Save-Knopf für Kabinenfieber nicht zum vorgesehenen dauerhaften Weltmodell passt. KF_0.29.2 stellt deshalb auf Autosave um und prüft den Reload explizit gegen den committed Kalenderstand.
+Der erste Praxistest von KF_0.29.0 zeigte, dass ein klassischer manueller Save-Knopf für Kabinenfieber nicht zum vorgesehenen dauerhaften Weltmodell passt. KF_0.29.1 stellt deshalb auf Autosave um und prüft den Reload explizit gegen den committed Kalenderstand.
 
 ### Autosave
 
@@ -75,7 +75,7 @@ Die eigentliche öffentliche Weltsuche, Bewerbungen und der Direktbeitritt werde
 
 ### Reload-Wahrheit
 
-Beim Öffnen wird die committed WorldRecord-Revision zusammen mit Current-Season-Match- und Finance-Details geladen. Der Regressionstest für KF_0.29.2 vergleicht insbesondere Saison und `world.calendar.currentSlotKey` vor dem Commit und nach einem Runtime-Unload/Reload.
+Beim Öffnen wird die committed WorldRecord-Revision zusammen mit Current-Season-Match- und Finance-Details geladen. Der Regressionstest für KF_0.29.1 vergleicht insbesondere Saison und `world.calendar.currentSlotKey` vor dem Commit und nach einem Runtime-Unload/Reload.
 
 ## KF_0.29.0 – User Identity, World Runtime & Save/Load
 
