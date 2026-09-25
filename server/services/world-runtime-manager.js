@@ -38,22 +38,23 @@ class WorldRuntimeManager {
 
   async _load(worldId) {
     const key = String(worldId);
-    let runtime = this.runtimes.get(key);
-    if (runtime) return this._touch(runtime);
-    const [manifest, worldRecord, details] = await Promise.all([
-      this.worldPersistence.getManifest(key),
-      this.worldPersistence.loadWorldRecord(key),
-      this.worldPersistence.loadCurrentSeasonDetails(key)
-    ]);
+    const manifest = await this.worldPersistence.getManifest(key);
     if (!manifest) throw new DomainRuleError('World is not initialized');
-    ensureWorldMembershipRoles(worldRecord);
+
+    let runtime = this.runtimes.get(key);
+    if (runtime && Number(runtime.revision) === Number(manifest.revision)) {
+      return this._touch(runtime);
+    }
+
+    const snapshot = await this.worldPersistence.loadRuntimeSnapshot(key, manifest);
+    ensureWorldMembershipRoles(snapshot.worldRecord);
     runtime = {
       worldId: key,
-      worldRecord,
-      revision: Number(manifest.revision),
-      currentSeason: Number(manifest.currentSeason || 1),
-      matches: details.matches || [],
-      financeEvents: details.financeEvents || [],
+      worldRecord: snapshot.worldRecord,
+      revision: Number(snapshot.manifest.revision),
+      currentSeason: Number(snapshot.currentSeason || 1),
+      matches: snapshot.matches || [],
+      financeEvents: snapshot.financeEvents || [],
       lastAccessAt: this.now()
     };
     this.runtimes.set(key, runtime);
