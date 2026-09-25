@@ -24326,7 +24326,7 @@ migrateWorldDataTruthToCurrent=function(world){
 
 var KF029_BACKEND_BASE_URL = String(window.KF_BACKEND_BASE_URL || 'https://kabinenfieber-backend-458781449503.us-central1.run.app').replace(/\/+$/,'');
 // Remote contract stays independent from the browser/game build. 0.29.1 backends ignore this field; 0.29.2+ use it to guard incompatible snapshot writes.
-var KF029_REMOTE_CONTRACT_VERSION = '0.29.2';
+var KF029_REMOTE_CONTRACT_VERSION = '0.29.5';
 var KF029_AUTH_STORAGE_KEY = 'kf.auth.token';
 var KF029_AUTOSAVE_DEBOUNCE_MS = 1400;
 var KF029Remote = {
