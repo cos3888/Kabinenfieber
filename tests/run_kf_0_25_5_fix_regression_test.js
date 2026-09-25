@@ -14,7 +14,7 @@ let code=read('src/app.bundle.js');
 code=code.replace(/\n  if \(document\.readyState === 'loading'\) \{/,`\n  window.KFTest={AppState,startNewCareer,kf0255AutoFillAiSponsorSlots,sponsorContractsForClub,sponsorProfileForClub,startSlotsForSponsorProfile,resetFinanceForNewSeason,financeEventSum,worldRecordForGameState,assignTrainerClub,financeCurrentCash,playerContractSalaryBreakdownForClub,estimateCurrentSeasonCupBonus,kf0214TargetPosition,financePlacementBonus};\n  if (document.readyState === 'loading') {`);
 vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();
 const T=windowObj.KFTest;
-check('Runtime enthaelt den KF_0.25.5-Fix und laeuft aktuell als KF_0.26.2',code.includes("var KF_VERSION = '0.27.3';")&&read('index.html').includes('KF_0.27.3')&&JSON.parse(read('package.json')).version==='0.27.3',{});
+check('Runtime enthaelt den KF_0.25.5-Fix unter KF_0.29.0',code.includes("var KF_VERSION = '0.29.0';")&&read('index.html').includes('KF_0.29.0')&&JSON.parse(read('package.json')).version==='0.29.0',{});
 check('Saisonwechsel ruft KI-Sponsor-Autofill nach Finanzreset auf',/step\('finance_new_season'[\s\S]*?resetFinanceForNewSeason\(world,previousSeason\);world\.meta\.lastAiSponsorAutofill=kf0255AutoFillAiSponsorSlots\(world,world\.meta\.seasonNumber\)/.test(code),{});
 check('Autofill ueberspringt menschlich kontrollierte Vereine',/function kf0255AutoFillAiSponsorSlots[\s\S]*?if \(isHumanControlledClub\(world, clubId\)\) return;/.test(code),{});
 check('Autofill verwendet bestehende Sponsorregeln und Vertragslogik',/function kf0255AutoFillAiSponsorSlots[\s\S]*?FINANCE_SPONSOR_SLOT_MAX[\s\S]*?preferredSponsorSizesFor\(profile, slotType\)[\s\S]*?createSponsorContract\(world, club, picked, slotType/.test(code),{});
