@@ -24601,6 +24601,7 @@ async function kf029CreateRemoteWorld(){
   if (data.membership && record.memberships && record.memberships.byTrainerId && record.memberships.byTrainerId[data.membership.trainerId]) {
     record.memberships.byTrainerId[data.membership.trainerId].role = data.membership.role || record.memberships.byTrainerId[data.membership.trainerId].role;
   }
+  kf029MarkCommittedDetails(kf029CurrentMatches(), kf029CurrentFinanceEvents());
   await kf029RefreshWorldList();
   KF029Remote.message = 'Neue Welt ist auf dem Server gespeichert.';
   renderApp();
@@ -24652,6 +24653,8 @@ function kf029ConfirmWorldCreate(){
   closeModal();renderModal();
   KF029Remote.revision=null;
   KF029Remote.membership=null;
+  KF029Remote.committedMatchIds={};
+  KF029Remote.committedFinanceIds={};
   KF029Remote.error='';
   KF029Remote.message='Neue Welt wird vorbereitet ...';
   startNewCareer();
@@ -24665,6 +24668,29 @@ function kf029ConfirmWorldCreate(){
     renderModal();renderApp();
     throw error;
   }).finally(function(){KF029Remote.createPromise=null;});
+}
+async function kf029RecoverCommittedProgress(record, slotKey, deltaMatches, deltaFinance){
+  try {
+    var data = await kf029Request('/api/v1/worlds/' + encodeURIComponent(record.id));
+    var serverRecord = data && data.worldRecord;
+    var serverSlot = (((serverRecord||{}).gameState||{}).calendar||{}).currentSlotKey || '';
+    if (String(serverSlot) !== String(slotKey)) return null;
+    var matchIds = {};
+    var financeIds = {};
+    (data.matches || []).forEach(function(row){ if(row && row.id) matchIds[String(row.id)] = 1; });
+    (data.financeEvents || []).forEach(function(row){ if(row && row.id) financeIds[String(row.id)] = 1; });
+    var hasMatches = (deltaMatches || []).every(function(row){ return row && row.id && matchIds[String(row.id)]; });
+    var hasFinance = (deltaFinance || []).every(function(row){ return row && row.id && financeIds[String(row.id)]; });
+    if (!hasMatches || !hasFinance) return null;
+    KF029Remote.revision = Number(data.revision);
+    KF029Remote.currentSeason = Number(data.currentSeason || KF029Remote.currentSeason || 1);
+    KF029Remote.lastCommittedSlotKey = slotKey;
+    KF029Remote.lastSavedAt = new Date().toISOString();
+    kf029AcceptCommittedDelta(deltaMatches, deltaFinance);
+    return { revision:KF029Remote.revision, currentSeason:KF029Remote.currentSeason, recovered:true };
+  } catch (recoveryError) {
+    return null;
+  }
 }
 function kf029SaveProgressCheckpoint(reason){
   if (!KF029Remote.user || !AppState.worldRecord) return Promise.resolve(null);
@@ -24680,18 +24706,25 @@ function kf029SaveProgressCheckpoint(reason){
   var run = KF029Remote.saveChain.catch(function(){}).then(async function(){
     if (KF029Remote.createPromise) await KF029Remote.createPromise;
     if (!AppState.worldRecord || KF029Remote.revision == null) return null;
-    var data = await kf029Request('/api/v1/worlds/' + encodeURIComponent(record.id) + '/slot', {
-      method:'PUT',
-      body:{
-        expectedRevision:KF029Remote.revision,
-        clientVersion:KF029_REMOTE_CONTRACT_VERSION,
-        worldRecord:record,
-        season:season,
-        slotKey:slotKey,
-        matches:deltaMatches,
-        financeEvents:deltaFinance
-      }
-    });
+    var data;
+    try {
+      data = await kf029Request('/api/v1/worlds/' + encodeURIComponent(record.id) + '/slot', {
+        method:'PUT',
+        body:{
+          expectedRevision:KF029Remote.revision,
+          clientVersion:KF029_REMOTE_CONTRACT_VERSION,
+          worldRecord:record,
+          season:season,
+          slotKey:slotKey,
+          matches:deltaMatches,
+          financeEvents:deltaFinance
+        }
+      });
+    } catch (saveError) {
+      var recovered = await kf029RecoverCommittedProgress(record, slotKey, deltaMatches, deltaFinance);
+      if (recovered) return recovered;
+      throw saveError;
+    }
     KF029Remote.revision = Number(data.revision);
     KF029Remote.currentSeason = Number(data.currentSeason || season);
     KF029Remote.lastSavedAt = data.committedAt || new Date().toISOString();
