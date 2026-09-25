@@ -5,6 +5,7 @@ on:
       - diagnostic-live-backend
 jobs:
   probe:
+    timeout-minutes: 2
     runs-on: ubuntu-latest
     steps:
       - name: Probe health endpoint
