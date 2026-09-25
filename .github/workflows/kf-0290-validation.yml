@@ -1,0 +1,22 @@
+name: KF 0.29.0 validation
+on:
+  push:
+    branches:
+      - kf-0.29.0-user-runtime-save-load
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:0290
+      - run: node --check server/index.js
+      - run: node --check server/services/auth-service.js
+      - run: node --check server/services/world-runtime-manager.js
+      - run: node --check server/services/world-session-service.js
+      - run: node --check src/app.bundle.js
