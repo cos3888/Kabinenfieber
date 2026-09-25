@@ -8,22 +8,12 @@ jobs:
     timeout-minutes: 2
     runs-on: ubuntu-latest
     steps:
-      - name: Probe public endpoints
+      - name: Probe repeated persistence runtime
         run: |
-          set -x
-          echo '--- healthz ---'
-          curl -sS -D - -o /tmp/health.out -H 'Origin: https://cos3888.github.io' 'https://kabinenfieber-backend-458781449503.us-central1.run.app/healthz' || true
-          cat /tmp/health.out
-          echo
-          echo '--- persistence status ---'
-          curl -sS -D - -o /tmp/status.out -H 'Origin: https://cos3888.github.io' 'https://kabinenfieber-backend-458781449503.us-central1.run.app/api/v1/persistence/status' || true
-          cat /tmp/status.out
-          echo
-          echo '--- login endpoint ---'
-          curl -sS -D - -o /tmp/login.out \
-            -H 'Origin: https://cos3888.github.io' \
-            -H 'Content-Type: application/json' \
-            -X POST \
-            --data '{"loginName":"__diagnostic_invalid__","password":"__diagnostic_invalid__"}' \
-            'https://kabinenfieber-backend-458781449503.us-central1.run.app/api/v1/auth/login' || true
-          cat /tmp/login.out
+          set -e
+          for i in $(seq 1 20); do
+            curl -sS -H 'Origin: https://cos3888.github.io' \
+              'https://kabinenfieber-backend-458781449503.us-central1.run.app/api/v1/persistence/status'
+            echo
+            sleep 0.15
+          done
