@@ -62,7 +62,7 @@ const path=require('path');
     }
   };
   const created=await request('/api/v1/worlds',{
-    method:'POST',headers:authHeaders,body:JSON.stringify({worldRecord:record,matches:[],financeEvents:[]})
+    method:'POST',headers:authHeaders,body:JSON.stringify({worldRecord:record,worldName:'HTTP Welt',visibility:'PUBLIC',joinPolicy:'OPEN',matches:[],financeEvents:[]})
   });
   check('Authenticated HTTP world creation returns compact revision/membership response',
     created.res.status===201&&created.data.revision===1&&created.data.membership.role==='WORLD_ADMIN'&&!Object.prototype.hasOwnProperty.call(created.data,'worldRecord'),
