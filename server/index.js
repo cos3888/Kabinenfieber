@@ -11,7 +11,7 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const API_VERSION = '0.29.0';
+const API_VERSION = '0.29.1';
 
 let persistenceVerificationState = {
   status: 'pending',
@@ -260,6 +260,9 @@ const server = http.createServer(async (req, res) => {
       const result = await persistence.worldSessions.createWorld({
         userId: auth.user.userId,
         worldRecord: body.worldRecord,
+        worldName: body.worldName,
+        visibility: body.visibility,
+        joinPolicy: body.joinPolicy,
         matches: body.matches || [],
         financeEvents: body.financeEvents || []
       });
