@@ -1,7 +1,14 @@
-# Kabinenfieber KF_0.29.2
+# Kabinenfieber KF_0.29.3
 
 KF_0.27.2 bereinigt auf Basis des abgeschlossenen KF_0.27.1-Stands die Repository- und Assetstruktur, ohne Gameplay oder Simulation zu veraendern. Die Match- und Finance-Segmentierung aus KF_0.27.0/0.27.1 bleibt unveraendert aktiv.
 
+
+## Neu in KF_0.29.3 – Backend Compatibility
+
+- Login, Session-Restore und Weltladen werden nicht mehr durch einen vorgeschalteten `/healthz`-Request blockiert.
+- Spielbuild `0.29.3` und Remote-Vertrag `0.29.2` sind getrennt.
+- Create/Save verwenden den stabilen Remote-Vertrag.
+- Save Integrity und Hard Checkpoints aus 0.29.2 bleiben erhalten.
 
 ## Neu in KF_0.29.2 – Save Integrity & World Navigation
 
