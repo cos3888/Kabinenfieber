@@ -1,6 +1,6 @@
 {
   "name": "kabinenfieber",
-  "version": "0.29.4",
+  "version": "0.29.5",
   "private": true,
   "description": "Kabinenfieber Fussballmanager",
   "scripts": {
@@ -49,7 +49,8 @@
     "test:0291": "node tests/run_kf_0_29_1_autosave_world_metadata_test.js",
     "test:0292": "node tests/run_kf_0_29_2_save_integrity_world_navigation_test.js",
     "test:0293": "node tests/run_kf_0_29_3_backend_compatibility_test.js",
-    "test:0294": "node tests/run_kf_0_29_4_authoritative_world_reload_test.js"
+    "test:0294": "node tests/run_kf_0_29_4_authoritative_world_reload_test.js",
+    "test:0295": "node tests/run_kf_0_29_5_progress_checkpoint_save_performance_test.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.2.0",
