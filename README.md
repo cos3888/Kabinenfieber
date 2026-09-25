@@ -1,6 +1,23 @@
-# Kabinenfieber KF_0.28.1
+# Kabinenfieber KF_0.29.0
 
 KF_0.27.2 bereinigt auf Basis des abgeschlossenen KF_0.27.1-Stands die Repository- und Assetstruktur, ohne Gameplay oder Simulation zu veraendern. Die Match- und Finance-Segmentierung aus KF_0.27.0/0.27.1 bleibt unveraendert aktiv.
+
+
+## Neu in KF_0.29.0 – User Identity, World Runtime & Save/Load
+
+KF_0.29.0 verbindet den Browser erstmals mit der autoritativen Cloud-Persistenz.
+
+- eigener Kabinenfieber-Login mit eindeutigem Benutzernamen + Passwort; E-Mail/Recovery ist bewusst noch nicht Teil dieses Entwicklungsblocks.
+- unveraenderliche interne `userId`; Loginname und sichtbarer Anzeigename sind davon getrennt.
+- Passwoerter werden serverseitig ausschliesslich als gesalzene `scrypt`-Hashes gespeichert. Persistiert wird nie das Klartextpasswort.
+- Browser-Sitzungen verwenden zufaellige Bearer-Tokens; serverseitig liegt nur deren SHA-256-Hash.
+- `WorldRuntimeManager` laedt mehrere Welten parallel nach `worldId`, serialisiert Mutationen je Welt in einer eigenen Queue und entlaedt inaktive Welten nach 15 Minuten aus dem RAM, ohne Spielstaende zu loeschen.
+- GitHub Pages kann nach Anmeldung eigene Welten auflisten, laden und serverseitig speichern.
+- aktuelle Vollmatch- und Finance-Details werden beim Remote-Snapshot zusammen mit dem WorldRecord wiederherstellbar gehalten.
+- `WorldRecord.memberships` bleibt alleinige Wahrheit fuer menschliche Weltzugehoerigkeit, `clubId` und `PLAYER`/`WORLD_ADMIN`. Auth-/Profil- und Firestore-Indexdaten enthalten diese Wahrheit nicht nochmals.
+- vollstaendiges Browser-Snapshot-Speichern ist absichtlich nur fuer Welten mit genau einem menschlichen User erlaubt. Sobald mehrere Menschen teilnehmen, muss der spaetere serverautoritative Command-Pfad verwendet werden.
+
+Das ist noch **nicht** die fertige Multiplayer-Lobby. Einladungen, Join/Leave-UI, Ready/Countdown und Live-Eingriffe folgen auf dieser nun servergebundenen Save/Load-Grundlage.
 
 ## Neu in KF_0.28.1 – Cloud Persistence Verification
 
