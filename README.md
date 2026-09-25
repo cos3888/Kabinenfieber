@@ -1,7 +1,23 @@
-# Kabinenfieber KF_0.29.0
+# Kabinenfieber KF_0.29.1
 
 KF_0.27.2 bereinigt auf Basis des abgeschlossenen KF_0.27.1-Stands die Repository- und Assetstruktur, ohne Gameplay oder Simulation zu veraendern. Die Match- und Finance-Segmentierung aus KF_0.27.0/0.27.1 bleibt unveraendert aktiv.
 
+
+## Neu in KF_0.29.1 – Autosave & benannte Spielwelten
+
+KF_0.29.1 korrigiert den ersten Save/Load-Praxistest und richtet Kabinenfieber auf ein persistentes Online-Weltmodell aus.
+
+- kein manueller „Jetzt speichern“-Knopf mehr als normale Spielfunktion.
+- garantierter serverseitiger Autosave-Checkpoint nach normalem Kalenderfortschritt und nach abgeschlossener Kalenderschnellsimulation.
+- relevante Entscheidungen wie Vereinsübernahme, Aufstellung/Taktik, Transfers, Verträge, Sponsoring, Scouting und Trikotänderungen lösen einen direkten oder kurz verzögerten Autosave aus.
+- beim Verlassen der Welt bzw. Logout wird ein noch offener Autosave vor dem Wechsel abgearbeitet.
+- Reload-Test prüft explizit, dass `world.calendar.currentSlotKey`, Saison, Current-Season-Matches und FinanceEvents aus derselben committed Revision wiederhergestellt werden.
+- jede neu erstellte Spielwelt benötigt einen Namen mit 3–40 Zeichen.
+- Weltname und Zugangsmodell liegen ausschließlich im World Registry / Firestore und werden nicht zusätzlich im WorldRecord gespeichert.
+- vorbereitete Zugangsmodelle: `PUBLIC + OPEN` (offen), `PUBLIC + APPLICATION` (Bewerbung) und `PRIVATE + INVITE_ONLY` (nur Einladung).
+- bestehende KF_0.29.0-Welten ohne Namen bleiben ladbar und erhalten in der Weltliste einen technischen Fallbacknamen.
+
+Öffentliche Weltsuche, Bewerbungsworkflow und Direktbeitritt sind weiterhin **nicht** Bestandteil dieses Fixes; KF_0.29.1 bereitet nur die Metadaten dafür sauber vor.
 
 ## Neu in KF_0.29.0 – User Identity, World Runtime & Save/Load
 
