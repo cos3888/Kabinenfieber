@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.29.0
+# Kabinenfieber - Stand KF_0.29.1
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.29.0`
+App-Version: `KF_0.29.1`
 
 Persistierte Schemas:
 
@@ -17,6 +17,40 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.29.1 – Autosave & benannte Spielwelten
+
+Der erste Praxistest von KF_0.29.0 zeigte, dass ein klassischer manueller Save-Knopf für Kabinenfieber nicht zum vorgesehenen dauerhaften Weltmodell passt. KF_0.29.1 stellt deshalb auf Autosave um und prüft den Reload explizit gegen den committed Kalenderstand.
+
+### Autosave
+
+- nach einem vollständig verarbeiteten normalen Kalenderslot wird unmittelbar ein serverseitiger Snapshot-Checkpoint erzeugt.
+- auch der Abschluss einer Kalenderschnellsimulation löst einen unmittelbaren Checkpoint aus.
+- relevante Entscheidungen außerhalb des Kalenderfortschritts werden direkt oder mit kurzem Debounce gespeichert, damit z. B. Aufstellung, Taktik, Transfers oder Verträge nicht bis zum nächsten Spieltag verloren gehen.
+- beim Verlassen der Welt bzw. Logout wird ein noch offener Autosave abgearbeitet.
+- der manuelle „Jetzt speichern“-Knopf entfällt; die Welt selbst ist der Spielstand.
+- Vollsnapshot-Saves bleiben weiterhin nur für Welten mit exakt einem menschlichen User erlaubt. Multiplayer benötigt danach serverautoritative Commands.
+
+### Spielweltname und Beitrittsmodell
+
+Neue Welten müssen einen `worldName` mit 3–40 Zeichen besitzen. Dieser Name gehört **nicht** in den WorldRecord, sondern in das bestehende World Registry / Firestore-Metadatum.
+
+Ebenfalls dort liegen die Verwaltungsfelder:
+
+- `visibility: PUBLIC | PRIVATE`
+- `joinPolicy: OPEN | APPLICATION | INVITE_ONLY`
+
+Aktuell zulässige Kombinationen:
+
+- offene Welt: `PUBLIC + OPEN`
+- Bewerbungswelt: `PUBLIC + APPLICATION`
+- private Welt: `PRIVATE + INVITE_ONLY`
+
+Die eigentliche öffentliche Weltsuche, Bewerbungen und der Direktbeitritt werden erst im folgenden Multiplayerblock umgesetzt. `WorldRecord.memberships` bleibt weiterhin alleinige Wahrheit dafür, wer tatsächlich Mitglied der Welt ist, welchen Club der User steuert und welche Weltrolle er besitzt.
+
+### Reload-Wahrheit
+
+Beim Öffnen wird die committed WorldRecord-Revision zusammen mit Current-Season-Match- und Finance-Details geladen. Der Regressionstest für KF_0.29.1 vergleicht insbesondere Saison und `world.calendar.currentSlotKey` vor dem Commit und nach einem Runtime-Unload/Reload.
 
 ## KF_0.29.0 – User Identity, World Runtime & Save/Load
 
