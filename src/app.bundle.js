@@ -25021,10 +25021,13 @@ function kf029StartNewCareer(){
 var kf029BaseHandleAction = handleAction;
 handleAction = function(action, actionEl){
   if (action === 'kf-retry-checkpoint') { void kf029RetryCheckpoint().catch(function(){}); return; }
+  if (action === 'kf-close-checkpoint-notice') { closeModal();renderModal();return; }
   if (action === 'kf-exit-world-discard') { void kf029ExitWorldToList(true); return; }
-  if ((KF029Remote.checkpointPending || KF029Remote.checkpointFailed) && action !== 'kf-retry-checkpoint' && action !== 'kf-exit-world-discard') {
-    if(KF029Remote.checkpointPending){
-      KF029Remote.message='Spielstand wird noch serverseitig bestätigt.';
+  if ((KF029Remote.checkpointPending || KF029Remote.checkpointFailed) && kf029ActionAdvancesWorld(action,actionEl)) {
+    if(KF029Remote.checkpointFailed){
+      kf029ShowCheckpointFailure(KF029Remote.checkpointReason||'checkpoint',new Error('Der letzte Fortschritt ist noch nicht bestätigt.'));
+    }else{
+      KF029Remote.message='Der letzte Kalenderfortschritt wird noch gespeichert. Navigation bleibt möglich; ein weiterer Fortschritt wartet auf die Serverbestätigung.';
       renderApp();
     }
     return;
@@ -25047,9 +25050,13 @@ handleAction = function(action, actionEl){
     return;
   }
   if (action === 'office-options' && KF029Remote.user) {
-    var saved = KF029Remote.lastSavedAt ? new Date(KF029Remote.lastSavedAt).toLocaleString('de-DE') : 'Autosave wartet auf die erste Änderung';
+    var saved = KF029Remote.lastSavedAt ? new Date(KF029Remote.lastSavedAt).toLocaleString('de-DE') : 'Noch kein Fortschritts-Checkpoint';
+    var metrics=KF029Remote.lastSaveMetrics||null;
+    var metricText=metrics
+      ? ('<br><br><strong>Letzter Save:</strong> '+escapeHtml(metrics.requestMs||0)+' ms Server/Netz · '+escapeHtml(metrics.compressMs||0)+' ms Komprimierung · '+escapeHtml(metrics.matches||0)+' neue Matches · '+escapeHtml(metrics.financeEvents||0)+' neue Finanzereignisse')
+      : '';
     openModal({ title:'Welt & Optionen', bodyHtml:
-      '<div class="notice"><strong>Autosave aktiv</strong><br>Kalenderslots und relevante Entscheidungen werden automatisch serverseitig gesichert.<br><br><strong>Serverwelt:</strong> Revision ' + escapeHtml(KF029Remote.revision == null ? '-' : KF029Remote.revision) + '<br><strong>Letzter Autosave:</strong> ' + escapeHtml(saved) + '</div>' +
+      '<div class="notice"><strong>Fortschrittssicherung</strong><br>Gespeichert wird bei Welterstellung, Vereinsübernahme und abgeschlossenem Kalenderfortschritt. Aufstellung, Taktik und andere Entscheidungen werden mit dem nächsten Fortschritts-Checkpoint übernommen.<br><br><strong>Serverwelt:</strong> Revision ' + escapeHtml(KF029Remote.revision == null ? '-' : KF029Remote.revision) + '<br><strong>Letzter Checkpoint:</strong> ' + escapeHtml(saved) + metricText + '</div>' +
       '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-exit-world">Zur Weltliste</button></div>'
     });
     renderModal(); return;
@@ -25070,28 +25077,17 @@ handleAction = function(action, actionEl){
     return;
   }
   kf029BaseHandleAction(action, actionEl);
-  if (KF029Remote.user && AppState.worldRecord && KF029_AUTOSAVE_ACTIONS[action]) {
-    kf029ScheduleAutosave(action, false);
-  }
 };
 
 var kf029BaseBoot = boot;
 boot = function(){
   kf029BaseBoot();
-  var autosaveRoot = document && document.documentElement ? document.documentElement : null;
-  if (autosaveRoot && autosaveRoot.dataset && !autosaveRoot.dataset.kf029AutosaveBound && typeof document.addEventListener === 'function') {
-    autosaveRoot.dataset.kf029AutosaveBound='1';
-    document.addEventListener('change', function(){
-      if (!KF029Remote.user || !AppState.worldRecord) return;
-      if (['lineup','contracts','squad-planning','finance','sponsoring'].indexOf(AppState.ui.currentView) >= 0) kf029ScheduleAutosave('form-change', false);
-    }, true);
-    document.addEventListener('drop', function(){
-      if (!KF029Remote.user || !AppState.worldRecord) return;
-      if (AppState.ui.currentView === 'lineup') kf029ScheduleAutosave('lineup-drop', false);
-    }, true);
+  var checkpointRoot=document&&document.documentElement?document.documentElement:null;
+  if(checkpointRoot&&checkpointRoot.dataset&&!checkpointRoot.dataset.kf029CheckpointBound){
+    checkpointRoot.dataset.kf029CheckpointBound='1';
     if(typeof window.addEventListener==='function'){
       window.addEventListener('beforeunload',function(event){
-        if(!KF029Remote.checkpointPending && !KF029Remote.autosaveTimer)return;
+        if(!KF029Remote.checkpointPending)return;
         event.preventDefault();
         event.returnValue='';
       });
