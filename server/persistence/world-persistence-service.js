@@ -88,6 +88,87 @@ class WorldPersistenceService {
     return decodeJsonGzip((await this.store.read(path)).body);
   }
 
+
+  async loadCurrentSeasonDetails(worldId) {
+    const manifest = await this.getManifest(worldId);
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const matchPaths = Array.from(new Set(Object.values(manifest.matchSegments || {}).filter(Boolean)));
+    const financePaths = Array.from(new Set(Object.values(manifest.financeSegments || {}).filter(Boolean)));
+    const [matchSegments, financeSegments] = await Promise.all([
+      Promise.all(matchPaths.map(async path => decodeJsonGzip((await this.store.read(path)).body))),
+      Promise.all(financePaths.map(async path => decodeJsonGzip((await this.store.read(path)).body)))
+    ]);
+    return {
+      season: Number(manifest.currentSeason || 1),
+      matches: matchSegments.flatMap(segment => Array.isArray(segment && segment.matches) ? segment.matches : []),
+      financeEvents: financeSegments.flatMap(segment => Array.isArray(segment && segment.events) ? segment.events : [])
+    };
+  }
+
+  async commitRuntimeSnapshot({ worldRecord, season, matches = [], financeEvents = [], expectedRevision }) {
+    const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
+    const envelope = await this._readManifestEnvelope(worldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const current = envelope.manifest;
+    if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
+      throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: current.revision });
+    }
+    season = Number(season || (worldRecord.gameState && worldRecord.gameState.meta && worldRecord.gameState.meta.seasonNumber) || current.currentSeason || 1);
+    if (!Number.isFinite(season) || season < 1) throw new Error('Invalid current season');
+
+    const revision = Number(current.revision) + 1;
+    const revisionPrefix = this.revisionPrefix(worldId, revision);
+    const detailPrefix = `${this.seasonPrefix(worldId, season)}/revisions/${String(revision).padStart(8, '0')}/runtime`;
+    const worldPath = `${revisionPrefix}/world.json.gz`;
+    const matchPath = `${detailPrefix}/matches.json.gz`;
+    const financePath = `${detailPrefix}/finances.json.gz`;
+    const staged = [worldPath, matchPath, financePath];
+
+    try {
+      await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+      await this.store.write(matchPath, await encodeJsonGzip({ season, kind: 'runtime-snapshot', matches }), { contentType: 'application/gzip' });
+      await this.store.write(financePath, await encodeJsonGzip({ season, kind: 'runtime-snapshot', events: financeEvents }), { contentType: 'application/gzip' });
+      const next = {
+        ...current,
+        revision,
+        committedAt: new Date().toISOString(),
+        worldRecordPath: worldPath,
+        currentSeason: season,
+        matchSegments: { __runtime__: matchPath },
+        financeSegments: { __runtime__: financePath }
+      };
+      await this.store.write(this.manifestKey(worldId), encodeJson(next), {
+        ifGenerationMatch: envelope.generation,
+        contentType: 'application/json'
+      });
+
+      if (current.worldRecordPath && current.worldRecordPath !== worldPath) {
+        await this.store.delete(current.worldRecordPath).catch(() => {});
+      }
+      const previousPaths = [
+        ...Object.values(current.matchSegments || {}),
+        ...Object.values(current.financeSegments || {})
+      ].filter(Boolean);
+      for (const oldPath of previousPaths) {
+        if (oldPath !== matchPath && oldPath !== financePath) await this.store.delete(oldPath).catch(() => {});
+      }
+      const previousSeason = Number(current.currentSeason);
+      if (Number.isFinite(previousSeason) && previousSeason !== season) {
+        await this.store.deletePrefix(this.seasonPrefix(worldId, previousSeason)).catch(() => {});
+      }
+      return next;
+    } catch (error) {
+      for (const path of staged) await this.store.delete(path).catch(() => {});
+      throw error;
+    }
+  }
+
+  async deleteWorld(worldId) {
+    const id = safeKey(worldId, 'worldId');
+    await this.store.deletePrefix(`worlds/${id}/`);
+    return true;
+  }
+
   async commitWorldRecord({ worldRecord, expectedRevision }) {
     const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
     const envelope = await this._readManifestEnvelope(worldId);
