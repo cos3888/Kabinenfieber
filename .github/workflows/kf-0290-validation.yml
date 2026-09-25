@@ -1,8 +1,9 @@
-name: KF 0.29.0 validation
+name: KF 0.29.x validation
 on:
   push:
     branches:
       - kf-0.29.0-user-runtime-save-load
+      - kf-0.29.1-autosave-world-metadata
 concurrency:
   group: kf029-validation
   cancel-in-progress: true
@@ -17,6 +18,7 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run test:0290
+      - run: npm run test:0291
       - run: npm test -- --full
       - run: node --check server/index.js
       - run: node --check server/services/auth-service.js
