@@ -11,8 +11,8 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const SERVICE_VERSION = '0.29.4';
-const API_VERSION = '0.29.2';
+const SERVICE_VERSION = '0.29.5';
+const API_VERSION = '0.29.5';
 
 let persistenceVerificationState = {
   status: 'pending',
@@ -285,6 +285,40 @@ const server = http.createServer(async (req, res) => {
         currentSeason: result.currentSeason,
         membership: result.membership
       });
+      return;
+    }
+
+    const clubWorldId = worldIdFromPath(pathname, '/club');
+    if (req.method === 'POST' && clubWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.assignClub({
+        userId: auth.user.userId,
+        worldId: clubWorldId,
+        clubId: String(body.clubId || ''),
+        expectedRevision: body.expectedRevision,
+        requestId: body.requestId || null
+      });
+      await sendJson(req, res, 200, { ok: true, ...result });
+      return;
+    }
+
+    const progressWorldId = worldIdFromPath(pathname, '/progress');
+    if (req.method === 'PUT' && progressWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.saveProgress({
+        userId: auth.user.userId,
+        worldId: progressWorldId,
+        worldRecord: body.worldRecord,
+        expectedRevision: body.expectedRevision,
+        requestId: body.requestId || null,
+        matchesDelta: Array.isArray(body.matchesDelta) ? body.matchesDelta : [],
+        financeEventsDelta: Array.isArray(body.financeEventsDelta) ? body.financeEventsDelta : []
+      });
+      await sendJson(req, res, 200, { ok: true, ...result });
       return;
     }
 
