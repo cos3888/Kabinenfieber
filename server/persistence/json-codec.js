@@ -5,8 +5,8 @@ const { promisify } = require('util');
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 
-async function encodeJsonGzip(value) {
-  return gzip(Buffer.from(JSON.stringify(value), 'utf8'), { level: 6 });
+async function encodeJsonGzip(value, { level = 6 } = {}) {
+  return gzip(Buffer.from(JSON.stringify(value), 'utf8'), { level });
 }
 
 async function decodeJsonGzip(buffer) {
