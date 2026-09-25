@@ -11,7 +11,7 @@ for(const f of ['src/static-data.js','src/db1-db2-data.js'])vm.runInContext(read
 let code=read('src/app.bundle.js');
 code=code.replace(/\n\n  if \(document\.readyState === 'loading'\) \{/,`\nwindow.KFTest={AppState,createEmptyWorld,createWorldRecord,registerWorldRecord,WorldRepository,CurrentSeasonMatchRepository,recordPlayedMatch,matchById,renderMatchInfoModalBody,kf0270LoadFullCurrentSeasonMatch,kf0270CompactCurrentMatch,kf0270ArchiveExistingCurrentSeasonMatches,migrateWorldDataTruthToCurrent};\n\n  if (document.readyState === 'loading') {`);
 vm.runInContext(code,context,{filename:'src/app.bundle.js'});if(document.cb)document.cb();const T=windowObj.KFTest;
-check('Runtime meldet KF_0.29.1',code.includes("var KF_VERSION = '0.29.1';")&&read('index.html').includes('KF_0.29.1')&&JSON.parse(read('package.json')).version==='0.29.1');
+check('Runtime meldet KF_0.29.2',code.includes("var KF_VERSION = '0.29.2';")&&read('index.html').includes('KF_0.29.2')&&JSON.parse(read('package.json')).version==='0.29.2');
 function sampleWorld(id){
   const w=T.createEmptyWorld({seasonNumber:1});w.meta.id=id;w.meta.initialized=true;
   w.clubs.byId.c1={id:'c1',name:'Heim',leagueKey:'Test 1',leagueLevel:1,countryName:'Testland'};w.clubs.byId.c2={id:'c2',name:'Gast',leagueKey:'Test 1',leagueLevel:1,countryName:'Testland'};w.clubs.order=['c1','c2'];
