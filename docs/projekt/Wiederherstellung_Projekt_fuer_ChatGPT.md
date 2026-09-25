@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.29.4
+# Wiederherstellung Kabinenfieber - KF_0.29.5
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.29.4`
+Version: `KF_0.29.5`
 
 Build-Label:
 
-`KF_0.29.4 - Authoritative World Reload`
+`KF_0.29.5 - Progress Checkpoints & Save Performance`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.29.4.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.29.5.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,53 @@ Aktuelle ZIP nach Export soll `KF_0.29.4.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.29.5 – Progress Checkpoints & Save Performance
+
+Dieser Block ersetzt den kontinuierlichen Browser-Autosave durch klar definierte Fortschrittsgrenzen und muss als aktueller Persistenzpfad erhalten bleiben.
+
+### Browser
+
+- `KF_VERSION = 0.29.5`; `KF029_REMOTE_CONTRACT_VERSION = 0.29.5`.
+- Keine `KF029_AUTOSAVE_ACTIONS`, kein `kf029ScheduleAutosave`, kein Debounce-Save fuer Managementaktionen.
+- Welterstellung bleibt ein einmaliger Initial-Snapshot.
+- Vereinsuebernahme: `kf029AssignClubRemote` -> `POST /api/v1/worlds/:id/club`; kleiner Payload aus `clubId`, `expectedRevision`, `requestId`, `clientVersion`.
+- Kalenderfortschritt: `kf029CommitHardCheckpoint` -> `kf029SaveProgressCheckpoint` -> `PUT /api/v1/worlds/:id/progress`.
+- `kf029CollectProgressDelta` uebertraegt nur noch nicht bestaetigte IDs aus `CurrentSeasonMatchRepository` und `CurrentSeasonFinanceRepository`.
+- `kf029PrepareProgressRequest` serialisiert/komprimiert den Grenzstand genau einmal und haelt ihn in `checkpointPreparedRequest`; Retry verwendet denselben Buffer und dieselbe `requestId`.
+- `checkpointPending`/`checkpointFailed` blockieren nur Aktionen, die weiteren Fortschritt ausloesen (`office-advance`, Kalendersimulation, Takeover-Doppelklick/entsprechende Autofix-Fortsetzung). `matchday-next` und normale Navigation bleiben aktiv.
+- Beim Verlassen waehrend eines laufenden Checkpoints wird dessen echtes Promise abgewartet; Fehler duerfen nicht durch eine catch-gesaeuberte Queue verschluckt werden.
+- Vor `beforeunload` wird nur bei einem wirklich laufenden Progress-Checkpoint gewarnt.
+- Request-Timeouts: normal 30 s; Create/Club/Progress 60 s.
+- `lastSaveMetrics` misst Serialisierung, Komprimierung, Requestzeit, Raw-/Wire-Payload und Zahl neuer Detailobjekte.
+
+### Server
+
+- `WorldSessionService.saveWorld` darf vor dem Save kein `runtime.openWorld()` mehr aufrufen; das verursachte einen unnoetigen kompletten Clone der Welt und Detailstores.
+- `WorldRuntimeManager.assignClub` mutiert nur die serverkanonische Membership und persistiert ueber `commitWorldRecord`.
+- `WorldRuntimeManager.saveProgress` kanonisiert Singleplayer-Snapshots, committed ueber `commitProgressCheckpoint` und merged nur die neuen Detailobjekte in die Runtime.
+- `_canonicalizeSingleUserSnapshot` darf den eingehenden riesigen WorldRecord nicht erneut komplett deep-clonen; servergeschuetzte Memberships werden separat geklont/ueberschrieben.
+- `WorldPersistenceService.commitProgressCheckpoint` schreibt einen neuen schnellen WorldRecord-Snapshot und append-only Match-/Finance-Delta-Segmente fuer die laufende Saison.
+- Manifestfelder `lastCommitRequestId`/`lastCommitKind` dienen ausschliesslich technischer Idempotenz, nicht als zweite Spielwahrheit.
+- Bei gleicher `requestId` und bereits fortgeschrittener Revision ist ein Retry dedupliziert und erzeugt keine weitere Revision.
+- Hot WorldRecord gzip Level 1; Progress-Detailsegmente Level 3.
+- `GoogleCloudObjectStore.write(..., readGeneration:false)` vermeidet unnoetige Metadata-Reads nach Datenobjekt-Writes; Manifest-Lese-/Generation-Sicherheit bleibt bestehen.
+
+### Wahrheiten
+
+- aktueller Spielzustand/Spielplan: committed `WorldRecord`, insbesondere `world.calendar.fixtures`.
+- User/Club/Rollen: nur `WorldRecord.memberships`.
+- laufende Vollmatches: `CurrentSeasonMatchRepository` / physisch die Manifest-Matchsegmente.
+- laufende FinanceEvents: `CurrentSeasonFinanceRepository` / physisch die Manifest-Finanzsegmente.
+- Weltname/Visibility/JoinPolicy: World Registry/Firestore.
+- keine fachliche Doppelhaltung.
+
+### Tests / Deployment
+
+- Pflichtregression: `tests/run_kf_0_29_5_progress_checkpoint_save_performance_test.js`.
+- Weiterhin alle 0.29.0–0.29.4-Regressionen sowie Current Core/Full Regression.
+- Weil API/Remote-Vertrag auf 0.29.5 steigt, muss das Cloud-Run-Backend zusammen mit dem GitHub-Pages-Frontend aktualisiert werden.
+- Cloud Run bleibt vorerst `max instances = 1`; horizontale Skalierung erst nach verteilter Lock-/Lease-Logik.
 
 ## KF_0.29.4 – Authoritative World Reload
 
