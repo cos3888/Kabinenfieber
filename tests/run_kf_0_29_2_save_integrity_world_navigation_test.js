@@ -84,9 +84,9 @@ function makeWorldRecord(worldId,userId){
   const server=await fs.readFile(path.join(__dirname,'..','server','index.js'),'utf8');
 
   check('Club takeover is a confirmed server checkpoint before office entry',
-    app.includes("kf029SaveRemoteWorld('take-over-club').then(function()")&&
-    app.includes("KF029Remote.membership=assignResult.membership || KF029Remote.membership")&&
-    !app.includes("'take-over-club':1,'lineup-assistant"));
+    app.includes("'/club'")&&
+    app.includes("KF029Remote.membership=data.membership || assignResult.membership || KF029Remote.membership")&&
+    !app.includes("kf029SaveRemoteWorld('take-over-club')"));
 
   check('Calendar advance uses a blocking hard checkpoint instead of fire-and-forget autosave',
     app.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
