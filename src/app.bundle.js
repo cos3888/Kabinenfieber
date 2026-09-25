@@ -20508,20 +20508,6 @@ function handleAction(action, actionEl){
       return;
     }
     finishTakeover();
-      }).catch(function(error){
-        if(assignResult.membership) assignResult.membership.clubId=previousTakeoverClubId;
-        if(AppState.session) AppState.session.activeClubId=previousTakeoverClubId;
-        KF029Remote.checkpointPending=false;
-        KF029Remote.checkpointReason='';
-        KF029Remote.message='';
-        KF029Remote.error='Vereinsübernahme konnte nicht sicher gespeichert werden: '+(error.message || 'Unbekannter Fehler');
-        setCurrentView('club-selection');
-        openModal({title:'Vereinsübernahme nicht gespeichert',body:'Der Server hat die Vereinsübernahme nicht bestätigt. Die lokale Zuordnung wurde zurückgesetzt. Bitte versuche die Vereinsübernahme erneut.'});
-        renderApp();renderModal();
-      });
-      return;
-    }
-    finishTakeover();
     return;
   }
   if (action === 'open-active-club-profile') { var currentClub = activeClub(); if (currentClub) openClubProfile(currentClub.id); return; }
