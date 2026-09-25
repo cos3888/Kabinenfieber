@@ -20500,15 +20500,29 @@ function handleAction(action, actionEl){
         KF029Remote.message='Vereinsübernahme gespeichert.';
         finishTakeover();
       }).catch(function(error){
-        if(assignResult.membership) assignResult.membership.clubId=previousTakeoverClubId;
-        if(AppState.session) AppState.session.activeClubId=previousTakeoverClubId;
-        KF029Remote.checkpointPending=false;
-        KF029Remote.checkpointReason='';
-        KF029Remote.message='';
-        KF029Remote.error='Vereinsübernahme konnte nicht sicher gespeichert werden: '+(error.message || 'Unbekannter Fehler');
-        setCurrentView('club-selection');
-        openModal({title:'Vereinsübernahme nicht gespeichert',body:'Der Server hat die Vereinsübernahme nicht bestätigt. Die lokale Zuordnung wurde zurückgesetzt. Bitte versuche die Vereinsübernahme erneut.'});
-        renderApp();renderModal();
+        return kf029Request('/api/v1/worlds/' + encodeURIComponent(AppState.worldRecord.id)).then(function(reloaded){
+          var recoveredMembership=reloaded && reloaded.membership;
+          if(!recoveredMembership || String(recoveredMembership.clubId||'')!==String(selectedId)) throw error;
+          KF029Remote.revision=Number(reloaded.revision);
+          KF029Remote.currentSeason=Number(reloaded.currentSeason || KF029Remote.currentSeason || 1);
+          KF029Remote.membership=recoveredMembership;
+          KF029Remote.checkpointPending=false;
+          KF029Remote.checkpointFailed=false;
+          KF029Remote.checkpointReason='';
+          KF029Remote.message='Vereinsübernahme gespeichert.';
+          if(assignResult.membership) assignResult.membership.clubId=selectedId;
+          finishTakeover();
+        }).catch(function(){
+          if(assignResult.membership) assignResult.membership.clubId=previousTakeoverClubId;
+          if(AppState.session) AppState.session.activeClubId=previousTakeoverClubId;
+          KF029Remote.checkpointPending=false;
+          KF029Remote.checkpointReason='';
+          KF029Remote.message='';
+          KF029Remote.error='Vereinsübernahme konnte nicht sicher gespeichert werden: '+(error.message || 'Unbekannter Fehler');
+          setCurrentView('club-selection');
+          openModal({title:'Vereinsübernahme nicht gespeichert',body:'Der Server hat die Vereinsübernahme nicht bestätigt. Die lokale Zuordnung wurde zurückgesetzt. Bitte versuche die Vereinsübernahme erneut.'});
+          renderApp();renderModal();
+        });
       });
       return;
     }
