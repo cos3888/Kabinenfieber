@@ -24894,9 +24894,13 @@ var KF029_AUTOSAVE_ACTIONS={
   'player-profile-scout-toggle':1,'cup-draw-continue':1,'delete-mail':1,'delete-all-mail':1,'toggle-mail-read':1
 };
 async function kf029Logout(){
+  if(KF029Remote.checkpointPending){
+    KF029Remote.error='Abmelden ist erst möglich, wenn der laufende Fortschritts-Speicherpunkt abgeschlossen ist.';
+    renderApp();
+    return;
+  }
   KF029Remote.busy = true; KF029Remote.error = ''; renderApp();
   try {
-    if (AppState.worldRecord) await kf029FlushAutosave('logout');
     await kf029Request('/api/v1/auth/logout', { method:'POST' });
     kf029SetToken(null);
     kf029SetUser(null);
@@ -24977,7 +24981,11 @@ handleAction = function(action, actionEl){
     KF029Remote.message=KF029Remote.checkpointPending
       ? 'Der letzte Fortschritt wird noch gespeichert.'
       : 'Der letzte Fortschritt ist noch nicht gespeichert. Bitte zuerst erneut versuchen.';
-    renderApp();
+    if(KF029Remote.checkpointFailed && !AppState.ui.modal){
+      kf029ShowCheckpointFailure(KF029Remote.checkpointReason||'checkpoint',new Error('Der letzte Fortschritt ist noch nicht bestätigt.'));
+    }else{
+      renderApp();
+    }
     return;
   }
   if (action === 'start-new-career') { kf029StartNewCareer(); return; }
@@ -24998,9 +25006,9 @@ handleAction = function(action, actionEl){
     return;
   }
   if (action === 'office-options' && KF029Remote.user) {
-    var saved = KF029Remote.lastSavedAt ? new Date(KF029Remote.lastSavedAt).toLocaleString('de-DE') : 'Autosave wartet auf die erste Änderung';
+    var saved = KF029Remote.lastSavedAt ? new Date(KF029Remote.lastSavedAt).toLocaleString('de-DE') : 'Noch kein Fortschritts-Speicherpunkt';
     openModal({ title:'Welt & Optionen', bodyHtml:
-      '<div class="notice"><strong>Autosave aktiv</strong><br>Kalenderslots und relevante Entscheidungen werden automatisch serverseitig gesichert.<br><br><strong>Serverwelt:</strong> Revision ' + escapeHtml(KF029Remote.revision == null ? '-' : KF029Remote.revision) + '<br><strong>Letzter Autosave:</strong> ' + escapeHtml(saved) + '</div>' +
+      '<div class="notice"><strong>Fortschrittsspeicherung aktiv</strong><br>Gespeichert wird bei Vereinsübernahme sowie nach vollständig verarbeitetem Kalender-/Spieltag-Fortschritt. Reine Managementänderungen werden mit dem nächsten Fortschritt übernommen.<br><br><strong>Serverwelt:</strong> Revision ' + escapeHtml(KF029Remote.revision == null ? '-' : KF029Remote.revision) + '<br><strong>Letzter Speicherpunkt:</strong> ' + escapeHtml(saved) + '</div>' +
       '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-exit-world">Zur Weltliste</button></div>'
     });
     renderModal(); return;
