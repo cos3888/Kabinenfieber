@@ -63,7 +63,7 @@ Recovery/UI:
 - `checkpointPending/checkpointFailed` blockiert nur weitere Fortschrittsaktionen (`office-advance`, Kalendersimulationsstart und passende Autofix-Progresspfade), nicht `matchday-next` oder sonstige Navigation.
 - Retry-Dialog offen halten, bis Erfolg/Fehler feststeht.
 
-Versionen: Browser/Service `0.29.5`; Remote/API-Vertrag bleibt `0.29.2`.
+Versionen: Browser/Service `0.29.5`; Remote/API-Vertrag ist ebenfalls `0.29.5`, weil `/club` und `/slot` neue verpflichtende Endpunkte sind.
 Pflichttest: `tests/run_kf_0_29_5_progress_checkpoint_performance_test.js` plus alle 0.29.0-0.29.4 Regressionen.
 
 Wichtige Einordnung: Cloud Run ist weiterhin `max instances = 1`. Der 0.29.4-Mehrinstanz-Cachefix bleibt korrekt, war aber nicht die Erklaerung des produktiven Save-Haengers.
