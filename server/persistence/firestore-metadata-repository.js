@@ -78,7 +78,7 @@ class FirestoreMetadataRepository {
     return true;
   }
 
-  async createWorldRegistration({ slotId, worldId, createdByUserId, createdAt = nowIso() }) {
+  async createWorldRegistration({ slotId, worldId, createdByUserId, worldName = null, visibility = 'PRIVATE', joinPolicy = 'INVITE_ONLY', createdAt = nowIso() }) {
     slotId = Number(slotId);
     if (!Number.isInteger(slotId) || slotId < 1 || slotId > MAX_WORLD_SLOTS) throw new DomainRuleError('slotId must be between 1 and 1000');
     if (!worldId || !createdByUserId) throw new DomainRuleError('worldId and createdByUserId are required');
@@ -89,7 +89,7 @@ class FirestoreMetadataRepository {
       if (slotDoc.exists && slotDoc.data().status === 'OCCUPIED') throw new DomainRuleError('World slot is already occupied', { slotId });
       if (worldDoc.exists && worldDoc.data().status === 'ACTIVE') throw new DomainRuleError('World already exists', { worldId });
       if (activeSnap.size >= MAX_ACTIVE_WORLDS_PER_USER) throw new DomainRuleError('User already participates in five active worlds');
-      const world = { worldId, slotId, status: 'ACTIVE', createdAt, createdByUserId };
+      const world = { worldId, slotId, status: 'ACTIVE', createdAt, createdByUserId, worldName, visibility, joinPolicy };
       tx.set(slotRef, { slotId, status: 'OCCUPIED', worldId, createdAt });
       tx.set(worldRef, world);
       tx.set(participationRef, { worldId, userId: createdByUserId, status: STATUS_ACTIVE, joinedAt: createdAt, derivedIndex: true });
