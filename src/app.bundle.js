@@ -61,8 +61,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.29.4';
-  var KF_BUILD_LABEL = 'KF_0.29.4 - Authoritative World Reload';
+  var KF_VERSION = '0.29.5';
+  var KF_BUILD_LABEL = 'KF_0.29.5 - Progress Checkpoints & Save Performance';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -20483,14 +20483,20 @@ function handleAction(action, actionEl){
       ensureOfficeMailbox();
       goToView('office');
     };
-    if (typeof kf029SaveRemoteWorld === 'function' && typeof KF029Remote !== 'undefined' && KF029Remote.user) {
+    if (typeof kf029Request === 'function' && typeof KF029Remote !== 'undefined' && KF029Remote.user) {
       KF029Remote.checkpointPending=true;
       KF029Remote.checkpointFailed=false;
       KF029Remote.checkpointReason='take-over-club';
-      void kf029SaveRemoteWorld('take-over-club').then(function(){
+      void kf029Request('/api/v1/worlds/' + encodeURIComponent(AppState.worldRecord.id) + '/club', {
+        method:'PUT',
+        body:{ expectedRevision:KF029Remote.revision, clientVersion:KF029_REMOTE_CONTRACT_VERSION, clubId:selectedId }
+      }).then(function(data){
+        KF029Remote.revision=Number(data.revision);
+        KF029Remote.currentSeason=Number(data.currentSeason || KF029Remote.currentSeason || 1);
+        KF029Remote.lastSavedAt=data.committedAt || new Date().toISOString();
         KF029Remote.checkpointPending=false;
         KF029Remote.checkpointReason='';
-        KF029Remote.membership=assignResult.membership || KF029Remote.membership;
+        KF029Remote.membership=data.membership || assignResult.membership || KF029Remote.membership;
         KF029Remote.message='Vereinsübernahme gespeichert.';
         finishTakeover();
       }).catch(function(error){
@@ -24331,7 +24337,9 @@ var KF029Remote = {
   backendVersion: null,
   checkpointPending: false,
   checkpointFailed: false,
-  checkpointReason: ''
+  checkpointReason: '',
+  committedMatchIds: {},
+  committedFinanceIds: {}
 };
 try { KF029Remote.token = window.localStorage.getItem(KF029_AUTH_STORAGE_KEY) || null; } catch (error) {}
 
@@ -24381,14 +24389,21 @@ async function kf029Request(path, options){
     if (encoded.encoding) headers['content-encoding'] = encoded.encoding;
   }
   var response;
+  var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var timeoutMs = Number(options.timeoutMs || 90000);
+  var timeoutId = controller ? setTimeout(function(){ controller.abort(); }, timeoutMs) : null;
   try {
     response = await fetch(KF029_BACKEND_BASE_URL + path, {
       method:options.method || 'GET',
       headers:headers,
-      body:body
+      body:body,
+      signal:controller ? controller.signal : undefined
     });
   } catch (error) {
+    if (error && error.name === 'AbortError') throw new Error('Server-Speicherung hat zu lange gedauert.');
     throw new Error('Backend nicht erreichbar.');
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
   var data = null;
   try { data = await response.json(); } catch (error) {}
@@ -24484,6 +24499,22 @@ function kf029CurrentFinanceEvents(){
   });
   return rows;
 }
+function kf029MarkCommittedDetails(matches, financeEvents){
+  KF029Remote.committedMatchIds = {};
+  KF029Remote.committedFinanceIds = {};
+  (matches || []).forEach(function(row){ if(row && row.id) KF029Remote.committedMatchIds[String(row.id)] = 1; });
+  (financeEvents || []).forEach(function(row){ if(row && row.id) KF029Remote.committedFinanceIds[String(row.id)] = 1; });
+}
+function kf029PendingMatches(){
+  return kf029CurrentMatches().filter(function(row){ return row && row.id && !KF029Remote.committedMatchIds[String(row.id)]; });
+}
+function kf029PendingFinanceEvents(){
+  return kf029CurrentFinanceEvents().filter(function(row){ return row && row.id && !KF029Remote.committedFinanceIds[String(row.id)]; });
+}
+function kf029AcceptCommittedDelta(matches, financeEvents){
+  (matches || []).forEach(function(row){ if(row && row.id) KF029Remote.committedMatchIds[String(row.id)] = 1; });
+  (financeEvents || []).forEach(function(row){ if(row && row.id) KF029Remote.committedFinanceIds[String(row.id)] = 1; });
+}
 function kf029RestoreCurrentDetails(world, matches, financeEvents){
   CurrentSeasonMatchRepository.deleteWorld(world);
   CurrentSeasonFinanceRepository.deleteWorld(world);
@@ -24500,6 +24531,7 @@ function kf029InstallLoadedWorld(data){
   registerWorldRecord(record);
   setWorldRecord(record);
   kf029RestoreCurrentDetails(record.gameState, data.matches || [], data.financeEvents || []);
+  kf029MarkCommittedDetails(data.matches || [], data.financeEvents || []);
   invalidateRuntimeDerivedIndex(record.gameState);
   WorldRepository.save(record);
 
@@ -24634,6 +24666,49 @@ function kf029ConfirmWorldCreate(){
     throw error;
   }).finally(function(){KF029Remote.createPromise=null;});
 }
+function kf029SaveProgressCheckpoint(reason){
+  if (!KF029Remote.user || !AppState.worldRecord) return Promise.resolve(null);
+  var record = AppState.worldRecord;
+  var season = Number((((record.gameState||{}).meta||{}).seasonNumber)||1);
+  if (KF029Remote.currentSeason != null && Number(KF029Remote.currentSeason) !== season) {
+    return kf029SaveRemoteWorld(reason || 'season-transition');
+  }
+  var slotKey = ((((record.gameState||{}).calendar||{}).currentSlotKey) || '');
+  if (!slotKey) return kf029SaveRemoteWorld(reason || 'progress-checkpoint');
+  var deltaMatches = kf029PendingMatches();
+  var deltaFinance = kf029PendingFinanceEvents();
+  var run = KF029Remote.saveChain.catch(function(){}).then(async function(){
+    if (KF029Remote.createPromise) await KF029Remote.createPromise;
+    if (!AppState.worldRecord || KF029Remote.revision == null) return null;
+    var data = await kf029Request('/api/v1/worlds/' + encodeURIComponent(record.id) + '/slot', {
+      method:'PUT',
+      body:{
+        expectedRevision:KF029Remote.revision,
+        clientVersion:KF029_REMOTE_CONTRACT_VERSION,
+        worldRecord:record,
+        season:season,
+        slotKey:slotKey,
+        matches:deltaMatches,
+        financeEvents:deltaFinance
+      }
+    });
+    KF029Remote.revision = Number(data.revision);
+    KF029Remote.currentSeason = Number(data.currentSeason || season);
+    KF029Remote.lastSavedAt = data.committedAt || new Date().toISOString();
+    KF029Remote.lastCommittedSlotKey = slotKey;
+    KF029Remote.error = '';
+    kf029AcceptCommittedDelta(deltaMatches, deltaFinance);
+    return data;
+  });
+  KF029Remote.saveChain = run.catch(function(){});
+  return run.catch(function(error){
+    KF029Remote.error = error && error.status === 409
+      ? 'Die Welt wurde zwischenzeitlich veraendert. Bitte lade sie neu, statt den Serverstand zu ueberschreiben.'
+      : ('Speichern fehlgeschlagen: ' + (error.message || 'Unbekannter Fehler'));
+    renderApp();
+    throw error;
+  });
+}
 function kf029SaveRemoteWorld(reason){
   if (!KF029Remote.user || !AppState.worldRecord) return Promise.resolve(null);
   var run = KF029Remote.saveChain.catch(function(){}).then(async function(){
@@ -24656,6 +24731,7 @@ function kf029SaveRemoteWorld(reason){
     KF029Remote.lastSavedAt = data.committedAt || new Date().toISOString();
     KF029Remote.lastCommittedSlotKey = (((record.gameState||{}).calendar||{}).currentSlotKey) || null;
     KF029Remote.error = '';
+    kf029MarkCommittedDetails(kf029CurrentMatches(), kf029CurrentFinanceEvents());
     return data;
   });
   KF029Remote.saveChain = run.catch(function(){});
@@ -24705,15 +24781,22 @@ function kf029ShowCheckpointFailure(reason,error){
 }
 function kf029CommitHardCheckpoint(reason){
   if(!KF029Remote.user||!AppState.worldRecord)return Promise.resolve(null);
+  var retrying=KF029Remote.checkpointFailed;
   KF029Remote.checkpointPending=true;
   KF029Remote.checkpointFailed=false;
   KF029Remote.checkpointReason=reason||'checkpoint';
   KF029Remote.error='';
-  return kf029SaveRemoteWorld(KF029Remote.checkpointReason).then(function(data){
+  KF029Remote.message='Spielstand wird gespeichert ...';
+  renderApp();
+  var save = (reason==='calendar-slot' || reason==='calendar-simulation-checkpoint')
+    ? kf029SaveProgressCheckpoint(reason)
+    : kf029SaveRemoteWorld(reason);
+  return save.then(function(data){
     KF029Remote.checkpointPending=false;
     KF029Remote.checkpointFailed=false;
     KF029Remote.checkpointReason='';
     KF029Remote.message='Spielstand gespeichert.';
+    if(retrying && AppState.ui.modal) closeModal();
     renderApp();renderModal();
     return data;
   }).catch(function(error){
@@ -24731,6 +24814,8 @@ function kf029DiscardLoadedWorldToList(){
   KF029Remote.membership=null;
   KF029Remote.lastSavedAt=null;
   KF029Remote.lastCommittedSlotKey=null;
+  KF029Remote.committedMatchIds={};
+  KF029Remote.committedFinanceIds={};
   KF029Remote.error='';
   KF029Remote.message='';
   returnToStart();
@@ -24740,21 +24825,15 @@ function kf029DiscardLoadedWorldToList(){
   }).finally(function(){renderApp();renderModal();});
 }
 function kf029ExitWorldToList(forceDiscard){
-  if(forceDiscard)return kf029DiscardLoadedWorldToList();
-  KF029Remote.checkpointPending=true;
-  KF029Remote.checkpointFailed=false;
-  KF029Remote.checkpointReason='exit';
-  return kf029FlushAutosave('exit').then(function(){
-    return kf029DiscardLoadedWorldToList();
-  }).catch(function(error){
-    kf029ShowCheckpointFailure('exit',error);
-    throw error;
-  });
+  if(KF029Remote.checkpointPending && !forceDiscard){
+    KF029Remote.message='Der laufende Fortschritts-Speicherpunkt wird noch bestätigt.';
+    renderApp();
+    return Promise.resolve(null);
+  }
+  return kf029DiscardLoadedWorldToList();
 }
 function kf029RetryCheckpoint(){
   var reason=KF029Remote.checkpointReason||'checkpoint';
-  if(reason==='exit')return kf029ExitWorldToList(false);
-  if(AppState.ui.modal){closeModal();renderModal();}
   return kf029CommitHardCheckpoint(reason);
 }
 var KF029_AUTOSAVE_ACTIONS={
@@ -24845,11 +24924,13 @@ var kf029BaseHandleAction = handleAction;
 handleAction = function(action, actionEl){
   if (action === 'kf-retry-checkpoint') { void kf029RetryCheckpoint().catch(function(){}); return; }
   if (action === 'kf-exit-world-discard') { void kf029ExitWorldToList(true); return; }
-  if ((KF029Remote.checkpointPending || KF029Remote.checkpointFailed) && action !== 'kf-retry-checkpoint' && action !== 'kf-exit-world-discard') {
-    if(KF029Remote.checkpointPending){
-      KF029Remote.message='Spielstand wird noch serverseitig bestätigt.';
-      renderApp();
-    }
+  var progressAction = action === 'office-advance' || action === 'calendar-sim-until-confirm' ||
+    (action === 'lineup-goalkeeper-autofix' && ['advance','sim-until'].indexOf(actionEl && actionEl.getAttribute('data-mode')) >= 0);
+  if ((KF029Remote.checkpointPending || KF029Remote.checkpointFailed) && progressAction) {
+    KF029Remote.message=KF029Remote.checkpointPending
+      ? 'Der letzte Fortschritt wird noch gespeichert.'
+      : 'Der letzte Fortschritt ist noch nicht gespeichert. Bitte zuerst erneut versuchen.';
+    renderApp();
     return;
   }
   if (action === 'start-new-career') { kf029StartNewCareer(); return; }
@@ -24893,9 +24974,6 @@ handleAction = function(action, actionEl){
     return;
   }
   kf029BaseHandleAction(action, actionEl);
-  if (KF029Remote.user && AppState.worldRecord && KF029_AUTOSAVE_ACTIONS[action]) {
-    kf029ScheduleAutosave(action, false);
-  }
 };
 
 var kf029BaseBoot = boot;
@@ -24904,14 +24982,6 @@ boot = function(){
   var autosaveRoot = document && document.documentElement ? document.documentElement : null;
   if (autosaveRoot && autosaveRoot.dataset && !autosaveRoot.dataset.kf029AutosaveBound && typeof document.addEventListener === 'function') {
     autosaveRoot.dataset.kf029AutosaveBound='1';
-    document.addEventListener('change', function(){
-      if (!KF029Remote.user || !AppState.worldRecord) return;
-      if (['lineup','contracts','squad-planning','finance','sponsoring'].indexOf(AppState.ui.currentView) >= 0) kf029ScheduleAutosave('form-change', false);
-    }, true);
-    document.addEventListener('drop', function(){
-      if (!KF029Remote.user || !AppState.worldRecord) return;
-      if (AppState.ui.currentView === 'lineup') kf029ScheduleAutosave('lineup-drop', false);
-    }, true);
     if(typeof window.addEventListener==='function'){
       window.addEventListener('beforeunload',function(event){
         if(!KF029Remote.checkpointPending && !KF029Remote.autosaveTimer)return;
