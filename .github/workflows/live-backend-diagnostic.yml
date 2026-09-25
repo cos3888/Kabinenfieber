@@ -8,9 +8,18 @@ jobs:
     timeout-minutes: 2
     runs-on: ubuntu-latest
     steps:
-      - name: Probe health endpoint
+      - name: Probe public endpoints
         run: |
-          set -eux
-          curl --fail-with-body -sS -D - \
+          set -x
+          echo '--- healthz ---'
+          curl -sS -D - -o /tmp/health.out -H 'Origin: https://cos3888.github.io' 'https://kabinenfieber-backend-458781449503.us-central1.run.app/healthz' || true
+          cat /tmp/health.out
+          echo
+          echo '--- login endpoint ---'
+          curl -sS -D - -o /tmp/login.out \
             -H 'Origin: https://cos3888.github.io' \
-            'https://kabinenfieber-backend-458781449503.us-central1.run.app/healthz'
+            -H 'Content-Type: application/json' \
+            -X POST \
+            --data '{"loginName":"__diagnostic_invalid__","password":"__diagnostic_invalid__"}' \
+            'https://kabinenfieber-backend-458781449503.us-central1.run.app/api/v1/auth/login' || true
+          cat /tmp/login.out
