@@ -6398,3 +6398,10 @@ button,.filter-chip,.lineup-subtab,.ghost-btn,.primary-btn,.secondary-btn,.small
 .kf-world-menu{max-height:520px;overflow-y:auto;padding-right:5px}
 .kf-world-row{text-align:left}
 @media (max-width:980px){.kf-auth-card{width:min(420px,60vw)}}
+
+
+/* KF_0.29.1 - named world creation / autosave status */
+.kf-world-create-form{display:grid;gap:14px}
+.kf-world-create-label{display:grid;gap:7px;color:var(--muted);font-size:13px}
+.kf-world-create-label select.kf-auth-input{appearance:auto}
+.kf-world-create-error{min-height:18px;color:#ffd0d0;font-size:13px}
