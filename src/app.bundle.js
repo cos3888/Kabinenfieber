@@ -24615,8 +24615,7 @@ renderStartView = function(){
     '</div>' + kf029AuthNotice() + '</div></section><div class="foot">Kabinenfieber · ' + KF_BUILD_LABEL + '</div></main>';
 };
 
-var kf029BaseStartNewCareer = startNewCareer;
-startNewCareer = function(){
+function kf029StartNewCareer(){
   if (!KF029Remote.user) {
     KF029Remote.error = 'Bitte melde dich zuerst an.';
     renderApp();
@@ -24626,7 +24625,7 @@ startNewCareer = function(){
   KF029Remote.membership = null;
   KF029Remote.error = '';
   KF029Remote.message = 'Neue Welt wird vorbereitet ...';
-  kf029BaseStartNewCareer();
+  startNewCareer();
   KF029Remote.createPromise = kf029CreateRemoteWorld().catch(function(error){
     KF029Remote.error = 'Die neue Welt konnte nicht auf dem Server angelegt werden: ' + (error.message || 'Unbekannter Fehler');
     KF029Remote.message = '';
@@ -24634,10 +24633,11 @@ startNewCareer = function(){
     renderModal(); renderApp();
     throw error;
   }).finally(function(){ KF029Remote.createPromise = null; });
-};
+}
 
 var kf029BaseHandleAction = handleAction;
 handleAction = function(action, actionEl){
+  if (action === 'start-new-career') { kf029StartNewCareer(); return; }
   if (action === 'kf-auth-login') { void kf029Login(false); return; }
   if (action === 'kf-auth-register') { void kf029Login(true); return; }
   if (action === 'kf-auth-logout') { void kf029Logout(); return; }
