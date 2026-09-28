@@ -93,13 +93,23 @@ class WorldRuntimeManager {
       if (!membership) throw new DomainRuleError('User is not a member of this world');
       this._touch(runtime);
       return {
-        worldRecord: clone(runtime.worldRecord),
+        worldRecord: runtime.worldRecord,
         revision: runtime.revision,
         currentSeason: runtime.currentSeason,
-        matches: clone(runtime.matches),
-        financeEvents: clone(runtime.financeEvents),
+        matches: [],
+        financeEvents: runtime.financeEvents,
         membership: clone(membership)
       };
+    });
+  }
+
+  async loadMatchDetail({ worldId, userId, matchId }) {
+    return this._enqueue(worldId, async () => {
+      const runtime = await this._load(worldId);
+      const membership = membershipForUser(runtime.worldRecord, userId);
+      if (!membership) throw new DomainRuleError('User is not a member of this world');
+      this._touch(runtime);
+      return this.worldPersistence.loadMatchDetail(worldId, matchId);
     });
   }
 
