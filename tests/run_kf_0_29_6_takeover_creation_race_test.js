@@ -35,7 +35,7 @@ function block(a,b){
       revision:null,
       message:''
     },
-    KF029_REMOTE_CONTRACT_VERSION:'0.29.5',
+    KF029_REMOTE_CONTRACT_VERSION:'0.30.0',
     renderApp:()=>{},
     encodeURIComponent,
     kf029Request:async (url,options)=>{
@@ -89,12 +89,12 @@ function block(a,b){
     action.includes("KF029Remote.checkpointReason === 'take-over-club'")&&
     app.includes("takeoverBusy ? ' disabled aria-disabled=\"true\"'"));
 
-  check('0.29.6 cache busting and service build are current',
-    app.includes("var KF_VERSION = '0.29.6';")&&
-    index.includes('KF_0.29.6')&&
-    index.includes('app.bundle.js?v=0.29.6')&&
-    server.includes("const SERVICE_VERSION = '0.29.6';")&&
-    server.includes("const API_VERSION = '0.29.5';"));
+  check('Current cache busting and service build are compatible with the 0.29.6 takeover regression',
+    app.includes("var KF_VERSION = '0.30.0';")&&
+    index.includes('KF_0.30.0')&&
+    index.includes('app.bundle.js?v=0.30.0')&&
+    server.includes("const SERVICE_VERSION = '0.30.0';")&&
+    server.includes("const API_VERSION = '0.30.0';"));
 
   console.log(JSON.stringify(report,null,2));
   process.exit(report.passed?0:1);
