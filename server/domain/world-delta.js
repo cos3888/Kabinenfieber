@@ -46,7 +46,10 @@ function ensureParent(root, path) {
   let current = root;
   for (let index = 0; index < path.length - 1; index += 1) {
     const key = path[index];
-    if (!current[key] || typeof current[key] !== 'object' || Array.isArray(current[key])) current[key] = {};
+    if (!current[key] || typeof current[key] !== 'object') {
+      const nextKey = String(path[index + 1] || '');
+      current[key] = /^\d+$/.test(nextKey) ? [] : {};
+    }
     current = current[key];
   }
   return current;
