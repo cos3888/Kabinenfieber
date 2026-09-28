@@ -333,6 +333,16 @@ class WorldSessionService {
     });
   }
 
+  async releaseProgress({ userId, worldId, expectedRevision, leaseId }) {
+    const participation = await this.metadata.getParticipation({ worldId, userId });
+    if (!participation) throw new DomainRuleError('User is not a member of this world');
+    return this.metadata.releaseWorldProgress({
+      worldId,
+      expectedRevision:Number(expectedRevision),
+      leaseId
+    });
+  }
+
   async openWorld({ userId, worldId }) {
     return this.runtime.openWorld({ userId, worldId });
   }
