@@ -61,8 +61,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.29.6';
-  var KF_BUILD_LABEL = 'KF_0.29.6 - Takeover Creation Race Fix';
+  var KF_VERSION = '0.30.0';
+  var KF_BUILD_LABEL = 'KF_0.30.0 - Startbereich & Spielwelt-Lobby';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -2858,7 +2858,10 @@ function displayedTrainerLabel(world, club){
     var leagueKeys = leagueKeysForCountry(world, countryName);
     var leagueKey = state.ui.selectedLeagueKey || leagueKeys[0] || null;
     var clubs = clubsForSelection(world, countryName, leagueKey);
-    var selectedClubId = state.ui.selectedClubId || (clubs[0] && clubs[0].id) || null;
+    var freeClubs = clubs.filter(function(club){ return !activeMembershipForClub(world, club.id); });
+    var requestedClubId = state.ui.selectedClubId;
+    var requestedOccupied = requestedClubId ? activeMembershipForClub(world, requestedClubId) : null;
+    var selectedClubId = requestedClubId && !requestedOccupied ? requestedClubId : ((freeClubs[0] && freeClubs[0].id) || null);
     var selectedClub = selectedClubId ? world.clubs.byId[selectedClubId] : null;
     var selectedSquad = selectedClub ? world.squads[selectedClub.id] : null;
     var selectedAverage = selectedSquad ? averageOverall(world, selectedSquad.playerIds) : 0;
@@ -2875,14 +2878,18 @@ function displayedTrainerLabel(world, club){
       return '<button class="filter-chip'+active+'" type="button" data-action="select-league" data-league="'+escapeHtml(league)+'">'+escapeHtml(league)+'</button>';
     }).join('');
     var tiles = clubs.map(function(club){
+      var occupied = activeMembershipForClub(world, club.id);
       var active = club.id === selectedClubId ? ' is-selected' : '';
+      var occupiedClass = occupied ? ' is-human-occupied' : '';
+      var occupiedLabel = occupied ? '<span class="kf-club-occupied">Belegt · '+escapeHtml(occupied.trainerDisplayName || 'Spieler')+'</span>' : '';
       return '' +
-        '<article class="club-tile'+active+'">' +
+        '<article class="club-tile'+active+occupiedClass+'">' +
         '  <div class="simple-club-tile">' +
         '    <button class="club-crest-btn" type="button" data-action="open-club-profile" data-club-id="'+escapeHtml(club.id)+'" aria-label="Vereinsprofil '+escapeHtml(club.name)+' öffnen">' +
         '      <img class="club-crest" src="'+escapeHtml(crestAssetForClub(club))+'" alt="'+escapeHtml(club.name)+' Wappen"'+onErrorFallbackAttr(crestFallbackAsset())+'>' +
         '    </button>' +
-        '    <button class="club-select-btn club-name-btn" type="button" data-action="select-club" data-club-id="'+escapeHtml(club.id)+'">'+escapeHtml(club.name)+'</button>' +
+        '    <button class="club-select-btn club-name-btn" type="button" data-action="select-club" data-club-id="'+escapeHtml(club.id)+'"'+(occupied?' disabled aria-disabled="true"':'')+'>'+escapeHtml(club.name)+'</button>' +
+        occupiedLabel +
         '  </div>' +
         '</article>';
     }).join('');
@@ -2935,7 +2942,7 @@ function displayedTrainerLabel(world, club){
       '        <button class="ghost-btn" type="button" data-action="return-start">Zurück zum Startmenü</button>' +
       '      </div>' +
       '      <div class="selection-footer-right">' +
-      '        <button class="primary-btn" type="button" data-action="take-over-club"' + (takeoverBusy ? ' disabled aria-disabled="true"' : '') + '>' + (takeoverBusy ? 'Verein wird übernommen ...' : 'Verein übernehmen') + '</button>' +
+      '        <button class="primary-btn" type="button" data-action="take-over-club"' + ((takeoverBusy || !selectedClub) ? ' disabled aria-disabled="true"' : '') + '>' + (takeoverBusy ? 'Verein wird übernommen ...' : 'Verein übernehmen') + '</button>' +
       '      </div>' +
       '    </div>' +
       '  </div>' +
@@ -20436,6 +20443,11 @@ function baseOverallForClub(club, mainPos, index){
   }
 
   function selectClub(clubId){
+    if (AppState.world && activeMembershipForClub(AppState.world, clubId)) {
+      KF029Remote.message='Dieser Verein wird bereits von einem anderen Spieler gesteuert.';
+      renderApp();
+      return;
+    }
     setSelectedClubId(clubId);
     renderApp();
     renderModal();
@@ -24338,7 +24350,7 @@ migrateWorldDataTruthToCurrent=function(world){
 
 var KF029_BACKEND_BASE_URL = String(window.KF_BACKEND_BASE_URL || 'https://kabinenfieber-backend-458781449503.us-central1.run.app').replace(/\/+$/,'');
 // Remote contract stays independent from the browser/game build. 0.29.1 backends ignore this field; 0.29.2+ use it to guard incompatible snapshot writes.
-var KF029_REMOTE_CONTRACT_VERSION = '0.29.5';
+var KF029_REMOTE_CONTRACT_VERSION = '0.30.0';
 var KF029_AUTH_STORAGE_KEY = 'kf.auth.token';
 var KF029_AUTOSAVE_DEBOUNCE_MS = 1400;
 var KF029Remote = {
@@ -24365,7 +24377,11 @@ var KF029Remote = {
   checkpointFailed: false,
   checkpointReason: '',
   committedMatchIds: {},
-  committedFinanceIds: {}
+  committedFinanceIds: {},
+  activeWorldCount: 0,
+  maxActiveWorlds: 5,
+  lobbyMineOnly: false,
+  lobbyPolicyFilter: 'ALL'
 };
 try { KF029Remote.token = window.localStorage.getItem(KF029_AUTH_STORAGE_KEY) || null; } catch (error) {}
 
@@ -24458,6 +24474,8 @@ async function kf029RefreshWorldList(){
   if (!KF029Remote.user) return [];
   var data = await kf029Request('/api/v1/worlds');
   KF029Remote.worlds = Array.isArray(data.worlds) ? data.worlds : [];
+  KF029Remote.activeWorldCount = Number(data.activeWorldCount || 0);
+  KF029Remote.maxActiveWorlds = Number(data.maxActiveWorlds || 5);
   return KF029Remote.worlds;
 }
 async function kf029RestoreRemoteSession(){
@@ -24619,7 +24637,7 @@ async function kf029CreateRemoteWorld(){
   var config = KF029Remote.pendingWorldConfig || {};
   var data = await kf029Request('/api/v1/worlds', {
     method:'POST',
-    body:{ clientVersion:KF029_REMOTE_CONTRACT_VERSION, worldRecord:record, worldName:config.worldName, visibility:config.visibility, joinPolicy:config.joinPolicy, matches:kf029CurrentMatches(), financeEvents:kf029CurrentFinanceEvents() }
+    body:{ clientVersion:KF029_REMOTE_CONTRACT_VERSION, worldRecord:record, worldName:config.worldName, description:config.description || '', startVariant:config.startVariant || 'classic', visibility:config.visibility, joinPolicy:config.joinPolicy, matches:kf029CurrentMatches(), financeEvents:kf029CurrentFinanceEvents() }
   });
   KF029Remote.revision = Number(data.revision);
   KF029Remote.currentSeason = Number(data.currentSeason || (((record.gameState||{}).meta||{}).seasonNumber)||1);
@@ -24653,6 +24671,8 @@ function kf029OpenWorldCreateModal(){
     bodyHtml:
       '<div class="kf-world-create-form">' +
       '<label class="kf-world-create-label">Name der Spielwelt<input id="kf-world-name" class="kf-auth-input" maxlength="40" placeholder="z. B. Nordlicht Karriere"></label>' +
+      '<label class="kf-world-create-label">Beschreibung<textarea id="kf-world-description" class="kf-auth-input" maxlength="200" rows="3" placeholder="Kurze Beschreibung der Spielwelt"></textarea></label>' +
+      '<label class="kf-world-create-label">Spielmodus<select id="kf-world-start-variant" class="kf-auth-input"><option value="classic">Klassisch</option></select></label>' +
       '<label class="kf-world-create-label">Beitritt zur Spielwelt<select id="kf-world-access" class="kf-auth-input">' +
       '<option value="PRIVATE:INVITE_ONLY">Private Welt · nur Einladungen</option>' +
       '<option value="PUBLIC:APPLICATION">Bewerbungswelt · Beitritt nach Freigabe</option>' +
@@ -24668,6 +24688,8 @@ function kf029OpenWorldCreateModal(){
 function kf029ConfirmWorldCreate(){
   var nameInput=document.getElementById('kf-world-name');
   var accessInput=document.getElementById('kf-world-access');
+  var descriptionInput=document.getElementById('kf-world-description');
+  var startVariantInput=document.getElementById('kf-world-start-variant');
   var worldName=String(nameInput&&nameInput.value||'').trim().replace(/\s+/g,' ');
   var errorNode=document.getElementById('kf-world-create-error');
   if(worldName.length<3||worldName.length>40){
@@ -24675,22 +24697,46 @@ function kf029ConfirmWorldCreate(){
     return;
   }
   var access=kf029WorldAccessConfig(accessInput&&accessInput.value);
-  KF029Remote.pendingWorldConfig={worldName:worldName,visibility:access.visibility,joinPolicy:access.joinPolicy};
+  var description=String(descriptionInput&&descriptionInput.value||'').trim().replace(/\s+/g,' ');
+  var startVariant=String(startVariantInput&&startVariantInput.value||'classic');
+  KF029Remote.pendingWorldConfig={worldName:worldName,description:description,startVariant:startVariant,visibility:access.visibility,joinPolicy:access.joinPolicy};
   closeModal();renderModal();
   KF029Remote.revision=null;
   KF029Remote.membership=null;
   KF029Remote.committedMatchIds={};
   KF029Remote.committedFinanceIds={};
   KF029Remote.error='';
-  KF029Remote.message='Neue Welt wird vorbereitet ...';
+  KF029Remote.message='Neue Welt wird erstellt ...';
   startNewCareer();
+  if(!AppState.worldRecord){
+    KF029Remote.pendingWorldConfig=null;
+    return;
+  }
+  setCurrentView('start');
+  KF029Remote.showWorldList=true;
+  renderApp();
   KF029Remote.createPromise=kf029CreateRemoteWorld().then(function(data){
     KF029Remote.pendingWorldConfig=null;
+    KF029Remote.showWorldList=false;
+    setSelectedCountryName(preferredCountry(AppState.world));
+    var leagues=leagueKeysForCountry(AppState.world,AppState.ui.selectedCountryName);
+    setSelectedLeagueKey(leagues[0]||null);
+    var clubs=clubsForSelection(AppState.world,AppState.ui.selectedCountryName,AppState.ui.selectedLeagueKey);
+    var firstFree=clubs.find(function(club){return !activeMembershipForClub(AppState.world,club.id);})||null;
+    setSelectedClubId(firstFree&&firstFree.id||null);
+    setCurrentView('club-selection');
+    KF029Remote.message='Spielwelt erfolgreich erstellt.';
+    renderApp();
     return data;
   }).catch(function(error){
-    KF029Remote.error='Die neue Welt konnte nicht auf dem Server angelegt werden: '+(error.message||'Unbekannter Fehler');
+    var message=(error&&error.message)||'Unbekannter Fehler';
+    if(/five active worlds/i.test(message)) message='Du bist bereits an 5 aktiven Spielwelten beteiligt. Verlasse oder lösche zuerst eine Spielwelt.';
+    KF029Remote.error='Die neue Welt konnte nicht angelegt werden: '+message;
     KF029Remote.message='';
-    openModal({title:'Server-Speicherung fehlgeschlagen',body:KF029Remote.error});
+    KF029Remote.pendingWorldConfig=null;
+    resetState();
+    KF029Remote.showWorldList=true;
+    openModal({title:'Spielwelt konnte nicht erstellt werden',body:KF029Remote.error});
     renderModal();renderApp();
     throw error;
   }).finally(function(){KF029Remote.createPromise=null;});
@@ -24967,6 +25013,58 @@ function kf029AuthNotice(){
   return '';
 }
 var kf029BaseRenderStartView = renderStartView;
+function kf030WorldActionHtml(world){
+  if(world.mine){
+    var primary='<button class="primary-btn kf-lobby-action" type="button" data-action="kf-load-world" data-world-id="'+escapeHtml(world.worldId)+'">'+(world.membership&&world.membership.clubId?'Öffnen':'Verein wählen')+'</button>';
+    var leaveLabel=Number(world.participantCount||0)<=1?'Welt löschen':'Austreten';
+    return primary+'<button class="ghost-btn kf-lobby-action" type="button" data-action="kf-leave-world" data-world-id="'+escapeHtml(world.worldId)+'" data-world-name="'+escapeHtml(world.worldName||'Spielwelt')+'">'+leaveLabel+'</button>';
+  }
+  if(world.applicationStatus==='OPEN') return '<button class="ghost-btn kf-lobby-action" type="button" disabled>Bewerbung läuft</button>';
+  if(world.canJoin) return '<button class="primary-btn kf-lobby-action" type="button" data-action="kf-join-world" data-world-id="'+escapeHtml(world.worldId)+'">Beitreten</button>';
+  if(world.canApply) return '<button class="primary-btn kf-lobby-action" type="button" data-action="kf-apply-world" data-world-id="'+escapeHtml(world.worldId)+'">Bewerben</button>';
+  return '<span class="kf-lobby-muted">Nicht verfügbar</span>';
+}
+function kf030RenderLobby(){
+  var worlds=(KF029Remote.worlds||[]).filter(function(world){
+    if(KF029Remote.lobbyMineOnly&&!world.mine)return false;
+    if(KF029Remote.lobbyPolicyFilter==='OPEN'&&world.joinPolicy!=='OPEN')return false;
+    if(KF029Remote.lobbyPolicyFilter==='APPLICATION'&&world.joinPolicy!=='APPLICATION')return false;
+    if(KF029Remote.lobbyPolicyFilter==='INVITE_ONLY'&&world.joinPolicy!=='INVITE_ONLY')return false;
+    return true;
+  });
+  var rows=worlds.map(function(world){
+    var status='–';
+    if(world.mine&&world.membership) status=world.membership.clubId ? ('Verein: '+world.membership.clubId) : 'Verein wählen';
+    else if(world.applicationStatus==='OPEN') status='Bewerbung läuft';
+    return '<tr>'+
+      '<td>#'+String(world.slotId||'').padStart(3,'0')+'</td>'+
+      '<td><strong>'+escapeHtml(world.worldName||('Welt '+world.slotId))+'</strong><span class="kf-lobby-description">'+escapeHtml(world.description||'Keine Beschreibung')+'</span></td>'+
+      '<td>Saison '+escapeHtml(world.currentSeason||1)+'</td>'+
+      '<td>'+escapeHtml(world.participantCount||0)+' / '+escapeHtml(world.maxParticipants||0)+'</td>'+
+      '<td>'+escapeHtml(kf029WorldPolicyLabel(world))+'</td>'+
+      '<td>'+escapeHtml(status)+'</td>'+
+      '<td><div class="kf-lobby-actions">'+kf030WorldActionHtml(world)+'</div></td>'+
+    '</tr>';
+  }).join('');
+  var full=Number(KF029Remote.activeWorldCount||0)>=Number(KF029Remote.maxActiveWorlds||5);
+  return '<main class="screen kf-lobby-screen"><section class="kf-lobby-panel">'+
+    '<header class="kf-lobby-header"><div class="kf-lobby-brand"><img class="kf-lobby-logo" src="./assets/common/logo.png" alt="Kabinenfieber Logo"><div><h1>Spielwelten</h1><p>Angemeldet als '+escapeHtml(KF029Remote.user.displayName||KF029Remote.user.loginName||'')+'</p></div></div>'+
+    '<div class="kf-lobby-head-actions"><span class="badge">Aktive Spielwelten: '+escapeHtml(KF029Remote.activeWorldCount)+' / '+escapeHtml(KF029Remote.maxActiveWorlds)+'</span>'+
+    '<button class="primary-btn" type="button" data-action="start-new-career"'+(full?' disabled aria-disabled="true"':'')+'>+ Neue Spielwelt</button>'+
+    '<button class="ghost-btn" type="button" data-action="kf-profile">Profil</button><button class="ghost-btn" type="button" data-action="kf-auth-logout">Abmelden</button></div></header>'+
+    '<div class="kf-lobby-filters"><button class="filter-chip'+(!KF029Remote.lobbyMineOnly?' is-active':'')+'" type="button" data-action="kf-lobby-all">Alle Welten</button>'+
+    '<button class="filter-chip'+(KF029Remote.lobbyMineOnly?' is-active':'')+'" type="button" data-action="kf-lobby-mine">Meine Welten</button>'+
+    '<span class="kf-lobby-divider"></span>'+
+    '<button class="filter-chip'+(KF029Remote.lobbyPolicyFilter==='ALL'?' is-active':'')+'" type="button" data-action="kf-lobby-policy" data-policy="ALL">Alle Kategorien</button>'+
+    '<button class="filter-chip'+(KF029Remote.lobbyPolicyFilter==='OPEN'?' is-active':'')+'" type="button" data-action="kf-lobby-policy" data-policy="OPEN">Offen</button>'+
+    '<button class="filter-chip'+(KF029Remote.lobbyPolicyFilter==='APPLICATION'?' is-active':'')+'" type="button" data-action="kf-lobby-policy" data-policy="APPLICATION">Bewerbung</button>'+
+    '<button class="filter-chip'+(KF029Remote.lobbyPolicyFilter==='INVITE_ONLY'?' is-active':'')+'" type="button" data-action="kf-lobby-policy" data-policy="INVITE_ONLY">Einladung</button></div>'+
+    kf029AuthNotice()+
+    (full?'<div class="notice">Du nutzt 5 / 5 aktive Spielwelten. Verlasse oder lösche eine Welt, bevor du eine weitere erstellst oder einer offenen Welt beitrittst.</div>':'')+
+    '<div class="kf-lobby-table-wrap"><table class="table kf-lobby-table"><thead><tr><th>Slot</th><th>Spielwelt</th><th>Saison</th><th>Spieler</th><th>Zugang</th><th>Mein Status</th><th>Aktion</th></tr></thead><tbody>'+
+    (rows||'<tr><td colspan="7"><div class="notice">Keine passenden Spielwelten gefunden.</div></td></tr>')+
+    '</tbody></table></div></section><div class="foot">Kabinenfieber · '+KF_BUILD_LABEL+'</div></main>';
+}
 renderStartView = function(){
   if (KF029Remote.restoring) {
     return '<main class="screen"><section class="start-layout"><div class="wall-panel"><img class="logo" src="./assets/common/logo.png" alt="Kabinenfieber Logo"><h1 class="title">Kabinenfieber</h1><div class="subtitle">Sitzung wird geladen ...</div></div></section><div class="foot">Kabinenfieber · ' + KF_BUILD_LABEL + '</div></main>';
@@ -24984,31 +25082,58 @@ renderStartView = function(){
       '<div class="kf-auth-hint">Noch ohne E-Mail: Das Passwort kann in dieser Entwicklungsphase nicht automatisch wiederhergestellt werden.</div>' +
       '</div></div></section><div class="foot">Kabinenfieber · ' + KF_BUILD_LABEL + '</div></main>';
   }
-  if (KF029Remote.showWorldList) {
-    var rows = (KF029Remote.worlds || []).map(function(world){
-      return '<button class="menu-btn kf-world-row" type="button" data-action="kf-load-world" data-world-id="' + escapeHtml(world.worldId) + '">' +
-        '<span class="big">' + escapeHtml(world.worldName || ('Welt ' + world.slotId)) + '</span>' +
-        '<span class="small">Saison ' + escapeHtml(world.currentSeason) + ' · ' + escapeHtml(kf029WorldPolicyLabel(world)) + ' · Revision ' + escapeHtml(world.revision) + '</span></button>';
-    }).join('');
-    return '<main class="screen"><section class="start-layout"><div class="wall-panel"><img class="logo kf-auth-logo" src="./assets/common/logo.png" alt="Kabinenfieber Logo"><h1 class="title">Meine Welten</h1>' +
-      '<div class="subtitle">' + escapeHtml(KF029Remote.user.displayName || KF029Remote.user.loginName || '') + '</div>' +
-      '<div class="menu-wrap kf-world-menu">' + (rows || '<div class="notice">Du hast noch keine Welt.</div>') +
-      '<button class="menu-btn" type="button" data-action="start-new-career"><span class="big">Neue Karriere</span><span class="small">Neue servergespeicherte Welt erstellen.</span></button>' +
-      '<button class="ghost-btn" type="button" data-action="kf-world-list-back">Zurueck</button></div>' + kf029AuthNotice() +
-      '</div></section><div class="foot">Kabinenfieber · ' + KF_BUILD_LABEL + '</div></main>';
-  }
-  return '<main class="screen" aria-label="Startmenue"><section class="start-layout"><div class="wall-panel">' +
-    '<img class="logo" src="./assets/common/logo.png" alt="Kabinenfieber Logo"><h1 class="title">Kabinenfieber</h1><div class="subtitle">Angemeldet als ' + escapeHtml(KF029Remote.user.displayName || KF029Remote.user.loginName || '') + '</div>' +
-    '<div class="menu-wrap">' +
-    '<button class="menu-btn" type="button" data-action="start-new-career"><span class="big">Neue Karriere starten</span><span class="small">Neue Welt erstellen und anschliessend Verein waehlen.</span></button>' +
-    '<button class="menu-btn" type="button" data-action="kf-show-worlds"><span class="big">Meine Welten</span><span class="small">' + escapeHtml((KF029Remote.worlds || []).length) + ' aktive Welt(en) · serverseitig gespeichert.</span></button>' +
-    '<button class="ghost-btn" type="button" data-action="kf-auth-logout">Abmelden</button>' +
-    '</div>' + kf029AuthNotice() + '</div></section><div class="foot">Kabinenfieber · ' + KF_BUILD_LABEL + '</div></main>';
+  return kf030RenderLobby();
 };
+
+async function kf030JoinWorld(worldId){
+  if(Number(KF029Remote.activeWorldCount||0)>=Number(KF029Remote.maxActiveWorlds||5)){
+    KF029Remote.error='Du bist bereits an 5 aktiven Spielwelten beteiligt.'; renderApp(); return;
+  }
+  KF029Remote.busy=true; KF029Remote.error=''; KF029Remote.message='Beitritt wird gespeichert ...'; renderApp();
+  try{
+    await kf029Request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/join',{method:'POST',body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION}});
+    await kf029RefreshWorldList();
+    KF029Remote.message='Du bist der Spielwelt beigetreten. Wähle jetzt deinen Verein.';
+    await kf029LoadWorld(worldId);
+  }catch(error){KF029Remote.error='Beitritt fehlgeschlagen: '+(error.message||'Unbekannter Fehler');renderApp();}
+  finally{KF029Remote.busy=false;}
+}
+async function kf030ApplyWorld(worldId){
+  KF029Remote.busy=true; KF029Remote.error=''; KF029Remote.message='Bewerbung wird gesendet ...'; renderApp();
+  try{
+    await kf029Request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/apply',{method:'POST',body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION}});
+    await kf029RefreshWorldList(); KF029Remote.message='Bewerbung wurde eingereicht.'; renderApp();
+  }catch(error){KF029Remote.error='Bewerbung fehlgeschlagen: '+(error.message||'Unbekannter Fehler');renderApp();}
+  finally{KF029Remote.busy=false;}
+}
+function kf030ConfirmLeaveWorld(worldId,worldName){
+  var world=(KF029Remote.worlds||[]).find(function(row){return String(row.worldId)===String(worldId);});
+  var only=world&&Number(world.participantCount||0)<=1;
+  openModal({title:only?'Spielwelt löschen':'Spielwelt verlassen',bodyHtml:
+    '<div class="notice">'+(only?'Du bist der einzige Teilnehmer. Beim Austritt wird <strong>'+escapeHtml(worldName)+'</strong> vollständig gelöscht.':'Möchtest du <strong>'+escapeHtml(worldName)+'</strong> wirklich verlassen?')+'</div>'+
+    '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-leave-world-confirm" data-world-id="'+escapeHtml(worldId)+'">'+(only?'Endgültig löschen':'Welt verlassen')+'</button></div>'});
+  renderModal();
+}
+async function kf030LeaveWorld(worldId){
+  closeModal();renderModal();KF029Remote.busy=true;KF029Remote.error='';KF029Remote.message='Welt wird verlassen ...';renderApp();
+  try{
+    await kf029Request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/leave',{method:'POST',body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION}});
+    await kf029RefreshWorldList();KF029Remote.message='Spielwelt wurde verlassen.';renderApp();
+  }catch(error){
+    var msg=error.message||'Unbekannter Fehler';
+    if(/Last world admin/i.test(msg))msg='Du bist der letzte Administrator dieser Welt. Übertrage zuerst die Administration an einen anderen Spieler.';
+    KF029Remote.error='Austritt nicht möglich: '+msg;renderApp();
+  }finally{KF029Remote.busy=false;}
+}
 
 function kf029StartNewCareer(){
   if (!KF029Remote.user) {
     KF029Remote.error = 'Bitte melde dich zuerst an.';
+    renderApp();
+    return;
+  }
+  if(Number(KF029Remote.activeWorldCount||0)>=Number(KF029Remote.maxActiveWorlds||5)){
+    KF029Remote.error='Du bist bereits an '+String(KF029Remote.maxActiveWorlds||5)+' aktiven Spielwelten beteiligt. Verlasse oder lösche zuerst eine Spielwelt.';
     renderApp();
     return;
   }
@@ -25032,6 +25157,17 @@ handleAction = function(action, actionEl){
     }
     return;
   }
+  if (action === 'kf-lobby-all') { KF029Remote.lobbyMineOnly=false; renderApp(); return; }
+  if (action === 'kf-lobby-mine') { KF029Remote.lobbyMineOnly=true; renderApp(); return; }
+  if (action === 'kf-lobby-policy') { KF029Remote.lobbyPolicyFilter=actionEl.getAttribute('data-policy')||'ALL'; renderApp(); return; }
+  if (action === 'kf-profile') {
+    openModal({title:'Mein Profil',bodyHtml:'<div class="notice"><strong>'+escapeHtml(KF029Remote.user.displayName||'Spieler')+'</strong><br>Benutzer-ID: '+escapeHtml(KF029Remote.user.userId||'-')+'<br><br>Weitere Profiloptionen werden auf dieser zentralen Kontoebene ergänzt.</div>'});
+    renderModal(); return;
+  }
+  if (action === 'kf-join-world') { void kf030JoinWorld(actionEl.getAttribute('data-world-id')||''); return; }
+  if (action === 'kf-apply-world') { void kf030ApplyWorld(actionEl.getAttribute('data-world-id')||''); return; }
+  if (action === 'kf-leave-world') { kf030ConfirmLeaveWorld(actionEl.getAttribute('data-world-id')||'',actionEl.getAttribute('data-world-name')||'Spielwelt'); return; }
+  if (action === 'kf-leave-world-confirm') { void kf030LeaveWorld(actionEl.getAttribute('data-world-id')||''); return; }
   if (action === 'start-new-career') { kf029StartNewCareer(); return; }
   if (action === 'kf-auth-login') { void kf029Login(false); return; }
   if (action === 'kf-auth-register') { void kf029Login(true); return; }
