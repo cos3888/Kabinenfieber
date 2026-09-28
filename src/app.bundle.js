@@ -18680,7 +18680,10 @@ function bindMailCenterModal(root){
 function bindClubProfileModal(root){
   bindModalCloseControls(root);
 }
-  function goToView(name){ setCurrentView(name); renderApp(); renderModal(); updateAppScale(); }
+  function goToView(name){
+    if (name === 'club-selection' && typeof KF029Remote !== 'undefined' && KF029Remote && KF029Remote.worldCreatePending) name = 'start';
+    setCurrentView(name); renderApp(); renderModal(); updateAppScale();
+  }
   function closeActiveModal(){ closeModal(); renderModal(); }
   function returnToStart(){ resetState(); renderApp(); renderModal(); updateAppScale(); }
 
@@ -24381,7 +24384,8 @@ var KF029Remote = {
   activeWorldCount: 0,
   maxActiveWorlds: 5,
   lobbyMineOnly: false,
-  lobbyPolicyFilter: 'ALL'
+  lobbyPolicyFilter: 'ALL',
+  worldCreatePending: false
 };
 try { KF029Remote.token = window.localStorage.getItem(KF029_AUTH_STORAGE_KEY) || null; } catch (error) {}
 
@@ -24678,7 +24682,7 @@ function kf029OpenWorldCreateModal(){
       '<option value="PUBLIC:APPLICATION">Bewerbungswelt · Beitritt nach Freigabe</option>' +
       '<option value="PUBLIC:OPEN">Offene Welt · freie Vereine direkt wählbar</option>' +
       '</select></label>' +
-      '<div class="kf-auth-hint">Öffentliche Suche, Bewerbungen und Direktbeitritt folgen im Multiplayer-Block. Die Einstellung wird bereits verbindlich gespeichert.</div>' +
+      '<div class="kf-auth-hint">Offene Welten erlauben direkten Beitritt. Bei Bewerbungswelten entscheidet ein World-Admin über die Aufnahme.</div>' +
       '<div id="kf-world-create-error" class="kf-world-create-error"></div>' +
       '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-create-world-confirm">Spielwelt erstellen</button></div>' +
       '</div>'
@@ -24707,9 +24711,13 @@ function kf029ConfirmWorldCreate(){
   KF029Remote.committedFinanceIds={};
   KF029Remote.error='';
   KF029Remote.message='Neue Welt wird erstellt ...';
+  KF029Remote.worldCreatePending=true;
+  AppState.userProfile=kf029TransientProfile(KF029Remote.user);
+  UserProfileRepository.save(AppState.userProfile);
   startNewCareer();
   if(!AppState.worldRecord){
     KF029Remote.pendingWorldConfig=null;
+    KF029Remote.worldCreatePending=false;
     return;
   }
   setCurrentView('start');
@@ -24717,6 +24725,7 @@ function kf029ConfirmWorldCreate(){
   renderApp();
   KF029Remote.createPromise=kf029CreateRemoteWorld().then(function(data){
     KF029Remote.pendingWorldConfig=null;
+    KF029Remote.worldCreatePending=false;
     KF029Remote.showWorldList=false;
     setSelectedCountryName(preferredCountry(AppState.world));
     var leagues=leagueKeysForCountry(AppState.world,AppState.ui.selectedCountryName);
@@ -24734,6 +24743,7 @@ function kf029ConfirmWorldCreate(){
     KF029Remote.error='Die neue Welt konnte nicht angelegt werden: '+message;
     KF029Remote.message='';
     KF029Remote.pendingWorldConfig=null;
+    KF029Remote.worldCreatePending=false;
     resetState();
     KF029Remote.showWorldList=true;
     openModal({title:'Spielwelt konnte nicht erstellt werden',body:KF029Remote.error});
