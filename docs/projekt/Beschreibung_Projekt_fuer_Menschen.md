@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.30.0
+# Kabinenfieber - Stand KF_0.30.1
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.30.0`
+App-Version: `KF_0.30.1`
 
 Persistierte Schemas:
 
@@ -17,6 +17,33 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.30.1 – Delta-Korrektheit & Match-Delta-Performance
+
+KF_0.30.1 ist der erste Performance-Fixblock nach dem Benchmark auf KF_0.30.0. Die Fussballsimulation, Matchengine und fachliche Spielwirkung bleiben unveraendert. Der Block korrigiert ausschliesslich die Synchronisation ausgelagerter Match-/Finance-Details und vermeidet unnoetiges Parsen bereits bestaetigter Vollmatches.
+
+Aenderungen:
+
+- `kf029PendingMatches()` prueft zuerst nur die Match-IDs aus dem `CurrentSeasonMatchRepository` und laedt/parst danach ausschliesslich uncommitted Vollmatches.
+- Finance-Commitzustand wird nicht mehr global nur nach `event.id` bestimmt. Technische Identity ist `seasonId + clubId + eventId`; zusaetzlich wird der vom Server bestaetigte Eventinhalt als temporaere Signatur gemerkt.
+- Dadurch werden gleiche Event-IDs verschiedener Clubs getrennt behandelt und spaeter veraenderte Events desselben Clubs erneut uebertragen.
+- Das ist insbesondere fuer die fortgeschriebene Gehaltsbuchung relevant: `salaryExpenseSeason` behaelt absichtlich dieselbe Event-ID, waehrend Betrag, letzter Slot und `slotsApplied` wachsen.
+- Timeout-Recovery bestaetigt Finance-Deltas nur noch, wenn Identity **und Inhalt** im geladenen Serverstand uebereinstimmen.
+- `WorldRuntimeManager` verwendet getrennte Merge-Regeln fuer Matches und Finance. Finance wird in warmer und kalter Runtime nach derselben club-/saisonbezogenen Identity kanonisiert; die neueste Segmentversion ersetzt die aeltere.
+- Der grosse `/slot`-WorldRecord-Vollsnapshot bleibt bewusst unveraendert und ist der naechste groessere Performanceblock.
+
+Zentrale Datenquellen bleiben unveraendert:
+
+- Vollmatches aktuelle Saison: `CurrentSeasonMatchRepository[worldId][season][matchId]`.
+- Finance-Ledger aktuelle Saison: `CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]`.
+- kompakter Finanzzustand: `world.clubFinances.byClub`.
+- Runtime und `KF029Remote.committed*` sind nur technische Caches/Sync-Indizes und keine persistente fachliche Wahrheit.
+
+Doppelte Datenhaltung: **nein**. Die Finance-Signatur speichert nur temporaer, welcher konkrete Ledgerzustand bereits serverseitig bestaetigt wurde.
+
+Versionierung: Browser-/Service-Build `0.30.1`; der Remote/API-Vertrag bleibt `0.30.0`, weil Request-/Response-Schema und Endpunkte unveraendert sind.
+
+Regression: `tests/run_kf_0_30_1_delta_correctness_performance_test.js` prueft Cross-Club-ID-Kollisionen, aktualisierte Same-Club-Events, Warm-/Cold-Gleichheit, Match-ID-Vorfilterung und exakte Finance-Recovery.
 
 ## KF_0.30.0 – Startbereich & Spielwelt-Lobby
 
