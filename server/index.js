@@ -277,7 +277,8 @@ const server = http.createServer(async (req, res) => {
         visibility: body.visibility,
         joinPolicy: body.joinPolicy,
         matches: body.matches || [],
-        financeEvents: body.financeEvents || []
+        financeEvents: body.financeEvents || [],
+        progressLeaseId: body.progressLeaseId || null
       });
       await sendJson(req, res, 201, {
         ok: true,
@@ -376,6 +377,31 @@ const server = http.createServer(async (req, res) => {
         expectedRevision: body.expectedRevision
       });
       await sendJson(req, res, 200, { ok: true, ...result });
+      return;
+    }
+
+    const readyWorldId = worldIdFromPath(pathname, '/ready');
+    if (req.method === 'POST' && readyWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const progression = await persistence.worldSessions.markReady({
+        userId:auth.user.userId,
+        worldId:readyWorldId,
+        expectedRevision:body.expectedRevision
+      });
+      await sendJson(req, res, 200, { ok:true, progression });
+      return;
+    }
+
+    const progressionWorldId = worldIdFromPath(pathname, '/progression');
+    if (req.method === 'GET' && progressionWorldId) {
+      const auth = await requireAuth(req);
+      const progression = await persistence.worldSessions.getProgression({
+        userId:auth.user.userId,
+        worldId:progressionWorldId
+      });
+      await sendJson(req, res, 200, { ok:true, progression });
       return;
     }
 
