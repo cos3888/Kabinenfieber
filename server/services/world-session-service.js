@@ -123,7 +123,7 @@ class WorldSessionService {
         applicationStatus: application && application.status || null,
         openApplicationCount: openApplications.length,
         canJoin: !membership && meta.visibility === 'PUBLIC' && meta.joinPolicy === 'OPEN',
-        canApply: !membership && meta.visibility === 'PUBLIC' && meta.joinPolicy === 'APPLICATION' && !(application && application.status === 'OPEN')
+        canApply: !membership && activeSet.size < MAX_ACTIVE_WORLDS_PER_USER && meta.visibility === 'PUBLIC' && meta.joinPolicy === 'APPLICATION' && !(application && application.status === 'OPEN')
       });
     }
     return {
@@ -161,7 +161,9 @@ class WorldSessionService {
     const record = await this.worlds.loadWorldRecord(worldId);
     const actor = membershipForUser(record, actorUserId);
     if (!actor || actor.role !== 'WORLD_ADMIN') throw new DomainRuleError('Only a world admin may review applications');
-    return this.metadata.listApplicationsForWorld(worldId);
+    const activeUsers = new Set(activeMemberships(record).map(row => String(row.userProfileId)));
+    const applications = await this.metadata.listApplicationsForWorld(worldId);
+    return applications.filter(row => !activeUsers.has(String(row.userId)));
   }
 
   async decideApplication({ actorUserId, worldId, applicantUserId, decision }) {
@@ -183,11 +185,13 @@ class WorldSessionService {
       const current = await this.worlds.loadWorldRecord(worldId);
       const membership = createMembershipForUser(current, { userId: applicantUserId, displayName: application.displayName });
       const committed = await this.worlds.commitWorldRecord({ worldRecord: current, expectedRevision: manifest.revision });
-      await this.metadata.setApplicationStatus({ worldId, userId: applicantUserId, status:'ACCEPTED' });
+      await this.metadata.setApplicationStatus({ worldId, userId: applicantUserId, status:'ACCEPTED' }).catch(() => {});
       await this.runtime.unloadWorld(worldId);
       return { accepted:true, membership:clone(membership), revision:Number(committed.revision) };
     } catch (error) {
-      await this.metadata.removeParticipationIndex({ worldId, userId: applicantUserId }).catch(() => {});
+      const latest = await this.worlds.loadWorldRecord(worldId).catch(() => null);
+      const persistedMembership = latest && membershipForUser(latest, applicantUserId);
+      if (!persistedMembership) await this.metadata.removeParticipationIndex({ worldId, userId: applicantUserId }).catch(() => {});
       throw error;
     }
   }
@@ -220,10 +224,15 @@ class WorldSessionService {
       return this.deleteWorld({ userId, worldId, allowLastParticipant: true });
     }
     removeMembershipForUser(record, userId);
-    const committed = await this.worlds.commitWorldRecord({ worldRecord: record, expectedRevision: manifest.revision });
     await this.metadata.removeParticipationIndex({ worldId, userId });
-    await this.runtime.unloadWorld(worldId);
-    return { deleted: false, left: true, revision: Number(committed.revision) };
+    try {
+      const committed = await this.worlds.commitWorldRecord({ worldRecord: record, expectedRevision: manifest.revision });
+      await this.runtime.unloadWorld(worldId);
+      return { deleted: false, left: true, revision: Number(committed.revision) };
+    } catch (error) {
+      await this.metadata.addParticipationIndex({ worldId, userId }).catch(() => {});
+      throw error;
+    }
   }
 
   async deleteWorld({ userId, worldId, allowLastParticipant = false }) {
@@ -236,9 +245,14 @@ class WorldSessionService {
     if (!allowLastParticipant && membership.role !== 'WORLD_ADMIN') throw new DomainRuleError('Only a world admin may delete the world');
     if (allowLastParticipant && members.length !== 1) throw new DomainRuleError('World still has other participants');
     await this.runtime.unloadWorld(worldId);
-    await this.worlds.deleteWorld(worldId);
     await this.metadata.deleteWorldRegistration({ worldId });
-    return { deleted: true, worldId };
+    let objectStoreDeleted = true;
+    try {
+      await this.worlds.deleteWorld(worldId);
+    } catch (_) {
+      objectStoreDeleted = false;
+    }
+    return { deleted: true, worldId, objectStoreDeleted };
   }
 
   async openWorld({ userId, worldId }) {
