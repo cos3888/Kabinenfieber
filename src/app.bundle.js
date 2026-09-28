@@ -2851,6 +2851,16 @@ function displayedTrainerLabel(world, club){
       '</section>';
   }
 
+  function kf030ClubOccupant(record,clubId){
+    return activeMemberships(record).find(function(m){
+      return m && m.clubId===clubId && (!KF029Remote.membership || m.trainerId!==KF029Remote.membership.trainerId);
+    }) || null;
+  }
+  function kf030FirstFreeClubId(record,clubs){
+    var free=(clubs||[]).find(function(club){return !kf030ClubOccupant(record,club.id);});
+    return free ? free.id : null;
+  }
+
   function renderClubSelectionView(state){
     var world = state.world;
     var summary = world.initializationSummary || {};
@@ -2858,7 +2868,8 @@ function displayedTrainerLabel(world, club){
     var leagueKeys = leagueKeysForCountry(world, countryName);
     var leagueKey = state.ui.selectedLeagueKey || leagueKeys[0] || null;
     var clubs = clubsForSelection(world, countryName, leagueKey);
-    var selectedClubId = state.ui.selectedClubId || (clubs[0] && clubs[0].id) || null;
+    var selectedClubId = state.ui.selectedClubId || kf030FirstFreeClubId(AppState.worldRecord,clubs);
+    if(selectedClubId && kf030ClubOccupant(AppState.worldRecord,selectedClubId)) selectedClubId=kf030FirstFreeClubId(AppState.worldRecord,clubs);
     var selectedClub = selectedClubId ? world.clubs.byId[selectedClubId] : null;
     var selectedSquad = selectedClub ? world.squads[selectedClub.id] : null;
     var selectedAverage = selectedSquad ? averageOverall(world, selectedSquad.playerIds) : 0;
@@ -2875,14 +2886,17 @@ function displayedTrainerLabel(world, club){
       return '<button class="filter-chip'+active+'" type="button" data-action="select-league" data-league="'+escapeHtml(league)+'">'+escapeHtml(league)+'</button>';
     }).join('');
     var tiles = clubs.map(function(club){
+      var occupant=kf030ClubOccupant(AppState.worldRecord,club.id);
       var active = club.id === selectedClubId ? ' is-selected' : '';
+      var occupied = occupant ? ' is-occupied' : '';
       return '' +
-        '<article class="club-tile'+active+'">' +
+        '<article class="club-tile'+active+occupied+'">' +
         '  <div class="simple-club-tile">' +
         '    <button class="club-crest-btn" type="button" data-action="open-club-profile" data-club-id="'+escapeHtml(club.id)+'" aria-label="Vereinsprofil '+escapeHtml(club.name)+' öffnen">' +
         '      <img class="club-crest" src="'+escapeHtml(crestAssetForClub(club))+'" alt="'+escapeHtml(club.name)+' Wappen"'+onErrorFallbackAttr(crestFallbackAsset())+'>' +
         '    </button>' +
-        '    <button class="club-select-btn club-name-btn" type="button" data-action="select-club" data-club-id="'+escapeHtml(club.id)+'">'+escapeHtml(club.name)+'</button>' +
+        '    <button class="club-select-btn club-name-btn" type="button" data-action="select-club" data-club-id="'+escapeHtml(club.id)+'"'+(occupant?' disabled aria-disabled="true"':'')+'>'+escapeHtml(club.name)+'</button>' +
+        (occupant?'<span class="kf-club-occupied">Belegt · '+escapeHtml(occupant.trainerDisplayName||'Spieler')+'</span>':'') +
         '  </div>' +
         '</article>';
     }).join('');
@@ -2935,7 +2949,7 @@ function displayedTrainerLabel(world, club){
       '        <button class="ghost-btn" type="button" data-action="return-start">Zurück zum Startmenü</button>' +
       '      </div>' +
       '      <div class="selection-footer-right">' +
-      '        <button class="primary-btn" type="button" data-action="take-over-club"' + (takeoverBusy ? ' disabled aria-disabled="true"' : '') + '>' + (takeoverBusy ? 'Verein wird übernommen ...' : 'Verein übernehmen') + '</button>' +
+      '        <button class="primary-btn" type="button" data-action="take-over-club"' + ((takeoverBusy || !selectedClub) ? ' disabled aria-disabled="true"' : '') + '>' + (takeoverBusy ? 'Verein wird übernommen ...' : (selectedClub ? 'Verein übernehmen' : 'Kein Verein frei')) + '</button>' +
       '      </div>' +
       '    </div>' +
       '  </div>' +
@@ -20412,7 +20426,7 @@ function baseOverallForClub(club, mainPos, index){
     }
     var clubs = clubsForSelection(AppState.world, AppState.ui.selectedCountryName, AppState.ui.selectedLeagueKey);
     if (!AppState.ui.selectedClubId || !AppState.world.clubs.byId[AppState.ui.selectedClubId]) {
-      setSelectedClubId(clubs[0] ? clubs[0].id : null);
+      setSelectedClubId(kf030FirstFreeClubId(AppState.worldRecord,clubs));
     }
     goToView('club-selection');
   }
@@ -20422,7 +20436,7 @@ function baseOverallForClub(club, mainPos, index){
     var leagues = leagueKeysForCountry(AppState.world, countryName);
     setSelectedLeagueKey(leagues[0] || null);
     var clubs = clubsForSelection(AppState.world, countryName, AppState.ui.selectedLeagueKey);
-    setSelectedClubId(clubs[0] ? clubs[0].id : null);
+    setSelectedClubId(kf030FirstFreeClubId(AppState.worldRecord,clubs));
     renderApp();
     renderModal();
   }
@@ -20430,12 +20444,13 @@ function baseOverallForClub(club, mainPos, index){
   function selectLeague(leagueKey){
     setSelectedLeagueKey(leagueKey);
     var clubs = clubsForSelection(AppState.world, AppState.ui.selectedCountryName, leagueKey);
-    setSelectedClubId(clubs[0] ? clubs[0].id : null);
+    setSelectedClubId(kf030FirstFreeClubId(AppState.worldRecord,clubs));
     renderApp();
     renderModal();
   }
 
   function selectClub(clubId){
+    if(kf030ClubOccupant(AppState.worldRecord,clubId)) return;
     setSelectedClubId(clubId);
     renderApp();
     renderModal();
