@@ -24684,6 +24684,30 @@ function kf029InstallLoadedWorld(data){
   }
   renderApp(); renderModal();
 }
+async function kf031EnsureMatchDetail(matchId){
+  var world = AppState.world;
+  if (!world || !AppState.worldRecord || !matchId) return null;
+  var summary = matchById(world, matchId);
+  var season = Number((summary && summary.season) || ((world.meta||{}).seasonNumber) || 1);
+  if (CurrentSeasonMatchRepository.has(world, matchId, season)) {
+    return CurrentSeasonMatchRepository.load(world, matchId, season);
+  }
+  KF029Remote.message='Spieldetails werden geladen ...';
+  renderApp();
+  try {
+    var data = await kf029Request('/api/v1/worlds/' + encodeURIComponent(AppState.worldRecord.id) + '/matches/' + encodeURIComponent(matchId));
+    if (data && data.match) {
+      CurrentSeasonMatchRepository.save(world, data.match);
+      KF029Remote.committedMatchIds[String(matchId)] = 1;
+      return data.match;
+    }
+    return null;
+  } finally {
+    KF029Remote.message='';
+    renderApp();
+  }
+}
+
 async function kf029LoadWorld(worldId){
   KF029Remote.busy = true; KF029Remote.error = ''; KF029Remote.message = 'Welt wird geladen ...'; renderApp();
   try {
@@ -25229,6 +25253,16 @@ function kf029StartNewCareer(){
 
 var kf029BaseHandleAction = handleAction;
 handleAction = function(action, actionEl){
+  if (action === 'open-match-info' && KF029Remote.user && AppState.worldRecord) {
+    var lazyMatchId=actionEl && actionEl.getAttribute ? (actionEl.getAttribute('data-match-id') || '') : '';
+    void kf031EnsureMatchDetail(lazyMatchId).then(function(){
+      kf029BaseHandleAction(action, actionEl);
+    }).catch(function(error){
+      KF029Remote.error='Spieldetails konnten nicht geladen werden: '+(error.message||'Unbekannter Fehler');
+      renderApp();
+    });
+    return;
+  }
   if (action === 'kf-retry-checkpoint') { void kf029RetryCheckpoint().catch(function(){}); return; }
   if (action === 'kf-exit-world-discard') { void kf029ExitWorldToList(true); return; }
   var progressAction = action === 'office-advance' || action === 'calendar-sim-until-confirm' ||
