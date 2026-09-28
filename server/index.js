@@ -277,8 +277,7 @@ const server = http.createServer(async (req, res) => {
         visibility: body.visibility,
         joinPolicy: body.joinPolicy,
         matches: body.matches || [],
-        financeEvents: body.financeEvents || [],
-        progressLeaseId: body.progressLeaseId || null
+        financeEvents: body.financeEvents || []
       });
       await sendJson(req, res, 201, {
         ok: true,
@@ -437,7 +436,8 @@ const server = http.createServer(async (req, res) => {
         season: body.season,
         slotKey: body.slotKey,
         matches: body.matches || [],
-        financeEvents: body.financeEvents || []
+        financeEvents: body.financeEvents || [],
+        progressLeaseId: body.progressLeaseId || null
       });
       await sendJson(req, res, 200, { ok: true, ...result });
       return;
