@@ -56,6 +56,7 @@ class WorldPersistenceService {
       currentSeason: Number(worldRecord.gameState && worldRecord.gameState.meta && worldRecord.gameState.meta.seasonNumber || 1),
       matchSegments: {},
       financeSegments: {},
+      matchIndex: {},
       worldDeltaPaths: []
     };
     try {
@@ -102,19 +103,34 @@ class WorldPersistenceService {
   }
 
 
-  async loadCurrentSeasonDetailsFromManifest(manifest) {
+  async _loadSegments(paths) {
+    const rows = [];
+    for (const path of paths) {
+      rows.push(await decodeJsonGzip((await this.store.read(path)).body));
+    }
+    return rows;
+  }
+
+  async loadCurrentSeasonDetailsFromManifest(manifest, { includeMatches = true, includeFinance = true } = {}) {
     if (!manifest) throw new PersistenceNotFoundError('World manifest not found');
-    const matchPaths = Array.from(new Set(Object.values(manifest.matchSegments || {}).filter(Boolean)));
-    const financePaths = Array.from(new Set(Object.values(manifest.financeSegments || {}).filter(Boolean)));
-    const [matchSegments, financeSegments] = await Promise.all([
-      Promise.all(matchPaths.map(async path => decodeJsonGzip((await this.store.read(path)).body))),
-      Promise.all(financePaths.map(async path => decodeJsonGzip((await this.store.read(path)).body)))
-    ]);
+    const matchPaths = includeMatches ? Array.from(new Set(Object.values(manifest.matchSegments || {}).filter(Boolean))) : [];
+    const financePaths = includeFinance ? Array.from(new Set(Object.values(manifest.financeSegments || {}).filter(Boolean))) : [];
+    const matchSegments = await this._loadSegments(matchPaths);
+    const financeSegments = await this._loadSegments(financePaths);
     return {
       season: Number(manifest.currentSeason || 1),
       matches: matchSegments.flatMap(segment => Array.isArray(segment && segment.matches) ? segment.matches : []),
       financeEvents: financeSegments.flatMap(segment => Array.isArray(segment && segment.events) ? segment.events : [])
     };
+  }
+
+  async loadMatchDetail(worldId, matchId) {
+    const manifest = await this.getManifest(worldId);
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
+    const path = (manifest.matchIndex || {})[String(matchId)];
+    if (!path) return null;
+    const segment = await decodeJsonGzip((await this.store.read(path)).body);
+    return (Array.isArray(segment && segment.matches) ? segment.matches : []).find(row => row && String(row.id) === String(matchId)) || null;
   }
 
   async loadCurrentSeasonDetails(worldId) {
@@ -128,7 +144,7 @@ class WorldPersistenceService {
     if (!committedManifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     const [worldRecord, details] = await Promise.all([
       this.loadWorldRecordFromManifest(committedManifest),
-      this.loadCurrentSeasonDetailsFromManifest(committedManifest)
+      this.loadCurrentSeasonDetailsFromManifest(committedManifest, { includeMatches: false, includeFinance: true })
     ]);
     return {
       manifest: committedManifest,
@@ -170,6 +186,7 @@ class WorldPersistenceService {
         currentSeason: season,
         matchSegments: { __runtime__: matchPath },
         financeSegments: { __runtime__: financePath },
+        matchIndex: Object.fromEntries((matches || []).filter(row => row && row.id).map(row => [String(row.id), matchPath])),
         worldDeltaPaths: []
       };
       await this.store.write(this.manifestKey(worldId), encodeJson(next), {
@@ -276,6 +293,10 @@ class WorldPersistenceService {
         currentSeason: Number(season),
         matchSegments: { ...(current.matchSegments || {}), [slotKey]: matchPath },
         financeSegments: { ...(current.financeSegments || {}), [slotKey]: financePath },
+        matchIndex: {
+          ...(current.matchIndex || {}),
+          ...Object.fromEntries((matches || []).filter(row => row && row.id).map(row => [String(row.id), matchPath]))
+        },
         worldDeltaPaths: worldDelta
           ? [...(Array.isArray(current.worldDeltaPaths) ? current.worldDeltaPaths : []), deltaPath]
           : []
