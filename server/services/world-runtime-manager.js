@@ -136,7 +136,24 @@ class WorldRuntimeManager {
     return next;
   }
 
-  async saveSnapshot({ worldId, userId, worldRecord, expectedRevision, matches = [], financeEvents = [] }) {
+  _canonicalizeProgressSnapshot(runtime, userId, incoming) {
+    if (!incoming || String(incoming.id) !== String(runtime.worldRecord.id)) throw new DomainRuleError('World snapshot does not match worldId');
+    if (!incoming.gameState || String(((incoming.gameState||{}).meta||{}).id || '') !== String(runtime.worldRecord.id)) {
+      throw new DomainRuleError('World snapshot gameState identity does not match worldId');
+    }
+    const membership = membershipForUser(runtime.worldRecord, userId);
+    if (!membership) throw new DomainRuleError('User is not a member of this world');
+    const next = incoming;
+    next.createdByUserId = runtime.worldRecord.createdByUserId;
+    next.createdAt = runtime.worldRecord.createdAt;
+    next.creationRules = clone(runtime.worldRecord.creationRules);
+    next.runtimeSettings = clone(runtime.worldRecord.runtimeSettings);
+    next.memberships = clone(runtime.worldRecord.memberships);
+    ensureWorldMembershipRoles(next);
+    return next;
+  }
+
+  async saveSnapshot({ worldId, userId, worldRecord, expectedRevision, matches = [], financeEvents = [] , allowMultiplayerProgress = false }) {
     return this._enqueue(worldId, async () => {
       const runtime = await this._load(worldId);
       if (Number(expectedRevision) !== Number(runtime.revision)) {
@@ -146,7 +163,9 @@ class WorldRuntimeManager {
           actualRevision: runtime.revision
         });
       }
-      const nextRecord = this._canonicalizeSingleUserSnapshot(runtime, userId, worldRecord);
+      const nextRecord = allowMultiplayerProgress
+        ? this._canonicalizeProgressSnapshot(runtime, userId, worldRecord)
+        : this._canonicalizeSingleUserSnapshot(runtime, userId, worldRecord);
       const season = Number(nextRecord.gameState && nextRecord.gameState.meta && nextRecord.gameState.meta.seasonNumber || runtime.currentSeason || 1);
       const manifest = await this.worldPersistence.commitRuntimeSnapshot({
         worldRecord: nextRecord,
