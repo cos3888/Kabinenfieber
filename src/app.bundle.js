@@ -61,8 +61,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.30.0';
-  var KF_BUILD_LABEL = 'KF_0.30.0 - Startbereich & Spielwelt-Lobby';
+  var KF_VERSION = '0.30.1';
+  var KF_BUILD_LABEL = 'KF_0.30.1 - Delta-Korrektheit & Match-Delta-Performance';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -24543,21 +24543,44 @@ function kf029CurrentFinanceEvents(){
   });
   return rows;
 }
+function kf0301FinanceCommitKey(row){
+  if (!row || row.id == null || row.clubId == null) return '';
+  return [Number(row.seasonId || 1), String(row.clubId), String(row.id)].join('|');
+}
+function kf0301FinanceCommitSignature(row){
+  if (!row) return '';
+  try { return JSON.stringify(row) || ''; } catch (error) { return ''; }
+}
 function kf029MarkCommittedDetails(matches, financeEvents){
   KF029Remote.committedMatchIds = {};
   KF029Remote.committedFinanceIds = {};
   (matches || []).forEach(function(row){ if(row && row.id) KF029Remote.committedMatchIds[String(row.id)] = 1; });
-  (financeEvents || []).forEach(function(row){ if(row && row.id) KF029Remote.committedFinanceIds[String(row.id)] = 1; });
+  (financeEvents || []).forEach(function(row){
+    var key = kf0301FinanceCommitKey(row);
+    if (key) KF029Remote.committedFinanceIds[key] = kf0301FinanceCommitSignature(row);
+  });
 }
 function kf029PendingMatches(){
-  return kf029CurrentMatches().filter(function(row){ return row && row.id && !KF029Remote.committedMatchIds[String(row.id)]; });
+  var world = AppState.world;
+  if (!world) return [];
+  var season = Number(((world.meta||{}).seasonNumber)||1);
+  return CurrentSeasonMatchRepository.listIds(world, season)
+    .filter(function(id){ return id && !KF029Remote.committedMatchIds[String(id)]; })
+    .map(function(id){ return CurrentSeasonMatchRepository.load(world, id, season); })
+    .filter(Boolean);
 }
 function kf029PendingFinanceEvents(){
-  return kf029CurrentFinanceEvents().filter(function(row){ return row && row.id && !KF029Remote.committedFinanceIds[String(row.id)]; });
+  return kf029CurrentFinanceEvents().filter(function(row){
+    var key = kf0301FinanceCommitKey(row);
+    return key && KF029Remote.committedFinanceIds[key] !== kf0301FinanceCommitSignature(row);
+  });
 }
 function kf029AcceptCommittedDelta(matches, financeEvents){
   (matches || []).forEach(function(row){ if(row && row.id) KF029Remote.committedMatchIds[String(row.id)] = 1; });
-  (financeEvents || []).forEach(function(row){ if(row && row.id) KF029Remote.committedFinanceIds[String(row.id)] = 1; });
+  (financeEvents || []).forEach(function(row){
+    var key = kf0301FinanceCommitKey(row);
+    if (key) KF029Remote.committedFinanceIds[key] = kf0301FinanceCommitSignature(row);
+  });
 }
 function kf029RestoreCurrentDetails(world, matches, financeEvents){
   CurrentSeasonMatchRepository.deleteWorld(world);
@@ -24758,11 +24781,17 @@ async function kf029RecoverCommittedProgress(record, slotKey, deltaMatches, delt
     var serverSlot = (((serverRecord||{}).gameState||{}).calendar||{}).currentSlotKey || '';
     if (String(serverSlot) !== String(slotKey)) return null;
     var matchIds = {};
-    var financeIds = {};
+    var financeStates = {};
     (data.matches || []).forEach(function(row){ if(row && row.id) matchIds[String(row.id)] = 1; });
-    (data.financeEvents || []).forEach(function(row){ if(row && row.id) financeIds[String(row.id)] = 1; });
+    (data.financeEvents || []).forEach(function(row){
+      var key = kf0301FinanceCommitKey(row);
+      if (key) financeStates[key] = kf0301FinanceCommitSignature(row);
+    });
     var hasMatches = (deltaMatches || []).every(function(row){ return row && row.id && matchIds[String(row.id)]; });
-    var hasFinance = (deltaFinance || []).every(function(row){ return row && row.id && financeIds[String(row.id)]; });
+    var hasFinance = (deltaFinance || []).every(function(row){
+      var key = kf0301FinanceCommitKey(row);
+      return key && financeStates[key] === kf0301FinanceCommitSignature(row);
+    });
     if (!hasMatches || !hasFinance) return null;
     KF029Remote.revision = Number(data.revision);
     KF029Remote.currentSeason = Number(data.currentSeason || KF029Remote.currentSeason || 1);
