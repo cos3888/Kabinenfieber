@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.30.0
+# Wiederherstellung Kabinenfieber - KF_0.30.1
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.30.0`
+Version: `KF_0.30.1`
 
 Build-Label:
 
-`KF_0.30.0 - Startbereich & Spielwelt-Lobby`
+`KF_0.30.1 - Delta-Korrektheit & Match-Delta-Performance`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.30.0.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.30.1.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,38 @@ Aktuelle ZIP nach Export soll `KF_0.30.0.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.30.1 – Delta-Korrektheit & Match-Delta-Performance
+
+Freigegebener erster Performance-Fixblock auf Basis des Benchmarks von KF_0.30.0.
+
+Technischer Stand:
+- `kf029PendingMatches()` darf bereits committed Vollmatches nicht mehr laden/parsen. Ablauf: `listIds` -> committed IDs herausfiltern -> nur neue IDs via `load` parsen.
+- Finance-Sync-Identity: `seasonId|clubId|eventId`.
+- Identity allein reicht nicht, weil Finance-Events innerhalb derselben Saison fortgeschrieben werden koennen. Beispiel: `salaryExpenseSeason` behaelt seine ID, aber `amount`, `lastSlotKey` und `slotsApplied` aendern sich.
+- `KF029Remote.committedFinanceIds` ist deshalb weiterhin nur ein temporaerer Client-Sync-Index, speichert pro Identity aber die Signatur des serverbestaetigten Eventinhalts.
+- `kf029PendingFinanceEvents()` sendet neue **und veraenderte** Finance-Events.
+- `kf029RecoverCommittedProgress()` akzeptiert ein Finance-Delta nach verlorener Save-Antwort nur bei identischer Identity und identischem Inhalt.
+- Server-Warmruntime: Matches merge nach Match-ID; Finance separat nach `seasonId + clubId + eventId`.
+- Cold Runtime kanonisiert alle geladenen Finance-Segmente mit derselben Identity, sodass die spaetere Segmentversion die fruehere ersetzt.
+- `WorldPersistenceService.commitSlot()` und Segmentformat bleiben in diesem Fix unveraendert.
+- der komplette WorldRecord im `/slot`-Request bleibt unveraendert und ist der geplante naechste Performanceblock.
+
+Datenwahrheit:
+- Matches: `CurrentSeasonMatchRepository[worldId][season][matchId]`.
+- Finance: `CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]`.
+- aktueller kompakter Finanzzustand: `world.clubFinances.byClub`.
+- Runtime/Committed-Indizes sind keine persistente Wahrheit.
+- keine neue persistente Doppelhaltung.
+
+Versionen:
+- App/Service: `0.30.1`.
+- API-/Remote-Vertrag: weiterhin `0.30.0`.
+
+Pflichtregression:
+- `tests/run_kf_0_30_1_delta_correctness_performance_test.js`
+- bestehende komplette Regression-Suite.
+- besonders pruefen: gleiche Event-ID in zwei Clubs, veraendertes Same-Club-Event, Warm = Cold, Save/Reload sowie Match-Delta ohne Vollmatch-Loads fuer committed IDs.
 
 ## KF_0.30.0 – Startbereich & Spielwelt-Lobby
 

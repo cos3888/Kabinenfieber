@@ -9,6 +9,30 @@ const {
 
 function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
 
+function mergeMatchesById(current, delta) {
+  const byId = new Map((current || []).filter(row => row && row.id != null).map(row => [String(row.id), row]));
+  (delta || []).filter(row => row && row.id != null).forEach(row => byId.set(String(row.id), row));
+  return Array.from(byId.values());
+}
+
+function financeEventIdentity(row) {
+  if (!row || row.id == null || row.clubId == null) return '';
+  return [Number(row.seasonId || 1), String(row.clubId), String(row.id)].join('|');
+}
+
+function mergeFinanceEvents(current, delta) {
+  const byIdentity = new Map();
+  (current || []).filter(Boolean).forEach(row => {
+    const key = financeEventIdentity(row);
+    if (key) byIdentity.set(key, row);
+  });
+  (delta || []).filter(Boolean).forEach(row => {
+    const key = financeEventIdentity(row);
+    if (key) byIdentity.set(key, row);
+  });
+  return Array.from(byIdentity.values());
+}
+
 class WorldRuntimeManager {
   constructor({ worldPersistence, metadataRepository, idleMs = 15 * 60 * 1000, now = () => Date.now() }) {
     if (!worldPersistence || !metadataRepository) throw new Error('WorldRuntimeManager requires worldPersistence and metadataRepository');
@@ -53,8 +77,8 @@ class WorldRuntimeManager {
       worldRecord: snapshot.worldRecord,
       revision: Number(snapshot.manifest.revision),
       currentSeason: Number(snapshot.currentSeason || 1),
-      matches: snapshot.matches || [],
-      financeEvents: snapshot.financeEvents || [],
+      matches: mergeMatchesById([], snapshot.matches || []),
+      financeEvents: mergeFinanceEvents([], snapshot.financeEvents || []),
       lastAccessAt: this.now()
     };
     this.runtimes.set(key, runtime);
@@ -183,13 +207,8 @@ class WorldRuntimeManager {
       runtime.worldRecord = nextRecord;
       runtime.revision = Number(manifest.revision);
       runtime.currentSeason = Number(manifest.currentSeason);
-      const mergeById = (current, delta) => {
-        const byId = new Map((current || []).filter(Boolean).map(row => [String(row.id || ''), row]));
-        (delta || []).filter(Boolean).forEach(row => byId.set(String(row.id || ''), row));
-        return Array.from(byId.values());
-      };
-      runtime.matches = mergeById(runtime.matches, matches);
-      runtime.financeEvents = mergeById(runtime.financeEvents, financeEvents);
+      runtime.matches = mergeMatchesById(runtime.matches, matches);
+      runtime.financeEvents = mergeFinanceEvents(runtime.financeEvents, financeEvents);
       this._touch(runtime);
       return { revision: runtime.revision, currentSeason: runtime.currentSeason, committedAt: manifest.committedAt };
     });

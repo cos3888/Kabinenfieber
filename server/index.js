@@ -11,7 +11,7 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const SERVICE_VERSION = '0.30.0';
+const SERVICE_VERSION = '0.30.1';
 const API_VERSION = '0.30.0';
 
 let persistenceVerificationState = {

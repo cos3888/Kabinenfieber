@@ -4,7 +4,7 @@ const read=r=>fs.readFileSync(path.join(root,r),'utf8');
 const report={passed:true,checks:[]};
 function check(name,ok,details={}){report.checks.push({name,ok:!!ok,details});if(!ok)report.passed=false;}
 const pkg=JSON.parse(read('package.json')),index=read('index.html'),app=read('src/app.bundle.js');
-check('Runtime version is consistently current',pkg.version==='0.30.0'&&index.includes('KF_0.30.0')&&app.includes("var KF_VERSION = '0.30.0';"),{package:pkg.version});
+check('Runtime version is consistently current',pkg.version==='0.30.1'&&index.includes('KF_0.30.1')&&app.includes("var KF_VERSION = '0.30.1';"),{package:pkg.version});
 const srcFiles=fs.readdirSync(path.join(root,'src')).filter(n=>fs.statSync(path.join(root,'src',n)).isFile());
 check('Active src has no backup bundles or version patch sources',!srcFiles.some(n=>/\.bak$/i.test(n)||/^kf\d+.*patch/i.test(n)||/stability-patch/i.test(n)),{srcFiles});
 const styleFiles=fs.readdirSync(path.join(root,'src','styles')).filter(n=>fs.statSync(path.join(root,'src','styles',n)).isFile());

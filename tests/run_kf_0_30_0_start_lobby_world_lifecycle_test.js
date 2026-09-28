@@ -73,11 +73,11 @@ async function create(service,id,userId,access='PRIVATE'){
 (async()=>{
   check('World participation limit remains five',MAX_ACTIVE_WORLDS_PER_USER===5);
   check('Browser and backend use the new lifecycle contract',
-    app.includes("var KF_VERSION = '0.30.0';")&&
+    app.includes("var KF_VERSION = '0.30.1';")&&
     app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.30.0';")&&
-    server.includes("const SERVICE_VERSION = '0.30.0';")&&
+    server.includes("const SERVICE_VERSION = '0.30.1';")&&
     server.includes("const API_VERSION = '0.30.0';")&&
-    index.includes('app.bundle.js?v=0.30.0')&&index.includes('app.css?v=0.30.0'));
+    index.includes('app.bundle.js?v=0.30.1')&&index.includes('app.css?v=0.30.1'));
 
   check('Lobby exposes filters and active-world counter',
     app.includes('Aktive Welten: ')&&
