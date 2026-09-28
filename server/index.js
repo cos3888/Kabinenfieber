@@ -11,7 +11,7 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const SERVICE_VERSION = '0.30.1';
+const SERVICE_VERSION = '0.31.0';
 const API_VERSION = '0.30.0';
 
 let persistenceVerificationState = {
@@ -387,7 +387,8 @@ const server = http.createServer(async (req, res) => {
       const result = await persistence.worldSessions.saveSlot({
         userId: auth.user.userId,
         worldId: slotWorldId,
-        worldRecord: body.worldRecord,
+        worldRecord: body.worldRecord || null,
+        worldDelta: body.worldDelta || null,
         expectedRevision: body.expectedRevision,
         season: body.season,
         slotKey: body.slotKey,
