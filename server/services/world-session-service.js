@@ -218,12 +218,25 @@ class WorldSessionService {
       if (!target) throw new DomainRuleError('Admin transfer target is not an active world member');
       target.role=ROLE_WORLD_ADMIN;
     }
+    const previousParticipation=await this.metadata.getParticipation({ worldId, userId });
     membership.status='left';
     membership.leftAt=new Date().toISOString();
     membership.clubId=null;
     const manifest=await this.worlds.getManifest(worldId);
-    const next=await this.worlds.commitWorldRecord({ worldRecord:record, expectedRevision:manifest.revision });
     await this.metadata.removeParticipationIndex({ worldId, userId });
+    let next;
+    try {
+      next=await this.worlds.commitWorldRecord({ worldRecord:record, expectedRevision:manifest.revision });
+    } catch (error) {
+      if (previousParticipation) {
+        await this.metadata.addParticipationIndex({
+          worldId,
+          userId,
+          joinedAt:previousParticipation.joinedAt || new Date().toISOString()
+        }).catch(() => {});
+      }
+      throw error;
+    }
     await this.runtime.unloadWorld(worldId);
     return { deleted:false, revision:Number(next.revision) };
   }
@@ -236,8 +249,8 @@ class WorldSessionService {
     if (!membership || membership.role !== ROLE_WORLD_ADMIN) throw new DomainRuleError('Only a world admin may delete a world');
     if (active.length > 1) throw new DomainRuleError('A world with other active players cannot be deleted');
     await this.runtime.unloadWorld(worldId);
-    await this.worlds.deleteWorld(worldId);
     await this.metadata.deleteWorldRegistration({ worldId });
+    await this.worlds.deleteWorld(worldId);
     return { deleted:true, worldId };
   }
 
