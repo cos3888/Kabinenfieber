@@ -35,14 +35,14 @@ class WorldPersistenceService {
   }
 
   async getManifest(worldId) {
-    const envelope = await this._readManifestEnvelope(resolvedWorldId);
+    const envelope = await this._readManifestEnvelope(worldId);
     return envelope ? envelope.manifest : null;
   }
 
   async initializeWorld({ worldRecord }) {
     const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
-    const existing = await this._readManifestEnvelope(resolvedWorldId);
-    if (existing) throw new PersistenceConflictError('World is already initialized', { worldId: resolvedWorldId });
+    const existing = await this._readManifestEnvelope(worldId);
+    if (existing) throw new PersistenceConflictError('World is already initialized', { worldId: worldId });
     const revision = 1, prefix = this.revisionPrefix(worldId, revision);
     const worldPath = `${prefix}/world.json.gz`;
     await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
@@ -81,13 +81,13 @@ class WorldPersistenceService {
 
   async loadWorldRecord(worldId) {
     const manifest = await this.getManifest(worldId);
-    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     return this.loadWorldRecordFromManifest(manifest);
   }
 
   async loadMatchSegment(worldId, slotKey) {
     const manifest = await this.getManifest(worldId);
-    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     const path = manifest.matchSegments[String(slotKey)];
     if (!path) return null;
     return decodeJsonGzip((await this.store.read(path)).body);
@@ -95,7 +95,7 @@ class WorldPersistenceService {
 
   async loadFinanceSegment(worldId, slotKey) {
     const manifest = await this.getManifest(worldId);
-    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     const path = manifest.financeSegments[String(slotKey)];
     if (!path) return null;
     return decodeJsonGzip((await this.store.read(path)).body);
@@ -119,13 +119,13 @@ class WorldPersistenceService {
 
   async loadCurrentSeasonDetails(worldId) {
     const manifest = await this.getManifest(worldId);
-    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     return this.loadCurrentSeasonDetailsFromManifest(manifest);
   }
 
   async loadRuntimeSnapshot(worldId, manifest = null) {
     const committedManifest = manifest || await this.getManifest(worldId);
-    if (!committedManifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    if (!committedManifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     const [worldRecord, details] = await Promise.all([
       this.loadWorldRecordFromManifest(committedManifest),
       this.loadCurrentSeasonDetailsFromManifest(committedManifest)
@@ -141,11 +141,11 @@ class WorldPersistenceService {
 
   async commitRuntimeSnapshot({ worldRecord, season, matches = [], financeEvents = [], expectedRevision }) {
     const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
-    const envelope = await this._readManifestEnvelope(resolvedWorldId);
-    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    const envelope = await this._readManifestEnvelope(worldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     const current = envelope.manifest;
     if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
-      throw new PersistenceConflictError('World revision mismatch', { worldId: resolvedWorldId, expectedRevision, actualRevision: current.revision });
+      throw new PersistenceConflictError('World revision mismatch', { worldId: worldId, expectedRevision, actualRevision: current.revision });
     }
     season = Number(season || (worldRecord.gameState && worldRecord.gameState.meta && worldRecord.gameState.meta.seasonNumber) || current.currentSeason || 1);
     if (!Number.isFinite(season) || season < 1) throw new Error('Invalid current season');
@@ -172,7 +172,7 @@ class WorldPersistenceService {
         financeSegments: { __runtime__: financePath },
         worldDeltaPaths: []
       };
-      await this.store.write(this.manifestKey(resolvedWorldId), encodeJson(next), {
+      await this.store.write(this.manifestKey(worldId), encodeJson(next), {
         ifGenerationMatch: envelope.generation,
         contentType: 'application/json'
       });
@@ -207,11 +207,11 @@ class WorldPersistenceService {
 
   async commitWorldRecord({ worldRecord, expectedRevision }) {
     const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
-    const envelope = await this._readManifestEnvelope(resolvedWorldId);
-    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    const envelope = await this._readManifestEnvelope(worldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     const current = envelope.manifest;
     if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
-      throw new PersistenceConflictError('World revision mismatch', { worldId: resolvedWorldId, expectedRevision, actualRevision: current.revision });
+      throw new PersistenceConflictError('World revision mismatch', { worldId: worldId, expectedRevision, actualRevision: current.revision });
     }
     const revision = Number(current.revision) + 1;
     const worldPath = `${this.revisionPrefix(worldId, revision)}/world.json.gz`;
@@ -280,7 +280,7 @@ class WorldPersistenceService {
           ? [...(Array.isArray(current.worldDeltaPaths) ? current.worldDeltaPaths : []), deltaPath]
           : []
       };
-      await this.store.write(this.manifestKey(worldId), encodeJson(next), {
+      await this.store.write(this.manifestKey(resolvedWorldId), encodeJson(next), {
         ifGenerationMatch: envelope.generation,
         contentType: 'application/json'
       });
@@ -301,11 +301,11 @@ class WorldPersistenceService {
 
   async commitSeasonTransition({ worldRecord, newSeason, expectedRevision }) {
     const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
-    const envelope = await this._readManifestEnvelope(resolvedWorldId);
-    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    const envelope = await this._readManifestEnvelope(worldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     const current = envelope.manifest;
     if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
-      throw new PersistenceConflictError('World revision mismatch', { worldId: resolvedWorldId, expectedRevision, actualRevision: current.revision });
+      throw new PersistenceConflictError('World revision mismatch', { worldId: worldId, expectedRevision, actualRevision: current.revision });
     }
     const previousSeason = Number(current.currentSeason);
     const revision = Number(current.revision) + 1;
