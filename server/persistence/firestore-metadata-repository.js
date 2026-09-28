@@ -43,6 +43,35 @@ class FirestoreMetadataRepository {
     return doc.exists ? doc.data() : null;
   }
 
+  async setWorldLobbyProjection({ worldId, currentSeason = 1, maxPlayers = 0, clubNamesById = {} }) {
+    const ref = this._world(worldId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new PersistenceNotFoundError('World not found', { worldId });
+    const patch = {
+      currentSeason: Number(currentSeason || 1),
+      maxPlayers: Number(maxPlayers || 0),
+      clubNamesById: clubNamesById || {},
+      projectionUpdatedAt: nowIso()
+    };
+    await ref.set(patch, { merge:true });
+    return { ...doc.data(), ...patch };
+  }
+
+  async setParticipationProjection({ worldId, userId, trainerId = null, clubId = null, role = null, trainerDisplayName = null }) {
+    const ref = this._participation(worldId, userId);
+    const doc = await ref.get();
+    if (!doc.exists || doc.data().status !== STATUS_ACTIVE) throw new PersistenceNotFoundError('Active participation index not found', { worldId, userId });
+    const patch = {
+      trainerId: trainerId || doc.data().trainerId || null,
+      clubId: clubId || null,
+      role: role || doc.data().role || 'PLAYER',
+      projectionUpdatedAt: nowIso()
+    };
+    if (trainerDisplayName) patch.trainerDisplayName = trainerDisplayName;
+    await ref.set(patch, { merge:true });
+    return { ...doc.data(), ...patch };
+  }
+
   async getSlot(slotId) {
     const doc = await this._slot(slotId).get();
     return doc.exists ? doc.data() : null;
