@@ -90,10 +90,10 @@ function block(a,b){
     app.includes("(takeoverBusy || !selectedClub) ? ' disabled aria-disabled=\"true\"'"));
 
   check('Current cache busting and service build are compatible with the 0.29.6 takeover regression',
-    app.includes("var KF_VERSION = '0.30.0';")&&
-    index.includes('KF_0.30.0')&&
-    index.includes('app.bundle.js?v=0.30.0')&&
-    server.includes("const SERVICE_VERSION = '0.30.0';")&&
+    app.includes("var KF_VERSION = '0.30.1';")&&
+    index.includes('KF_0.30.1')&&
+    index.includes('app.bundle.js?v=0.30.1')&&
+    server.includes("const SERVICE_VERSION = '0.30.1';")&&
     server.includes("const API_VERSION = '0.30.0';"));
 
   console.log(JSON.stringify(report,null,2));
