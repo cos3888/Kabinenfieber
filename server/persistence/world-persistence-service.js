@@ -127,10 +127,17 @@ class WorldPersistenceService {
   async loadMatchDetail(worldId, matchId) {
     const manifest = await this.getManifest(worldId);
     if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId });
-    const path = (manifest.matchIndex || {})[String(matchId)];
-    if (!path) return null;
-    const segment = await decodeJsonGzip((await this.store.read(path)).body);
-    return (Array.isArray(segment && segment.matches) ? segment.matches : []).find(row => row && String(row.id) === String(matchId)) || null;
+    const indexedPath = (manifest.matchIndex || {})[String(matchId)] || null;
+    const paths = indexedPath
+      ? [indexedPath]
+      : Array.from(new Set(Object.values(manifest.matchSegments || {}).filter(Boolean)));
+    for (const path of paths) {
+      const segment = await decodeJsonGzip((await this.store.read(path)).body);
+      const match = (Array.isArray(segment && segment.matches) ? segment.matches : [])
+        .find(row => row && String(row.id) === String(matchId));
+      if (match) return match;
+    }
+    return null;
   }
 
   async loadCurrentSeasonDetails(worldId) {
