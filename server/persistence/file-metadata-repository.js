@@ -108,6 +108,21 @@ class FileMetadataRepository {
     });
   }
 
+  async listApplicationsForWorld(worldId) {
+    const data = await this._read();
+    return Object.values(data.applications).filter(row => row.worldId === worldId && row.status === 'OPEN').map(clone);
+  }
+
+  async setApplicationStatus({ worldId, userId, status }) {
+    return this._mutate(data => {
+      const key = applicationKey(worldId, userId), row = data.applications[key];
+      if (!row) throw new PersistenceNotFoundError('Application not found', { worldId, userId });
+      row.status = String(status);
+      row.decidedAt = nowIso();
+      return row;
+    });
+  }
+
   async getWorld(worldId) {
     const data = await this._read();
     return data.worlds[worldId] ? clone(data.worlds[worldId]) : null;
