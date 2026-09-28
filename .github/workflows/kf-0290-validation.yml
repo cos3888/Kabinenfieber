@@ -8,6 +8,7 @@ on:
       - kf-0.29.3-backend-compatibility
       - kf-0.30.0-start-lobby-world-lifecycle
       - kf-0.30.1-performance-delta-correctness
+      - kf-0.31.0-authoritative-persistence-progression
 concurrency:
   group: kf029-validation
   cancel-in-progress: true
@@ -27,9 +28,14 @@ jobs:
       - run: npm run test:0293
       - run: npm run test:0300
       - run: npm run test:0301
+      - run: npm run test:0310
       - run: npm test -- --full
       - run: node --check server/index.js
       - run: node --check server/services/auth-service.js
       - run: node --check server/services/world-runtime-manager.js
       - run: node --check server/services/world-session-service.js
+      - run: node --check server/persistence/world-persistence-service.js
+      - run: node --check server/persistence/firestore-metadata-repository.js
+      - run: node --check server/persistence/file-metadata-repository.js
+      - run: node --check server/domain/world-delta.js
       - run: node --check src/app.bundle.js
