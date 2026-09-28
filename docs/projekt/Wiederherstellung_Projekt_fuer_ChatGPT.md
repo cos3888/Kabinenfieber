@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.29.5
+# Wiederherstellung Kabinenfieber - KF_0.29.6
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.29.5`
+Version: `KF_0.29.6`
 
 Build-Label:
 
-`KF_0.29.5 - Progress Checkpoints & Save Performance`
+`KF_0.29.6 - Takeover Creation Race Fix`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.29.5.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.29.6.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,28 @@ Aktuelle ZIP nach Export soll `KF_0.29.5.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.29.6 – Takeover Creation Race Fix
+
+Kritischer Browserfix auf KF_0.29.5:
+
+- reale Cloud-Pruefung bestaetigte Backend `version = 0.29.5`, `apiVersion = 0.29.5`; der Fehler war kein veralteter Deploy.
+- Ursache: der neue `/club`-Pfad wartete nicht mehr auf `KF029Remote.createPromise`, obwohl die alte Vollsnapshot-Speicherung diese Synchronisation noch besass.
+- neuer Helper `kf029CommitClubTakeover(worldId, clubId)` wartet vor dem Request auf die laufende Welterstellung.
+- `expectedRevision` darf erst nach diesem Await aus `KF029Remote.revision` gelesen werden.
+- bei fehlgeschlagener Welterstellung muss der Fehler als Creation-Failure weitergereicht werden; kein `/club` und keine sinnlose Server-Reconciliation.
+- wiederholte Takeover-Klicks waehrend des laufenden Commits werden blockiert; Clubauswahl zeigt einen deaktivierten Uebernahmebutton.
+- kein API-Umbau: Browser/Service-Build `0.29.6`, `API_VERSION` und `KF029_REMOTE_CONTRACT_VERSION` bleiben `0.29.5`.
+
+Datenwahrheit:
+- Vereinszuordnung nur `WorldRecord.memberships`.
+- Revision nur committed World-Manifest.
+- `KF029Remote.createPromise` ist nur Browser-Synchronisation, keine persistente Wahrheit.
+- keine doppelte Datenhaltung.
+
+Pflichttest: `tests/run_kf_0_29_6_takeover_creation_race_test.js`. Er muss mit einer kontrolliert offenen Create-Promise beweisen, dass `/club` vorher nicht aufgerufen wird, danach die neue Revision nutzt und bei Create-Fehler komplett ausbleibt.
+
+Betrieb: Bei der Fehlersuche zeigte Cloud Run fuer die aktive Revision `max instances = 3`. Das widerspricht der Projektregel. Vor weiteren Multiplayer-/Persistenztests auf **max instances = 1** zuruecksetzen; erst mit verteilter Lock-/Lease-Logik wieder skalieren.
 
 ## KF_0.29.5 – Progress Checkpoints & Save Performance
 
