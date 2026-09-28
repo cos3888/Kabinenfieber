@@ -25040,6 +25040,7 @@ function kf029SaveRemoteWorld(reason){
         worldRecord:record,
         matches:kf029CurrentMatches(),
         financeEvents:kf029CurrentFinanceEvents(),
+        progressLeaseId:KF029Remote.progressLeaseId || null,
         reason:reason || 'autosave'
       }
     });
