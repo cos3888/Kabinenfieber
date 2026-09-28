@@ -290,6 +290,31 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const adminTransferWorldId = worldIdFromPath(pathname, '/admin-transfer');
+    if (req.method === 'POST' && adminTransferWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.transferAdmin({
+        actorUserId: auth.user.userId,
+        targetUserId: body.targetUserId,
+        worldId: adminTransferWorldId
+      });
+      await sendJson(req, res, 200, { ok: true, ...result });
+      return;
+    }
+
+    const membersWorldId = worldIdFromPath(pathname, '/members');
+    if (req.method === 'GET' && membersWorldId) {
+      const auth = await requireAuth(req);
+      const members = await persistence.worldSessions.listMembers({
+        actorUserId: auth.user.userId,
+        worldId: membersWorldId
+      });
+      await sendJson(req, res, 200, { ok: true, members });
+      return;
+    }
+
     const applicationDecisionWorldId = worldIdFromPath(pathname, '/applications/decision');
     if (req.method === 'POST' && applicationDecisionWorldId) {
       const auth = await requireAuth(req);
