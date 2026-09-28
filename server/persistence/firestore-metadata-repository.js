@@ -19,6 +19,7 @@ class FirestoreMetadataRepository {
       worlds: `${collectionPrefix}_worlds`,
       participation: `${collectionPrefix}_world_participation_index`,
       invitations: `${collectionPrefix}_invitations`,
+      applications: `${collectionPrefix}_applications`,
       system: `${collectionPrefix}_system`
     };
   }
@@ -78,7 +79,7 @@ class FirestoreMetadataRepository {
     return true;
   }
 
-  async createWorldRegistration({ slotId, worldId, createdByUserId, worldName = null, visibility = 'PRIVATE', joinPolicy = 'INVITE_ONLY', createdAt = nowIso() }) {
+  async createWorldRegistration({ slotId, worldId, createdByUserId, worldName = null, description = '', visibility = 'PRIVATE', joinPolicy = 'INVITE_ONLY', createdAt = nowIso() }) {
     slotId = Number(slotId);
     if (!Number.isInteger(slotId) || slotId < 1 || slotId > MAX_WORLD_SLOTS) throw new DomainRuleError('slotId must be between 1 and 1000');
     if (!worldId || !createdByUserId) throw new DomainRuleError('worldId and createdByUserId are required');
@@ -89,7 +90,7 @@ class FirestoreMetadataRepository {
       if (slotDoc.exists && slotDoc.data().status === 'OCCUPIED') throw new DomainRuleError('World slot is already occupied', { slotId });
       if (worldDoc.exists && worldDoc.data().status === 'ACTIVE') throw new DomainRuleError('World already exists', { worldId });
       if (activeSnap.size >= MAX_ACTIVE_WORLDS_PER_USER) throw new DomainRuleError('User already participates in five active worlds');
-      const world = { worldId, slotId, status: 'ACTIVE', createdAt, createdByUserId, worldName, visibility, joinPolicy };
+      const world = { worldId, slotId, status: 'ACTIVE', createdAt, createdByUserId, worldName, description, visibility, joinPolicy };
       tx.set(slotRef, { slotId, status: 'OCCUPIED', worldId, createdAt });
       tx.set(worldRef, world);
       tx.set(participationRef, { worldId, userId: createdByUserId, status: STATUS_ACTIVE, joinedAt: createdAt, derivedIndex: true });
@@ -129,17 +130,85 @@ class FirestoreMetadataRepository {
     if (expectedCreatedByUserId && String(world.createdByUserId) !== String(expectedCreatedByUserId)) {
       throw new DomainRuleError('World creator does not match rollback request', { worldId });
     }
-    const [participations, invitations] = await Promise.all([
+    const [participations, invitations, applications] = await Promise.all([
       this.db.collection(this.names.participation).where('worldId', '==', worldId).get(),
-      this.db.collection(this.names.invitations).where('worldId', '==', worldId).get()
+      this.db.collection(this.names.invitations).where('worldId', '==', worldId).get(),
+      this.db.collection(this.names.applications).where('worldId', '==', worldId).get()
     ]);
     const batch = this.db.batch();
     batch.delete(worldRef);
     batch.delete(this._slot(world.slotId));
     participations.docs.forEach(doc => batch.delete(doc.ref));
     invitations.docs.forEach(doc => batch.delete(doc.ref));
+    applications.docs.forEach(doc => batch.delete(doc.ref));
     await batch.commit();
     return { deleted: true, worldId };
+  }
+
+  async listLobbyWorlds(userId) {
+    const [worldSnap, participationSnap, applicationSnap] = await Promise.all([
+      this.db.collection(this.names.worlds).where('status', '==', 'ACTIVE').get(),
+      this.db.collection(this.names.participation).where('status', '==', STATUS_ACTIVE).get(),
+      this.db.collection(this.names.applications).where('userId', '==', userId).get()
+    ]);
+    const participationByWorld = {};
+    participationSnap.docs.forEach(doc => {
+      const row = doc.data();
+      participationByWorld[row.worldId] = participationByWorld[row.worldId] || [];
+      participationByWorld[row.worldId].push(row);
+    });
+    const applications = {};
+    applicationSnap.docs.forEach(doc => { const row=doc.data(); applications[row.worldId]=row; });
+    return worldSnap.docs.map(doc => doc.data())
+      .filter(world => world.visibility === 'PUBLIC' || (participationByWorld[world.worldId] || []).some(row => String(row.userId) === String(userId)))
+      .map(world => {
+        const participants = participationByWorld[world.worldId] || [];
+        const application = applications[world.worldId] || null;
+        return {
+          ...world,
+          participantCount: participants.length,
+          isMember: participants.some(row => String(row.userId) === String(userId)),
+          applicationStatus: application ? application.status : null
+        };
+      })
+      .sort((a,b) => Number(a.slotId) - Number(b.slotId));
+  }
+
+  async getParticipation({ worldId, userId }) {
+    const doc = await this._participation(worldId, userId).get();
+    return doc.exists && doc.data().status === STATUS_ACTIVE ? doc.data() : null;
+  }
+
+  async createWorldApplication({ worldId, userId, displayName = '', createdAt = nowIso() }) {
+    const world = await this.getWorld(worldId);
+    if (!world || world.status !== 'ACTIVE') throw new PersistenceNotFoundError('Active world not found', { worldId });
+    if (world.visibility !== 'PUBLIC' || world.joinPolicy !== 'APPLICATION') throw new DomainRuleError('World does not accept applications');
+    if (await this.getParticipation({ worldId, userId })) throw new DomainRuleError('User already participates in this world');
+    const ref = this.db.collection(this.names.applications).doc(participationId(worldId, userId));
+    const existing = await ref.get();
+    if (existing.exists && existing.data().status === 'PENDING') throw new DomainRuleError('Application already pending');
+    const application = { applicationId:participationId(worldId, userId), worldId, userId, displayName, status:'PENDING', createdAt };
+    await ref.set(application);
+    return application;
+  }
+
+  async listWorldApplications(worldId) {
+    const snap = await this.db.collection(this.names.applications).where('worldId', '==', worldId).where('status', '==', 'PENDING').get();
+    return snap.docs.map(doc => doc.data()).sort((a,b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  }
+
+  async getWorldApplication({ worldId, userId }) {
+    const doc = await this.db.collection(this.names.applications).doc(participationId(worldId, userId)).get();
+    return doc.exists ? doc.data() : null;
+  }
+
+  async resolveWorldApplication({ worldId, userId, status, resolvedByUserId }) {
+    const ref = this.db.collection(this.names.applications).doc(participationId(worldId, userId));
+    const doc = await ref.get();
+    if (!doc.exists || doc.data().status !== 'PENDING') throw new PersistenceNotFoundError('Pending application not found', { worldId, userId });
+    const next = { ...doc.data(), status, resolvedAt:nowIso(), resolvedByUserId };
+    await ref.set(next);
+    return next;
   }
 
   async createInvitation({ worldId, invitedByUserId, invitedUserId = null, inviteId = crypto.randomUUID(), expiresAt = null }) {
