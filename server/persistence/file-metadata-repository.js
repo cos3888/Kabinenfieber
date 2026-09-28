@@ -208,12 +208,13 @@ class FileMetadataRepository {
       .filter(world => world.visibility === 'PUBLIC' || (participationByWorld[world.worldId] || []).some(row => String(row.userId) === String(userId)))
       .map(world => {
         const participants = participationByWorld[world.worldId] || [];
-        const mine = participants.some(row => String(row.userId) === String(userId));
+        const mineRow = participants.find(row => String(row.userId) === String(userId)) || null;
         const application = data.applications[participationKey(world.worldId, userId)] || null;
         return {
           ...clone(world),
           participantCount: participants.length,
-          isMember: mine,
+          isMember: Boolean(mineRow),
+          membership: mineRow ? clone(mineRow) : null,
           applicationStatus: application ? application.status : null
         };
       })
