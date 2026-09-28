@@ -379,6 +379,24 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const matchDetailRoute = pathname.match(/^\/api\/v1\/worlds\/([^/]+)\/matches\/([^/]+)$/);
+    if (req.method === 'GET' && matchDetailRoute) {
+      const auth = await requireAuth(req);
+      const worldId = decodeURIComponent(matchDetailRoute[1]);
+      const matchId = decodeURIComponent(matchDetailRoute[2]);
+      const match = await persistence.worldSessions.loadMatchDetail({
+        userId: auth.user.userId,
+        worldId,
+        matchId
+      });
+      if (!match) {
+        await sendJson(req, res, 404, { ok:false, error:'not_found' });
+        return;
+      }
+      await sendJson(req, res, 200, { ok:true, match });
+      return;
+    }
+
     const slotWorldId = worldIdFromPath(pathname, '/slot');
     if (req.method === 'PUT' && slotWorldId) {
       const auth = await requireAuth(req);
