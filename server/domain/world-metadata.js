@@ -16,6 +16,18 @@ function normalizeWorldName(value) {
   return name;
 }
 
+function normalizeWorldDescription(value) {
+  const description = String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (description.length > 200) throw new DomainRuleError('World description must contain at most 200 characters');
+  return description;
+}
+
+function normalizeStartVariant(value) {
+  const variant = String(value || 'classic').toLowerCase();
+  if (variant !== 'classic') throw new DomainRuleError('Unsupported start variant');
+  return variant;
+}
+
 function normalizeWorldAccess({ visibility, joinPolicy } = {}) {
   const nextVisibility = String(visibility || WORLD_VISIBILITY_PRIVATE).toUpperCase();
   const nextJoinPolicy = String(joinPolicy || JOIN_POLICY_INVITE_ONLY).toUpperCase();
@@ -36,5 +48,7 @@ module.exports = {
   JOIN_POLICY_APPLICATION,
   JOIN_POLICY_INVITE_ONLY,
   normalizeWorldName,
+  normalizeWorldDescription,
+  normalizeStartVariant,
   normalizeWorldAccess
 };
