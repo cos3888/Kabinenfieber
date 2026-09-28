@@ -290,6 +290,32 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const applicationDecisionWorldId = worldIdFromPath(pathname, '/applications/decision');
+    if (req.method === 'POST' && applicationDecisionWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.decideApplication({
+        actorUserId: auth.user.userId,
+        worldId: applicationDecisionWorldId,
+        applicantUserId: body.applicantUserId,
+        decision: body.decision
+      });
+      await sendJson(req, res, 200, { ok: true, ...result });
+      return;
+    }
+
+    const applicationsWorldId = worldIdFromPath(pathname, '/applications');
+    if (req.method === 'GET' && applicationsWorldId) {
+      const auth = await requireAuth(req);
+      const applications = await persistence.worldSessions.listApplications({
+        actorUserId: auth.user.userId,
+        worldId: applicationsWorldId
+      });
+      await sendJson(req, res, 200, { ok: true, applications });
+      return;
+    }
+
     const joinWorldId = worldIdFromPath(pathname, '/join');
     if (req.method === 'POST' && joinWorldId) {
       const auth = await requireAuth(req);
