@@ -124,6 +124,29 @@ function makeWorldRecord(worldId,userId,trainerId='trainer-owner'){
   check('Application world stores pending application without consuming active-world slot',
     application.status==='OPEN'&&applicantLobby.activeWorldCount===0&&applicationRow&&applicationRow.applicationStatus==='OPEN');
 
+  const accepted=await sessions.decideApplication({
+    actorUserId:owner,worldId:applicationWorld,applicantUserId:guest,decision:'ACCEPT'
+  });
+  const guestAfterAccept=await sessions.listWorlds(guest);
+  const acceptedRow=guestAfterAccept.worlds.find(row=>row.worldId===applicationWorld);
+  check('Admin acceptance creates membership and consumes one active-world slot',
+    accepted.accepted===true&&guestAfterAccept.activeWorldCount===1&&acceptedRow&&acceptedRow.mine===true&&acceptedRow.membership.role==='PLAYER');
+
+  const transferred=await sessions.transferAdmin({
+    actorUserId:owner,targetUserId:guest,worldId:applicationWorld
+  });
+  const guestAfterTransfer=await sessions.openWorld({userId:guest,worldId:applicationWorld});
+  check('Admin rights can be transferred before the last admin leaves',
+    transferred.transferredToUserId===guest&&guestAfterTransfer.membership.role==='WORLD_ADMIN');
+
+  const ownerLeftApplication=await sessions.leaveWorld({userId:owner,worldId:applicationWorld});
+  check('Former last admin can leave after transferring administration',
+    ownerLeftApplication.left===true&&ownerLeftApplication.deleted===false);
+
+  const guestDeletesApplication=await sessions.leaveWorld({userId:guest,worldId:applicationWorld});
+  check('New sole admin leaving deletes the world and frees the active slot',
+    guestDeletesApplication.deleted===true&&(await sessions.listWorlds(guest)).activeWorldCount===0);
+
   const app=await fs.readFile(path.join(__dirname,'..','src','app.bundle.js'),'utf8');
   const index=await fs.readFile(path.join(__dirname,'..','index.html'),'utf8');
   const server=await fs.readFile(path.join(__dirname,'..','server','index.js'),'utf8');
