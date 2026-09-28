@@ -16,6 +16,39 @@ class WorldSessionService {
     this.runtime = runtimeManager;
   }
 
+  _clubNamesById(record) {
+    const clubs = record && record.gameState && record.gameState.clubs;
+    const names = {};
+    if (!clubs || !clubs.byId) return names;
+    Object.keys(clubs.byId).forEach(clubId => {
+      const club = clubs.byId[clubId];
+      if (club) names[clubId] = club.name || club.clubName || clubId;
+    });
+    return names;
+  }
+
+  async _syncLobbyProjection(record) {
+    const clubs = record && record.gameState && record.gameState.clubs;
+    await this.metadata.setWorldLobbyProjection({
+      worldId: record.id,
+      currentSeason: Number(record.gameState.meta && record.gameState.meta.seasonNumber || 1),
+      maxPlayers: clubs && Array.isArray(clubs.order) ? clubs.order.length : 0,
+      clubNamesById: this._clubNamesById(record)
+    });
+  }
+
+  async _syncParticipationProjection(worldId, membership) {
+    if (!membership) return null;
+    return this.metadata.setParticipationProjection({
+      worldId,
+      userId: membership.userProfileId,
+      trainerId: membership.trainerId,
+      clubId: membership.clubId || null,
+      role: membership.role || 'PLAYER',
+      trainerDisplayName: membership.trainerDisplayName || null
+    });
+  }
+
   _prepareInitialWorld(worldRecord, userId) {
     if (!worldRecord || !worldRecord.id || !worldRecord.gameState || !worldRecord.gameState.meta) throw new DomainRuleError('Initial WorldRecord is incomplete');
     if (String(worldRecord.gameState.meta.id) !== String(worldRecord.id)) throw new DomainRuleError('WorldRecord id and gameState.meta.id must match');
@@ -64,6 +97,8 @@ class WorldSessionService {
     const createdAt = record.createdAt || new Date().toISOString();
     const registration = await this._claimFreeSlot(record.id, userId, createdAt, worldMetadata);
     try {
+      await this._syncLobbyProjection(record);
+      await this._syncParticipationProjection(record.id, activeMemberships(record)[0]);
       const manifest = await this.worlds.initializeWorld({ worldRecord: record });
       if ((matches && matches.length) || (financeEvents && financeEvents.length)) {
         await this.worlds.commitRuntimeSnapshot({
@@ -89,21 +124,10 @@ class WorldSessionService {
     for (const meta of rows) {
       const manifest = await this.worlds.getManifest(meta.worldId);
       if (!manifest) continue;
-      let membership = null;
-      let active = [];
-      let clubName = null;
-      let maxPlayers = 0;
-      try {
-        const record = await this.worlds.loadWorldRecord(meta.worldId);
-        ensureWorldMembershipRoles(record);
-        active = activeMemberships(record);
-        membership = membershipForUser(record, userId);
-        const clubs = record.gameState && record.gameState.clubs;
-        maxPlayers = clubs && Array.isArray(clubs.order) ? clubs.order.length : 0;
-        if (membership && membership.clubId && clubs && clubs.byId && clubs.byId[membership.clubId]) {
-          clubName = clubs.byId[membership.clubId].name || clubs.byId[membership.clubId].clubName || membership.clubId;
-        }
-      } catch (_) {}
+      const membership = meta.membership || null;
+      const clubName = membership && membership.clubId
+        ? ((meta.clubNamesById || {})[membership.clubId] || membership.clubId)
+        : null;
       worlds.push({
         worldId: meta.worldId,
         slotId: meta.slotId,
@@ -114,9 +138,9 @@ class WorldSessionService {
         createdAt: meta.createdAt,
         createdByUserId: meta.createdByUserId,
         revision: Number(manifest.revision),
-        currentSeason: Number(manifest.currentSeason || 1),
-        participantCount: Number(meta.participantCount || active.length || 0),
-        maxPlayers,
+        currentSeason: Number(meta.currentSeason || manifest.currentSeason || 1),
+        participantCount: Number(meta.participantCount || 0),
+        maxPlayers: Number(meta.maxPlayers || 0),
         isMember: Boolean(membership),
         membership: membership ? clone(membership) : null,
         clubName,
@@ -151,6 +175,7 @@ class WorldSessionService {
     await this.metadata.addParticipationIndex({ worldId, userId, joinedAt });
     try {
       const next = await this.worlds.commitWorldRecord({ worldRecord:record, expectedRevision:manifest.revision });
+      await this._syncParticipationProjection(worldId, record.memberships.byTrainerId[trainerId]);
       await this.runtime.unloadWorld(worldId);
       return { revision:Number(next.revision), currentSeason:Number(next.currentSeason || manifest.currentSeason || 1), membership:clone(record.memberships.byTrainerId[trainerId]) };
     } catch (error) {
@@ -199,6 +224,7 @@ class WorldSessionService {
     await this.metadata.addParticipationIndex({ worldId, userId:applicantUserId, joinedAt });
     try {
       const next=await this.worlds.commitWorldRecord({ worldRecord:record, expectedRevision:manifest.revision });
+      await this._syncParticipationProjection(worldId, record.memberships.byTrainerId[trainerId]);
       await this.metadata.resolveWorldApplication({ worldId, userId:applicantUserId, status:'ACCEPTED', resolvedByUserId:actorUserId });
       await this.runtime.unloadWorld(worldId);
       return { revision:Number(next.revision), membership:clone(record.memberships.byTrainerId[trainerId]) };
@@ -241,6 +267,10 @@ class WorldSessionService {
       }
       throw error;
     }
+    if (transferAdminToUserId) {
+      const target = activeMemberships(record).find(row => String(row.userProfileId) === String(transferAdminToUserId));
+      if (target) await this._syncParticipationProjection(worldId, target);
+    }
     await this.runtime.unloadWorld(worldId);
     return { deleted:false, revision:Number(next.revision) };
   }
@@ -275,7 +305,9 @@ class WorldSessionService {
   }
 
   async assignClub({ userId, worldId, clubId, expectedRevision }) {
-    return this.runtime.assignClub({ userId, worldId, clubId, expectedRevision });
+    const result = await this.runtime.assignClub({ userId, worldId, clubId, expectedRevision });
+    await this._syncParticipationProjection(worldId, result.membership);
+    return result;
   }
 }
 
