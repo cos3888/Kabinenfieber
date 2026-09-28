@@ -25017,10 +25017,14 @@ function kf030WorldActionHtml(world){
   if(world.mine){
     var primary='<button class="primary-btn kf-lobby-action" type="button" data-action="kf-load-world" data-world-id="'+escapeHtml(world.worldId)+'">'+(world.membership&&world.membership.clubId?'Öffnen':'Verein wählen')+'</button>';
     var leaveLabel=Number(world.participantCount||0)<=1?'Welt löschen':'Austreten';
-    var applications=(world.membership&&world.membership.role==='WORLD_ADMIN'&&Number(world.openApplicationCount||0)>0)
+    var isAdmin=world.membership&&world.membership.role==='WORLD_ADMIN';
+    var applications=(isAdmin&&Number(world.openApplicationCount||0)>0)
       ? '<button class="secondary-btn kf-lobby-action" type="button" data-action="kf-review-applications" data-world-id="'+escapeHtml(world.worldId)+'">Bewerbungen ('+escapeHtml(world.openApplicationCount)+')</button>'
       : '';
-    return primary+applications+'<button class="ghost-btn kf-lobby-action" type="button" data-action="kf-leave-world" data-world-id="'+escapeHtml(world.worldId)+'" data-world-name="'+escapeHtml(world.worldName||'Spielwelt')+'">'+leaveLabel+'</button>';
+    var manage=isAdmin&&Number(world.participantCount||0)>1
+      ? '<button class="ghost-btn kf-lobby-action" type="button" data-action="kf-manage-world" data-world-id="'+escapeHtml(world.worldId)+'">Verwalten</button>'
+      : '';
+    return primary+applications+manage+'<button class="ghost-btn kf-lobby-action" type="button" data-action="kf-leave-world" data-world-id="'+escapeHtml(world.worldId)+'" data-world-name="'+escapeHtml(world.worldName||'Spielwelt')+'">'+leaveLabel+'</button>';
   }
   if(world.applicationStatus==='OPEN') return '<button class="ghost-btn kf-lobby-action" type="button" disabled>Bewerbung läuft</button>';
   if(world.canJoin) return '<button class="primary-btn kf-lobby-action" type="button" data-action="kf-join-world" data-world-id="'+escapeHtml(world.worldId)+'">Beitreten</button>';
@@ -25037,7 +25041,7 @@ function kf030RenderLobby(){
   });
   var rows=worlds.map(function(world){
     var status='–';
-    if(world.mine&&world.membership) status=world.membership.clubId ? ('Verein: '+world.membership.clubId) : 'Verein wählen';
+    if(world.mine&&world.membership) status=world.membership.clubId ? ('Verein: '+(world.membershipClubName||world.membership.clubId)) : 'Verein wählen';
     else if(world.applicationStatus==='OPEN') status='Bewerbung läuft';
     return '<tr>'+
       '<td>#'+String(world.slotId||'').padStart(3,'0')+'</td>'+
@@ -25087,6 +25091,31 @@ renderStartView = function(){
   }
   return kf030RenderLobby();
 };
+
+async function kf030ManageWorld(worldId){
+  try{
+    var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/members');
+    var rows=(data.members||[]).map(function(row){
+      var me=KF029Remote.user&&String(row.userProfileId)===String(KF029Remote.user.userId);
+      return '<div class="kf-application-row"><div><strong>'+escapeHtml(row.trainerDisplayName||'Spieler')+'</strong><span>'+(row.role==='WORLD_ADMIN'?'Admin':'Spieler')+(row.clubId?' · '+escapeHtml(row.clubId):'')+'</span></div>'+
+        (!me&&row.role!=='WORLD_ADMIN'?'<button class="secondary-btn" type="button" data-action="kf-transfer-admin" data-world-id="'+escapeHtml(worldId)+'" data-user-id="'+escapeHtml(row.userProfileId)+'">Adminrechte übertragen</button>':'')+
+        '</div>';
+    }).join('');
+    openModal({title:'Spielwelt verwalten',bodyHtml:rows||'<div class="notice">Keine weiteren Teilnehmer.</div>'});
+    renderModal();
+  }catch(error){KF029Remote.error='Mitglieder konnten nicht geladen werden: '+(error.message||'Unbekannter Fehler');renderApp();}
+}
+async function kf030TransferAdmin(worldId,userId){
+  try{
+    await kf029Request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/admin-transfer',{
+      method:'POST',body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION,targetUserId:userId}
+    });
+    await kf029RefreshWorldList();
+    KF029Remote.message='Adminrechte wurden übertragen.';
+    await kf030ManageWorld(worldId);
+    renderApp();
+  }catch(error){KF029Remote.error='Adminrechte konnten nicht übertragen werden: '+(error.message||'Unbekannter Fehler');closeModal();renderModal();renderApp();}
+}
 
 async function kf030ReviewApplications(worldId){
   KF029Remote.error='';
@@ -25192,6 +25221,8 @@ handleAction = function(action, actionEl){
     openModal({title:'Mein Profil',bodyHtml:'<div class="notice"><strong>'+escapeHtml(KF029Remote.user.displayName||'Spieler')+'</strong><br>Benutzer-ID: '+escapeHtml(KF029Remote.user.userId||'-')+'<br><br>Weitere Profiloptionen werden auf dieser zentralen Kontoebene ergänzt.</div>'});
     renderModal(); return;
   }
+  if (action === 'kf-manage-world') { void kf030ManageWorld(actionEl.getAttribute('data-world-id')||''); return; }
+  if (action === 'kf-transfer-admin') { void kf030TransferAdmin(actionEl.getAttribute('data-world-id')||'',actionEl.getAttribute('data-user-id')||''); return; }
   if (action === 'kf-review-applications') { void kf030ReviewApplications(actionEl.getAttribute('data-world-id')||''); return; }
   if (action === 'kf-application-decision') { void kf030DecideApplication(actionEl.getAttribute('data-world-id')||'',actionEl.getAttribute('data-user-id')||'',actionEl.getAttribute('data-decision')||''); return; }
   if (action === 'kf-join-world') { void kf030JoinWorld(actionEl.getAttribute('data-world-id')||''); return; }
