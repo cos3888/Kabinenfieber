@@ -1,7 +1,7 @@
 'use strict';
 
 const { DomainRuleError } = require('../persistence/errors');
-const { ensureWorldMembershipRoles, activeMemberships, membershipForUser, createMembershipForUser, removeMembershipForUser } = require('../domain/world-memberships');
+const { ensureWorldMembershipRoles, activeMemberships, membershipForUser, createMembershipForUser, removeMembershipForUser, setWorldMembershipRole, ROLE_WORLD_ADMIN } = require('../domain/world-memberships');
 const { MAX_WORLD_SLOTS, MAX_ACTIVE_WORLDS_PER_USER } = require('../persistence/file-metadata-repository');
 const { normalizeWorldName, normalizeWorldDescription, normalizeStartVariant, normalizeWorldAccess } = require('../domain/world-metadata');
 
@@ -117,6 +117,9 @@ class WorldSessionService {
         maxParticipants: (((record.gameState || {}).clubs || {}).order || []).length,
         mine: Boolean(membership),
         membership: membership ? clone(membership) : null,
+        membershipClubName: membership && membership.clubId && record.gameState && record.gameState.clubs && record.gameState.clubs.byId && record.gameState.clubs.byId[membership.clubId]
+          ? record.gameState.clubs.byId[membership.clubId].name
+          : null,
         applicationStatus: application && application.status || null,
         openApplicationCount: openApplications.length,
         canJoin: !membership && meta.visibility === 'PUBLIC' && meta.joinPolicy === 'OPEN',
@@ -187,6 +190,23 @@ class WorldSessionService {
       await this.metadata.removeParticipationIndex({ worldId, userId: applicantUserId }).catch(() => {});
       throw error;
     }
+  }
+
+  async listMembers({ actorUserId, worldId }) {
+    const record = await this.worlds.loadWorldRecord(worldId);
+    const actor = membershipForUser(record, actorUserId);
+    if (!actor || actor.role !== ROLE_WORLD_ADMIN) throw new DomainRuleError('Only a world admin may manage members');
+    return activeMemberships(record).map(clone);
+  }
+
+  async transferAdmin({ actorUserId, targetUserId, worldId }) {
+    const manifest = await this.worlds.getManifest(worldId);
+    if (!manifest) throw new DomainRuleError('World is not initialized');
+    const record = await this.worlds.loadWorldRecord(worldId);
+    setWorldMembershipRole(record, { actorUserId, targetUserId, role: ROLE_WORLD_ADMIN });
+    const committed = await this.worlds.commitWorldRecord({ worldRecord: record, expectedRevision: manifest.revision });
+    await this.runtime.unloadWorld(worldId);
+    return { revision:Number(committed.revision), transferredToUserId:targetUserId };
   }
 
   async leaveWorld({ userId, worldId }) {
