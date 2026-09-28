@@ -87,7 +87,7 @@ function block(a,b){
 
   check('Repeated takeover click is guarded while commit is pending',
     action.includes("KF029Remote.checkpointReason === 'take-over-club'")&&
-    app.includes("takeoverBusy ? ' disabled aria-disabled=\"true\"'"));
+    app.includes("(takeoverBusy || !selectedClub) ? ' disabled aria-disabled=\"true\"'"));
 
   check('Current cache busting and service build are current',
     app.includes("var KF_VERSION = '0.30.0';")&&
