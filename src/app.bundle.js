@@ -25010,7 +25010,7 @@ function kf030FilteredWorlds(){
 }
 function kf030WorldStatus(world){
   if(world.isMember){
-    if(world.membership && world.membership.clubId) return 'Verein '+world.membership.clubId;
+    if(world.membership && world.membership.clubId) return world.clubName || ('Verein '+world.membership.clubId);
     return world.isAdmin ? 'Admin · Verein wählen' : 'Mitglied · Verein wählen';
   }
   if(world.applicationStatus==='PENDING')return 'Bewerbung läuft';
@@ -25120,7 +25120,7 @@ renderStartView = function(){
     }
     return '<tr><td>#'+escapeHtml(String(world.slotId).padStart(3,'0'))+'</td>'+
       '<td><strong>'+escapeHtml(world.worldName||('Welt '+world.slotId))+'</strong><small>'+escapeHtml(world.description||'Keine Beschreibung')+'</small></td>'+
-      '<td>'+escapeHtml(world.currentSeason||1)+'</td><td>'+escapeHtml(world.participantCount||0)+'</td>'+
+      '<td>'+escapeHtml(world.currentSeason||1)+'</td><td>'+escapeHtml(world.participantCount||0)+'/'+escapeHtml(world.maxPlayers||'—')+'</td>'+
       '<td>'+escapeHtml(kf029WorldPolicyLabel(world))+'</td><td>'+escapeHtml(kf030WorldStatus(world))+'</td>'+
       '<td><div class="kf-world-actions"><button class="primary-btn" type="button" data-action="'+actionName+'" data-world-id="'+escapeHtml(world.worldId)+'"'+(disabled?' disabled aria-disabled="true"':'')+'>'+escapeHtml(action)+'</button>'+secondary+'</div></td></tr>';
   }).join('');
