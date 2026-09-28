@@ -75,6 +75,20 @@ class FirestoreMetadataRepository {
     return row;
   }
 
+  async listApplicationsForWorld(worldId) {
+    const snap = await this.db.collection(this.names.applications).where('worldId', '==', worldId).where('status', '==', 'OPEN').get();
+    return snap.docs.map(doc => doc.data());
+  }
+
+  async setApplicationStatus({ worldId, userId, status }) {
+    const ref = this._application(worldId, userId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new PersistenceNotFoundError('Application not found', { worldId, userId });
+    const next = { ...doc.data(), status:String(status), decidedAt:nowIso() };
+    await ref.set(next);
+    return next;
+  }
+
   async getWorld(worldId) {
     const doc = await this._world(worldId).get();
     return doc.exists ? doc.data() : null;
