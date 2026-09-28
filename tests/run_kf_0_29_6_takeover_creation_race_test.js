@@ -8,6 +8,7 @@ const root=path.resolve(__dirname,'..');
 const app=fs.readFileSync(path.join(root,'src','app.bundle.js'),'utf8');
 const index=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const server=fs.readFileSync(path.join(root,'server','index.js'),'utf8');
+const currentVersion=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).version;
 
 const report={version:'0.29.6',passed:true,checks:[]};
 function check(name,ok,details={}){report.checks.push({name,ok:!!ok,details});if(!ok)report.passed=false;}
@@ -90,10 +91,10 @@ function block(a,b){
     app.includes("(takeoverBusy || !selectedClub) ? ' disabled aria-disabled=\"true\"'"));
 
   check('Current cache busting and service build are compatible with the 0.29.6 takeover regression',
-    app.includes("var KF_VERSION = '0.30.1';")&&
-    index.includes('KF_0.30.1')&&
-    index.includes('app.bundle.js?v=0.30.1')&&
-    server.includes("const SERVICE_VERSION = '0.30.1';")&&
+    app.includes("var KF_VERSION = '"+currentVersion+"';")&&
+    index.includes('KF_'+currentVersion)&&
+    index.includes('app.bundle.js?v='+currentVersion)&&
+    server.includes("const SERVICE_VERSION = '"+currentVersion+"';")&&
     server.includes("const API_VERSION = '0.30.0';"));
 
   console.log(JSON.stringify(report,null,2));
