@@ -351,8 +351,45 @@ class WorldSessionService {
     return this.runtime.loadMatchDetail({ userId, worldId, matchId });
   }
 
-  async saveWorld({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents }) {
-    return this.runtime.saveSnapshot({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents });
+  async saveWorld({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents, progressLeaseId = null }) {
+    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    let allowMultiplayerProgress = false;
+    if (progressLeaseId) {
+      const state = await this.metadata.getWorldProgression(worldId);
+      if (!state ||
+          Number(state.revision) !== Number(expectedRevision) ||
+          state.status !== 'PROCESSING' ||
+          String(state.leaseId || '') !== String(progressLeaseId)) {
+        throw new DomainRuleError('Progression lease mismatch');
+      }
+      allowMultiplayerProgress = true;
+    } else if (activeUserIds.length > 1) {
+      throw new DomainRuleError('Multiplayer snapshot progress requires a progress lease');
+    }
+
+    try {
+      const result = await this.runtime.saveSnapshot({
+        userId, worldId, worldRecord, expectedRevision, matches, financeEvents, allowMultiplayerProgress
+      });
+      if (progressLeaseId) {
+        await this.metadata.completeWorldProgress({
+          worldId,
+          expectedRevision:Number(expectedRevision),
+          nextRevision:Number(result.revision),
+          leaseId:progressLeaseId
+        }).catch(() => {});
+      }
+      return result;
+    } catch (error) {
+      if (progressLeaseId) {
+        await this.metadata.releaseWorldProgress({
+          worldId,
+          expectedRevision:Number(expectedRevision),
+          leaseId:progressLeaseId
+        }).catch(() => {});
+      }
+      throw error;
+    }
   }
 
   async saveSlot({ userId, worldId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches, financeEvents, progressLeaseId = null }) {
