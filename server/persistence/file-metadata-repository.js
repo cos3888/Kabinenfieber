@@ -99,6 +99,8 @@ class FileMetadataRepository {
       if (world.visibility !== 'PUBLIC' || world.joinPolicy !== 'APPLICATION') throw new DomainRuleError('World does not accept applications');
       const participant = data.participationIndex[participationKey(worldId, userId)];
       if (participant && participant.status === STATUS_ACTIVE) throw new DomainRuleError('User already participates in this world');
+      const active = Object.values(data.participationIndex).filter(p => p.userId === userId && p.status === STATUS_ACTIVE);
+      if (active.length >= MAX_ACTIVE_WORLDS_PER_USER) throw new DomainRuleError('User already participates in five active worlds');
       const key = applicationKey(worldId, userId);
       const existing = data.applications[key];
       if (existing && existing.status === 'OPEN') return existing;
