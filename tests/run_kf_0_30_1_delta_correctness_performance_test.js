@@ -3,6 +3,7 @@
 const fs=require('fs/promises');
 const path=require('path');
 const os=require('os');
+const vm=require('vm');
 const { LocalObjectStore }=require('../server/persistence/local-object-store');
 const { FileMetadataRepository }=require('../server/persistence/file-metadata-repository');
 const { WorldPersistenceService }=require('../server/persistence/world-persistence-service');
@@ -102,10 +103,41 @@ function makeWorldRecord(worldId,userId){
   const app=await fs.readFile(path.join(__dirname,'..','src','app.bundle.js'),'utf8');
   const runtimeCode=await fs.readFile(path.join(__dirname,'..','server','services','world-runtime-manager.js'),'utf8');
 
-  check('Match delta filters ids before loading full match payloads',
-    app.includes('CurrentSeasonMatchRepository.listIds(world, season)')&&
-    app.includes(".filter(function(id){ return id && !KF029Remote.committedMatchIds[String(id)]; })")&&
-    app.includes(".map(function(id){ return CurrentSeasonMatchRepository.load(world, id, season); })"));
+  function extractFunction(source,name){
+    const start=source.indexOf('function '+name+'(');
+    if(start<0)throw new Error('Missing function '+name);
+    const bodyStart=source.indexOf('{',start);
+    let depth=0;
+    for(let i=bodyStart;i<source.length;i++){
+      if(source[i]==='{')depth+=1;
+      else if(source[i]==='}'){
+        depth-=1;
+        if(depth===0)return source.slice(start,i+1);
+      }
+    }
+    throw new Error('Unclosed function '+name);
+  }
+
+  const ids=Array.from({length:1300},(_,i)=>'match-'+String(i+1));
+  let loadCount=0;
+  const matchContext={
+    AppState:{world:{meta:{seasonNumber:1}}},
+    KF029Remote:{committedMatchIds:{}},
+    CurrentSeasonMatchRepository:{
+      listIds:()=>ids.slice(),
+      load:(world,id,season)=>{loadCount+=1;return {id,season};}
+    }
+  };
+  vm.createContext(matchContext);
+  vm.runInContext(extractFunction(app,'kf029PendingMatches'),matchContext);
+  ids.forEach(id=>{matchContext.KF029Remote.committedMatchIds[id]=1;});
+  const none=matchContext.kf029PendingMatches();
+  check('1300 committed matches require zero full-match loads',none.length===0&&loadCount===0,{pending:none.length,loadCount});
+
+  loadCount=0;
+  ids.slice(1084).forEach(id=>{delete matchContext.KF029Remote.committedMatchIds[id];});
+  const pending216=matchContext.kf029PendingMatches();
+  check('216 uncommitted matches require exactly 216 full-match loads',pending216.length===216&&loadCount===216,{pending:pending216.length,loadCount});
 
   check('Finance committed state uses season club id identity plus content signature',
     app.includes('function kf0301FinanceCommitKey(row)')&&
