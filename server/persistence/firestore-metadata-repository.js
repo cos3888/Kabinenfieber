@@ -192,11 +192,13 @@ class FirestoreMetadataRepository {
       .filter(world => world.visibility === 'PUBLIC' || (participationByWorld[world.worldId] || []).some(row => String(row.userId) === String(userId)))
       .map(world => {
         const participants = participationByWorld[world.worldId] || [];
+        const mineRow = participants.find(row => String(row.userId) === String(userId)) || null;
         const application = applications[world.worldId] || null;
         return {
           ...world,
           participantCount: participants.length,
-          isMember: participants.some(row => String(row.userId) === String(userId)),
+          isMember: Boolean(mineRow),
+          membership: mineRow || null,
           applicationStatus: application ? application.status : null
         };
       })
