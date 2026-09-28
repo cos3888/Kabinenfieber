@@ -93,20 +93,22 @@ function makeWorldRecord(worldId,userId){
     matchdayReloadedOnB.revision===matchdaySaved.revision,
     {before:staleBeforeMatchdayReload,afterRevision:matchdayReloadedOnB.revision,expectedRevision:matchdaySaved.revision});
 
-  check('Played matchday reload is revision-coherent across WorldRecord, membership, matches and finances',
+  const lazyMatchdayMatch=await sessionsB.loadMatchDetail({userId,worldId,matchId:fullMatch.id});
+  check('Played matchday reload is revision-coherent across WorldRecord, lazy match detail and finances',
     matchdayReloadedOnB.membership.clubId==='club-a'&&
     matchdayReloadedOnB.worldRecord.gameState.calendar.currentSlotKey==='w2-end'&&
     matchdayReloadedOnB.worldRecord.gameState.calendar.fixtures[0].status==='played'&&
     matchdayReloadedOnB.worldRecord.gameState.history.matches.length===1&&
-    matchdayReloadedOnB.matches.length===1&&matchdayReloadedOnB.matches[0].id===fullMatch.id&&
+    matchdayReloadedOnB.matches.length===0&&lazyMatchdayMatch&&lazyMatchdayMatch.id===fullMatch.id&&
     matchdayReloadedOnB.financeEvents.length===1&&matchdayReloadedOnB.financeEvents[0].id===financeEvent.id);
 
   const manifest=await worlds.getManifest(worldId);
   const directSnapshot=await worlds.loadRuntimeSnapshot(worldId,manifest);
-  check('Direct runtime snapshot uses one committed manifest for all current truths',
+  const directLazyMatch=await worlds.loadMatchDetail(worldId,fullMatch.id);
+  check('Direct runtime snapshot uses one committed manifest while full matches remain lazy',
     directSnapshot.manifest.revision===matchdaySaved.revision&&
     directSnapshot.worldRecord.gameState.calendar.currentSlotKey==='w2-end'&&
-    directSnapshot.matches.length===1&&directSnapshot.financeEvents.length===1,
+    directSnapshot.matches.length===0&&directLazyMatch&&directLazyMatch.id===fullMatch.id&&directSnapshot.financeEvents.length===1,
     {revision:directSnapshot.manifest.revision,currentSeason:directSnapshot.currentSeason});
 
   console.log(JSON.stringify(report,null,2));
