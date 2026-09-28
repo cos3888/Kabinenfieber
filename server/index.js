@@ -404,6 +404,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const releaseProgressWorldId = worldIdFromPath(pathname, '/progression/release');
+    if (req.method === 'POST' && releaseProgressWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const progression = await persistence.worldSessions.releaseProgress({
+        userId:auth.user.userId,
+        worldId:releaseProgressWorldId,
+        expectedRevision:body.expectedRevision,
+        leaseId:body.leaseId
+      });
+      await sendJson(req, res, 200, { ok:true, progression });
+      return;
+    }
+
     const matchDetailRoute = pathname.match(/^\/api\/v1\/worlds\/([^/]+)\/matches\/([^/]+)$/);
     if (req.method === 'GET' && matchDetailRoute) {
       const auth = await requireAuth(req);
