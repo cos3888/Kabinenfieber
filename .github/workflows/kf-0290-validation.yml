@@ -9,6 +9,7 @@ on:
       - kf-0.30.0-start-lobby-world-lifecycle
       - kf-0.30.1-performance-delta-correctness
       - kf-0.31.0-authoritative-persistence-progression
+      - kf-0.31.0-authoritative-persistence-progression
 concurrency:
   group: kf029-validation
   cancel-in-progress: true
@@ -28,6 +29,7 @@ jobs:
       - run: npm run test:0293
       - run: npm run test:0300
       - run: npm run test:0301
+      - run: npm run test:0310
       - run: npm run test:0310
       - run: npm test -- --full
       - run: node --check server/index.js
