@@ -35,6 +35,7 @@ function block(a,b){
       revision:null,
       message:''
     },
+    KF029_REMOTE_CONTRACT_VERSION:'0.29.5',
     renderApp:()=>{},
     encodeURIComponent,
     kf029Request:async (url,options)=>{
