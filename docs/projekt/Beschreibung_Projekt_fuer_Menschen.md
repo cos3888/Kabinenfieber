@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.30.1
+# Kabinenfieber - Stand KF_0.31.0
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.30.1`
+App-Version: `KF_0.31.0`
 
 Persistierte Schemas:
 
@@ -16,6 +16,87 @@ Persistierte Schemas:
 - WorldRecord: `kf-world-record-0.27.2`
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
+
+
+
+## KF_0.31.0 – Authoritative Persistence & Progression Foundation
+
+KF_0.31.0 beseitigt den monolithischen Slot-Save als dominanten Performanceengpass und legt die transaktionsfaehige Grundlage fuer gemeinsamen Multiplayer-Fortschritt. Die Fussballsimulation selbst, Matchlogik und fachliche Ergebnisentstehung bleiben unveraendert.
+
+### Speichern
+
+Normale Kalender-/Spieltag-Checkpoints senden nicht mehr den kompletten `WorldRecord`. Der Browser haelt einen Snapshot des zuletzt serverbestaetigten `gameState` und erzeugt daraus ein validiertes `kf-world-delta-0.31.0`.
+
+Der Delta-Vertrag:
+- darf ausschliesslich Pfade unter `gameState` aendern;
+- darf keine Membership-, World-ID- oder Auth-Wahrheit ueberschreiben;
+- wird serverseitig validiert und auf die autoritative Runtime angewendet;
+- wird als eigenes gzip-Objekt im Revisionsbereich gespeichert;
+- wird im Manifest ueber `worldDeltaPaths` in Commit-Reihenfolge referenziert.
+
+Ein normaler Slot schreibt damit:
+- World-Delta;
+- neue/veraenderte Matchdetails;
+- neue/veraenderte FinanceEvents;
+- anschliessend atomar den neuen Manifeststand.
+
+Vollsnapshots bleiben fuer Welterstellung, Saisonwechsel, Migration und Kompaktierung erhalten. Bei einem solchen Snapshot werden vorherige Delta-Pfade verworfen und der neue Snapshot wird wieder Basis der Welt.
+
+Persistenzschema Object Store: `kf-storage-0.31.0`.
+
+### Laden
+
+Cold Load rekonstruiert den aktuellen WorldRecord aus:
+`Basis-WorldRecord + worldDeltaPaths`.
+
+Vollmatches der laufenden Saison werden beim Weltstart nicht mehr komplett geladen oder uebertragen. Das Manifest pflegt einen kleinen `matchIndex` von Match-ID auf Segmentpfad. Erst beim Oeffnen einer Spielinfo wird genau das benoetigte Vollmatch ueber einen autorisierten Match-Endpunkt geladen.
+
+FinanceEvents werden in diesem Block beim Cold Load weiterhin rekonstruiert, weil laufende Finanzlogik, Bonus-Idempotenz und fortgeschriebene Events wie `salaryExpenseSeason` derzeit noch den aktuellen Ledgerzustand benoetigen. Eine spaetere Finance-Lazy-Stufe darf erst erfolgen, wenn dafuer ein fachlich vollstaendiger kompakter Sync-State existiert.
+
+### Lobby
+
+Die Lobby liest keine kompletten WorldRecords mehr. Firestore/File-Metadata enthalten eine kleine abgeleitete Lobby-Projektion:
+- aktuelle Saison;
+- maximale Trainer-/Vereinskapazitaet;
+- Clubnamen fuer die Anzeige;
+- Trainer-ID;
+- Club-ID;
+- Rolle;
+- Anzeigename.
+
+Diese Projektion ist keine zweite fachliche Wahrheit. Die kanonische Membership bleibt im WorldRecord; die Projektion dient nur der schnellen Lobbydarstellung und kann aus der Welt rekonstruiert werden.
+
+### Multiplayer-Progression
+
+Ready-/Countdown-Zustand liegt ausserhalb des grossen WorldRecords in einer kleinen transaktionsfaehigen Progression-Entitaet:
+- `revision`;
+- `readyUserIds`;
+- `deadlineAt`;
+- `status`;
+- `leaseId`;
+- `leaseExpiresAt`.
+
+Der erste Ready-Klick setzt die Deadline. Weitere Klicks fuegen nur Ready-IDs hinzu. Sind alle aktiven Trainer bereit oder ist die Deadline erreicht, kann genau eine Transaktion die Progress-Lease beanspruchen. Nur der Lease-Inhaber darf in einer Mehrspielerwelt den Slot committen. Nach erfolgreichem Commit wird der Progressionszustand auf die neue Revision zurueckgesetzt.
+
+Der aktuelle Browser pollt waehrend des Wartens klein gegen den Ready-Endpunkt und zeigt `x/y Trainer bereit · mm:ss`. Damit funktioniert Countdown-Fortschritt, solange mindestens ein beteiligter Browser aktiv ist. Ein serverseitiger Hintergrundtrigger fuer Welten ohne aktive Clients ist in KF_0.31.0 noch nicht Bestandteil der Umsetzung und muss vor dem vollstaendigen asynchronen Multiplayerbetrieb ergaenzt werden.
+
+### Zentrale Datenquellen
+
+- aktuelle Spieler: `world.players.byId`
+- Kader/Aufstellung/Taktik: `world.squads`
+- Spielplan/Status: `world.calendar`
+- kompakte laufende Matchergebnisse: `world.history.matches`
+- Vollmatches: CurrentSeasonMatchRepository/GCS-Segmente
+- kompakter Finanzzustand: `world.clubFinances.byClub`
+- Finance-Ledger: CurrentSeasonFinanceRepository/GCS-Segmente
+- Membership-Wahrheit: `WorldRecord.memberships`
+- Lobby-Projektion: Metadata Repository, abgeleitet
+- Ready/Deadline/Lease: Metadata Repository/Firestore Progression
+- Regeln/Texte: `StaticData`
+
+Doppelte fachliche Datenhaltung entsteht nicht. World-Deltas, Lobby-Projektionen, MatchIndex und Client-Sync-Indizes sind technische Persistenz-/Zugriffsstrukturen und keine eigene fachliche Wahrheit.
+
+Pflichtregression: `tests/run_kf_0_31_0_authoritative_persistence_progression_test.js` plus komplette bisherige Regression-Suite.
 
 
 ## KF_0.30.1 – Delta-Korrektheit & Match-Delta-Performance
