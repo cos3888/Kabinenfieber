@@ -175,7 +175,7 @@ class WorldSessionService {
     await this.metadata.addParticipationIndex({ worldId, userId, joinedAt });
     try {
       const next = await this.worlds.commitWorldRecord({ worldRecord:record, expectedRevision:manifest.revision });
-      await this._syncParticipationProjection(worldId, record.memberships.byTrainerId[trainerId]);
+      await this._syncParticipationProjection(worldId, record.memberships.byTrainerId[trainerId]).catch(() => {});
       await this.runtime.unloadWorld(worldId);
       return { revision:Number(next.revision), currentSeason:Number(next.currentSeason || manifest.currentSeason || 1), membership:clone(record.memberships.byTrainerId[trainerId]) };
     } catch (error) {
@@ -224,7 +224,7 @@ class WorldSessionService {
     await this.metadata.addParticipationIndex({ worldId, userId:applicantUserId, joinedAt });
     try {
       const next=await this.worlds.commitWorldRecord({ worldRecord:record, expectedRevision:manifest.revision });
-      await this._syncParticipationProjection(worldId, record.memberships.byTrainerId[trainerId]);
+      await this._syncParticipationProjection(worldId, record.memberships.byTrainerId[trainerId]).catch(() => {});
       await this.metadata.resolveWorldApplication({ worldId, userId:applicantUserId, status:'ACCEPTED', resolvedByUserId:actorUserId });
       await this.runtime.unloadWorld(worldId);
       return { revision:Number(next.revision), membership:clone(record.memberships.byTrainerId[trainerId]) };
@@ -269,7 +269,7 @@ class WorldSessionService {
     }
     if (transferAdminToUserId) {
       const target = activeMemberships(record).find(row => String(row.userProfileId) === String(transferAdminToUserId));
-      if (target) await this._syncParticipationProjection(worldId, target);
+      if (target) await this._syncParticipationProjection(worldId, target).catch(() => {});
     }
     await this.runtime.unloadWorld(worldId);
     return { deleted:false, revision:Number(next.revision) };
@@ -371,6 +371,7 @@ class WorldSessionService {
       const result = await this.runtime.saveSnapshot({
         userId, worldId, worldRecord, expectedRevision, matches, financeEvents, allowMultiplayerProgress
       });
+      await this._syncLobbyProjection(worldRecord).catch(() => {});
       if (progressLeaseId) {
         await this.metadata.completeWorldProgress({
           worldId,
@@ -429,7 +430,7 @@ class WorldSessionService {
 
   async assignClub({ userId, worldId, clubId, expectedRevision }) {
     const result = await this.runtime.assignClub({ userId, worldId, clubId, expectedRevision });
-    await this._syncParticipationProjection(worldId, result.membership);
+    await this._syncParticipationProjection(worldId, result.membership).catch(() => {});
     return result;
   }
 }
