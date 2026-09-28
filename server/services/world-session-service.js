@@ -1,9 +1,9 @@
 'use strict';
 
 const { DomainRuleError } = require('../persistence/errors');
-const { ensureWorldMembershipRoles, activeMemberships, membershipForUser } = require('../domain/world-memberships');
-const { MAX_WORLD_SLOTS } = require('../persistence/file-metadata-repository');
-const { normalizeWorldName, normalizeWorldAccess } = require('../domain/world-metadata');
+const { ensureWorldMembershipRoles, activeMemberships, membershipForUser, createMembershipForUser, removeMembershipForUser } = require('../domain/world-memberships');
+const { MAX_WORLD_SLOTS, MAX_ACTIVE_WORLDS_PER_USER } = require('../persistence/file-metadata-repository');
+const { normalizeWorldName, normalizeWorldDescription, normalizeStartVariant, normalizeWorldAccess } = require('../domain/world-metadata');
 
 function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
 
@@ -37,6 +37,8 @@ class WorldSessionService {
         return await this.metadata.createWorldRegistration({
           slotId, worldId, createdByUserId: userId, createdAt,
           worldName: worldMetadata.worldName,
+          description: worldMetadata.description,
+          startVariant: worldMetadata.startVariant,
           visibility: worldMetadata.visibility,
           joinPolicy: worldMetadata.joinPolicy
         });
@@ -50,11 +52,15 @@ class WorldSessionService {
     throw new DomainRuleError('No free world slot available');
   }
 
-  async createWorld({ userId, worldRecord, worldName, visibility, joinPolicy, matches = [], financeEvents = [] }) {
+  async createWorld({ userId, worldRecord, worldName, description, startVariant, visibility, joinPolicy, matches = [], financeEvents = [] }) {
     const record = this._prepareInitialWorld(worldRecord, userId);
     const access = normalizeWorldAccess({ visibility, joinPolicy });
+    const normalizedStartVariant = normalizeStartVariant(startVariant || (record.creationRules && record.creationRules.startVariant));
+    record.creationRules = { ...(record.creationRules || {}), startVariant: normalizedStartVariant };
     const worldMetadata = {
       worldName: normalizeWorldName(worldName),
+      description: normalizeWorldDescription(description),
+      startVariant: normalizedStartVariant,
       visibility: access.visibility,
       joinPolicy: access.joinPolicy
     };
@@ -81,26 +87,99 @@ class WorldSessionService {
   }
 
   async listWorlds(userId) {
-    const ids = await this.metadata.listActiveWorldIdsForUser(userId);
+    const registrations = await this.metadata.listVisibleWorldRegistrations(userId);
+    const activeIds = await this.metadata.listActiveWorldIdsForUser(userId);
+    const activeSet = new Set(activeIds.map(String));
     const worlds = [];
-    for (const worldId of ids) {
-      const [meta, manifest] = await Promise.all([
-        this.metadata.getWorld(worldId),
-        this.worlds.getManifest(worldId)
-      ]);
-      if (!meta || meta.status !== 'ACTIVE' || !manifest) continue;
+    for (const meta of registrations) {
+      const worldId = meta.worldId;
+      const manifest = await this.worlds.getManifest(worldId);
+      if (!manifest) continue;
+      const record = await this.worlds.loadWorldRecord(worldId);
+      const members = activeMemberships(record);
+      const membership = membershipForUser(record, userId);
+      const application = membership ? null : await this.metadata.getApplication(worldId, userId);
       worlds.push({
         worldId,
         slotId: meta.slotId,
         worldName: meta.worldName || `Welt ${meta.slotId}`,
+        description: meta.description || '',
+        startVariant: meta.startVariant || ((record.creationRules || {}).startVariant) || 'classic',
         visibility: meta.visibility || 'PRIVATE',
         joinPolicy: meta.joinPolicy || 'INVITE_ONLY',
         createdAt: meta.createdAt,
         revision: Number(manifest.revision),
-        currentSeason: Number(manifest.currentSeason || 1)
+        currentSeason: Number(manifest.currentSeason || 1),
+        participantCount: members.length,
+        maxParticipants: (((record.gameState || {}).clubs || {}).order || []).length,
+        mine: Boolean(membership),
+        membership: membership ? clone(membership) : null,
+        applicationStatus: application && application.status || null,
+        canJoin: !membership && meta.visibility === 'PUBLIC' && meta.joinPolicy === 'OPEN',
+        canApply: !membership && meta.visibility === 'PUBLIC' && meta.joinPolicy === 'APPLICATION' && !(application && application.status === 'OPEN')
       });
     }
-    return worlds.sort((a, b) => Number(a.slotId) - Number(b.slotId));
+    return {
+      worlds: worlds.sort((a, b) => Number(a.slotId) - Number(b.slotId)),
+      activeWorldCount: activeSet.size,
+      maxActiveWorlds: MAX_ACTIVE_WORLDS_PER_USER
+    };
+  }
+
+  async joinWorld({ userId, displayName, worldId }) {
+    const meta = await this.metadata.getWorld(worldId);
+    if (!meta || meta.status !== 'ACTIVE') throw new DomainRuleError('World is not active');
+    if (meta.visibility !== 'PUBLIC' || meta.joinPolicy !== 'OPEN') throw new DomainRuleError('World does not allow direct joining');
+    const participation = await this.metadata.getParticipation(worldId, userId);
+    if (participation && participation.status === 'ACTIVE') throw new DomainRuleError('User already participates in this world');
+    await this.metadata.addParticipationIndex({ worldId, userId });
+    try {
+      const manifest = await this.worlds.getManifest(worldId);
+      const record = await this.worlds.loadWorldRecord(worldId);
+      const membership = createMembershipForUser(record, { userId, displayName });
+      const committed = await this.worlds.commitWorldRecord({ worldRecord: record, expectedRevision: manifest.revision });
+      await this.runtime.unloadWorld(worldId);
+      return { membership: clone(membership), revision: Number(committed.revision), currentSeason: Number(committed.currentSeason || manifest.currentSeason || 1) };
+    } catch (error) {
+      await this.metadata.removeParticipationIndex({ worldId, userId }).catch(() => {});
+      throw error;
+    }
+  }
+
+  async applyToWorld({ userId, displayName, worldId }) {
+    return this.metadata.createApplication({ worldId, userId, displayName });
+  }
+
+  async leaveWorld({ userId, worldId }) {
+    const manifest = await this.worlds.getManifest(worldId);
+    if (!manifest) throw new DomainRuleError('World is not initialized');
+    const record = await this.worlds.loadWorldRecord(worldId);
+    const active = activeMemberships(record);
+    const membership = membershipForUser(record, userId);
+    if (!membership) throw new DomainRuleError('User is not a member of this world');
+    if (active.length === 1) {
+      return this.deleteWorld({ userId, worldId, allowLastParticipant: true });
+    }
+    removeMembershipForUser(record, userId);
+    const committed = await this.worlds.commitWorldRecord({ worldRecord: record, expectedRevision: manifest.revision });
+    await this.metadata.removeParticipationIndex({ worldId, userId });
+    await this.runtime.unloadWorld(worldId);
+    return { deleted: false, left: true, revision: Number(committed.revision) };
+  }
+
+  async deleteWorld({ userId, worldId, allowLastParticipant = false }) {
+    const meta = await this.metadata.getWorld(worldId);
+    if (!meta || meta.status !== 'ACTIVE') throw new DomainRuleError('World is not active');
+    const record = await this.worlds.loadWorldRecord(worldId);
+    const membership = membershipForUser(record, userId);
+    if (!membership) throw new DomainRuleError('User is not a member of this world');
+    const members = activeMemberships(record);
+    if (!allowLastParticipant && membership.role !== 'WORLD_ADMIN') throw new DomainRuleError('Only a world admin may delete the world');
+    if (allowLastParticipant && members.length !== 1) throw new DomainRuleError('World still has other participants');
+    await this.runtime.unloadWorld(worldId);
+    await this.worlds.deleteWorld(worldId);
+    await this.metadata.deleteWorldRegistration({ worldId });
+    return { deleted: true, worldId };
   }
 
   async openWorld({ userId, worldId }) {
