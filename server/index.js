@@ -469,7 +469,8 @@ const server = http.createServer(async (req, res) => {
         worldRecord: body.worldRecord,
         expectedRevision: body.expectedRevision,
         matches: body.matches || [],
-        financeEvents: body.financeEvents || []
+        financeEvents: body.financeEvents || [],
+        progressLeaseId: body.progressLeaseId || null
       });
       await sendJson(req, res, 200, { ok: true, ...result });
       return;
