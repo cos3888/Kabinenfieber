@@ -139,6 +139,44 @@ function slotDelta(worldId){
       Number(progression.revision)===Number(mpSaved.revision)&&progression.status==='WAITING'&&(progression.readyUserIds||[]).length===0,
       {progression,mpSaved});
 
+    const nextReadyResults=await Promise.all([
+      sessions.markReady({userId:'uA',worldId:mpWorld,expectedRevision:mpSaved.revision}),
+      sessions.markReady({userId:'uB',worldId:mpWorld,expectedRevision:mpSaved.revision})
+    ]);
+    const nextWinner=nextReadyResults.find(row=>row.shouldAdvance);
+    const nextWinningUser=nextReadyResults[0].shouldAdvance?'uA':'uB';
+    const seasonRecord=JSON.parse(JSON.stringify((await sessions.openWorld({userId:'uA',worldId:mpWorld})).worldRecord));
+    seasonRecord.gameState.meta.seasonNumber=2;
+    seasonRecord.gameState.calendar.currentSlotKey='season-2-start';
+
+    let unleasedSnapshotError=null;
+    try {
+      await sessions.saveWorld({
+        userId:'uA',worldId:mpWorld,worldRecord:seasonRecord,expectedRevision:mpSaved.revision,
+        matches:[],financeEvents:[]
+      });
+    } catch(error) {
+      unleasedSnapshotError=error;
+    }
+    check('Multiplayer full snapshot remains blocked without a progress lease',
+      !!unleasedSnapshotError&&/progress lease/i.test(String(unleasedSnapshotError.message||'')),
+      {error:unleasedSnapshotError&&unleasedSnapshotError.message});
+
+    const seasonSaved=await sessions.saveWorld({
+      userId:nextWinningUser,worldId:mpWorld,worldRecord:seasonRecord,expectedRevision:mpSaved.revision,
+      matches:[],financeEvents:[],progressLeaseId:nextWinner.leaseId
+    });
+    await runtime.unloadWorld(mpWorld);
+    const afterSeason=await sessions.openWorld({userId:'uA',worldId:mpWorld});
+    const seasonProgression=await sessions.getProgression({userId:'uB',worldId:mpWorld});
+    check('Lease-authorized multiplayer season snapshot preserves memberships and completes progression',
+      Number(seasonSaved.revision)===Number(mpSaved.revision)+1&&
+      afterSeason.worldRecord.gameState.meta.seasonNumber===2&&
+      afterSeason.worldRecord.memberships.order.length===2&&
+      Number(seasonProgression.revision)===Number(seasonSaved.revision)&&
+      seasonProgression.status==='WAITING',
+      {seasonSaved,seasonProgression,memberships:afterSeason.worldRecord.memberships.order});
+
     report.metrics={fullBytes,deltaBytes,deltaRatio:deltaBytes/fullBytes,revision:saved.revision};
   }finally{
     await fs.rm(root,{recursive:true,force:true});
