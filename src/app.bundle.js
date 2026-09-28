@@ -24706,6 +24706,18 @@ function kf031ProgressMessage(state){
   if (state.status==='PROCESSING') return 'Spieltag wird von einem Trainer verarbeitet ...';
   return String(ready)+'/'+String(total||'?')+' Trainer bereit'+suffix;
 }
+async function kf031ReleaseProgressLease(worldId, expectedRevision, leaseId){
+  if (!worldId || !leaseId) return null;
+  try {
+    return await kf029Request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/progression/release',{
+      method:'POST',
+      body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION,expectedRevision:expectedRevision,leaseId:leaseId}
+    });
+  } catch (error) {
+    return null;
+  }
+}
+
 async function kf031RequestReadyAndMaybeAdvance(actionEl){
   if (!KF029Remote.user || !AppState.worldRecord || KF029Remote.progressRequestPending) return null;
   KF029Remote.progressRequestPending=true;
@@ -24737,6 +24749,7 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
         KF029Remote.message='Spielstand gespeichert.';
         renderApp();
       } else {
+        await kf031ReleaseProgressLease(record.id, expectedRevision, state.leaseId);
         KF029Remote.progressLeaseId=null;
         KF029Remote.progression=null;
       }
@@ -24753,6 +24766,10 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
       renderApp();
       await kf029LoadWorld(record.id);
       return null;
+    }
+    if (KF029Remote.progressLeaseId) {
+      await kf031ReleaseProgressLease(record && record.id, expectedRevision, KF029Remote.progressLeaseId);
+      KF029Remote.progressLeaseId=null;
     }
     KF029Remote.error='Fortschritt konnte nicht abgestimmt werden: '+(error.message||'Unbekannter Fehler');
     renderApp();
