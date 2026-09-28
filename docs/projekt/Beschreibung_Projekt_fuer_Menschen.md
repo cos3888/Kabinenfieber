@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.29.6
+# Kabinenfieber - Stand KF_0.30.0
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.29.6`
+App-Version: `KF_0.30.0`
 
 Persistierte Schemas:
 
@@ -17,6 +17,62 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.30.0 – Startbereich & Spielwelt-Lobby
+
+KF_0.30.0 schliesst den Weg vom Login bis zum eigentlichen Spiel als zusammenhaengenden Welt-Lifecycle ab. Ausgangspunkt war der Praxistest von KF_0.29.6: Der sechste Testspielstand konnte serverseitig nicht angelegt werden, weil bereits das bestehende Limit von fuenf aktiven Weltteilnahmen griff. Der Browser zeigte dies jedoch erst spaet als scheinbaren Fehler der Vereinsuebernahme; gleichzeitig fehlte eine Moeglichkeit, alte Welten sauber zu verlassen oder zu loeschen.
+
+### Neuer Startfluss
+
+- Einstieg bleibt Login/Registrierung.
+- nach erfolgreichem Login wird direkt die Spielwelt-Lobby angezeigt.
+- die Lobby zeigt Slot, Weltname, Beschreibung, Saison, Teilnehmerzahl, Zugangsmodell, eigenen Status und passende Aktionen.
+- Filter: alle/eigene Welten sowie offen/Bewerbung/Einladung.
+- Aktive Spielwelten x / 5 wird aus dem Participation Index berechnet und nicht separat gespeichert.
+- bei 5/5 kann keine weitere Welt erstellt oder direkt betreten werden.
+- Profil ist als zentrale Kontoebene erreichbar; weitere Profiloptionen koennen dort spaeter ergaenzt werden.
+
+### Weltanlage
+
+- Weltname bleibt Pflicht; neu ist eine optionale Beschreibung bis 200 Zeichen.
+- der aktuell tatsaechlich unterstuetzte Startmodus ist classic. Die UI zeigt deshalb nur Klassisch und behauptet keinen noch nicht verdrahteten Chancengleichheitsmodus.
+- Zugangsmodelle bleiben PUBLIC+OPEN, PUBLIC+APPLICATION und PRIVATE+INVITE_ONLY.
+- der Browser erzeugt weiterhin den initialen WorldRecord lokal, zeigt aber keine Vereinsauswahl, bevor POST /api/v1/worlds serverseitig erfolgreich bestaetigt wurde.
+- bei fehlgeschlagener Anlage bleibt der Spieler in der Lobby; insbesondere wird das 5-Welten-Limit dort erklaert statt spaeter als Takeover-Fehler maskiert.
+
+### Lobby-/Multiplayer-Lifecycle
+
+- GET /api/v1/worlds liefert sichtbare oeffentliche Welten sowie eigene private Welten und zusaetzlich activeWorldCount/maxActiveWorlds.
+- offene Welten koennen direkt betreten werden.
+- Bewerbungswelten erzeugen einen separaten Bewerbungs-Metadatensatz; eine offene Bewerbung zaehlt noch nicht als aktive Weltteilnahme.
+- World-Admins koennen offene Bewerbungen in der Lobby annehmen oder ablehnen.
+- Annahme legt erst dann Participation Index und WorldRecord.memberships an; das 5-Welten-Limit bleibt serverautoritaetiv.
+- normale Teilnehmer koennen Welten verlassen.
+- verlaesst der einzige Teilnehmer eine Welt, wird die Welt vollstaendig geloescht.
+- der letzte Admin einer Welt mit weiteren Teilnehmern darf nicht austreten, bevor Adminrechte an einen anderen Teilnehmer uebertragen wurden.
+- die Admin-Uebergabe ist ueber die Weltverwaltung in der Lobby moeglich.
+
+Beim vollstaendigen Loeschen werden Runtime, der komplette Object-Store-Prefix worlds/<worldId>/, World Registry/Slot, Participation-Indizes, Einladungen und Bewerbungen entfernt. Damit wird auch der belegte Platz im persoenlichen 5-Welten-Limit wieder frei.
+
+### Vereinsauswahl
+
+Das bestehende Layout bleibt erhalten. Bereits von anderen aktiven Menschen gesteuerte Vereine werden aus WorldRecord.memberships abgeleitet, sichtbar als belegt markiert und koennen clientseitig nicht ausgewaehlt werden. Die bestehende serverseitige Konfliktpruefung bleibt zusaetzlich bestehen, damit parallele Auswahlversuche sicher abgefangen werden.
+
+### Datenwahrheit und Versionen
+
+- User/Auth: bestehende Auth-Repositories.
+- Weltname, Beschreibung, Slot, Visibility, JoinPolicy und Bewerbungen: World Registry / Metadata Store.
+- aktive Teilnahmezahl: Participation Index, nur abgeleitet dargestellt.
+- Mitgliedschaft, Rolle und Vereinszuordnung: ausschliesslich WorldRecord.memberships.
+- eigentliche Spielwelt: WorldRecord/Object Store.
+- Runtime ist nur Cache, keine persistente Wahrheit.
+- keine neue doppelte persistente Spielwahrheit.
+- Browser/Service/API-/Remote-Vertrag: 0.30.0.
+- persistierte Schemas bleiben kf-core-0.27.2 und kf-world-record-0.27.2.
+
+Regression: tests/run_kf_0_30_0_world_lobby_lifecycle_test.js prueft Weltanlage, Lobbyzaehler, oeffentliche Sichtbarkeit, direkten Beitritt, getrennte Vereinsuebernahme, Konfliktschutz, Austritt, automatische Loeschung der letzten Teilnahme, Bewerbungsworkflow, Annahme, Admin-Uebergabe und anschliessenden Austritt. Die aktuelle Regression-Suite bindet diesen Test zusaetzlich zu allen bisherigen Kernregressionen ein.
+
+Betrieb: Cloud Run bleibt bis zu einer verteilten Lock-/Lease-Logik auf max instances = 1.
 
 ## KF_0.29.6 – Takeover Creation Race Fix
 
