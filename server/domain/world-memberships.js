@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const { DomainRuleError, PersistenceNotFoundError } = require('../persistence/errors');
 
 const ROLE_PLAYER = 'PLAYER';
@@ -25,6 +26,45 @@ function activeMemberships(worldRecord) {
 
 function membershipForUser(worldRecord, userId) {
   return activeMemberships(worldRecord).find(m => String(m.userProfileId) === String(userId)) || null;
+}
+
+function createMembershipForUser(worldRecord, { userId, displayName, role = ROLE_PLAYER } = {}) {
+  if (!worldRecord || !worldRecord.memberships || !worldRecord.memberships.byTrainerId) throw new DomainRuleError('World memberships are missing');
+  if (!userId) throw new DomainRuleError('User id is required');
+  if (membershipForUser(worldRecord, userId)) throw new DomainRuleError('User already participates in this world');
+  const clubs = worldRecord.gameState && worldRecord.gameState.clubs;
+  const maxHumans = clubs && Array.isArray(clubs.order) ? clubs.order.length : 0;
+  if (maxHumans && activeMemberships(worldRecord).length >= maxHumans) throw new DomainRuleError('World has no free club slots');
+  const trainerId = 'trainer-' + crypto.randomUUID();
+  const now = new Date().toISOString();
+  const membership = {
+    trainerId,
+    userProfileId: userId,
+    clubId: null,
+    status: 'active',
+    role: role === ROLE_WORLD_ADMIN ? ROLE_WORLD_ADMIN : ROLE_PLAYER,
+    joinedAt: now,
+    lastActivityAt: now,
+    trainerDisplayName: String(displayName || 'Trainer').slice(0, 40)
+  };
+  worldRecord.memberships.byTrainerId[trainerId] = membership;
+  worldRecord.memberships.order = Array.isArray(worldRecord.memberships.order) ? worldRecord.memberships.order : [];
+  worldRecord.memberships.order.push(trainerId);
+  return membership;
+}
+
+function removeMembershipForUser(worldRecord, userId) {
+  ensureWorldMembershipRoles(worldRecord);
+  const membership = membershipForUser(worldRecord, userId);
+  if (!membership) throw new PersistenceNotFoundError('Membership not found', { userId });
+  const active = activeMemberships(worldRecord);
+  const admins = active.filter(row => row.role === ROLE_WORLD_ADMIN);
+  if (membership.role === ROLE_WORLD_ADMIN && admins.length <= 1 && active.length > 1) {
+    throw new DomainRuleError('Last world admin must transfer administration before leaving');
+  }
+  delete worldRecord.memberships.byTrainerId[membership.trainerId];
+  worldRecord.memberships.order = (worldRecord.memberships.order || []).filter(id => String(id) !== String(membership.trainerId));
+  return { membership, remaining: activeMemberships(worldRecord) };
 }
 
 function ensureWorldMembershipRoles(worldRecord) {
@@ -75,6 +115,8 @@ module.exports = {
   ROLE_WORLD_ADMIN,
   activeMemberships,
   membershipForUser,
+  createMembershipForUser,
+  removeMembershipForUser,
   ensureWorldMembershipRoles,
   setWorldMembershipRole,
   canManageWorld
