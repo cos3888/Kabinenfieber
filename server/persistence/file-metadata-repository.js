@@ -28,9 +28,10 @@ class FileMetadataRepository {
       parsed.worlds = parsed.worlds || {};
       parsed.participationIndex = parsed.participationIndex || {};
       parsed.invitations = parsed.invitations || {};
+      parsed.applications = parsed.applications || {};
       return parsed;
     } catch (error) {
-      if (error && error.code === 'ENOENT') return { schemaVersion: 1, slots: {}, worlds: {}, participationIndex: {}, invitations: {} };
+      if (error && error.code === 'ENOENT') return { schemaVersion: 1, slots: {}, worlds: {}, participationIndex: {}, invitations: {}, applications: {} };
       throw error;
     }
   }
@@ -102,7 +103,7 @@ class FileMetadataRepository {
     return true;
   }
 
-  async createWorldRegistration({ slotId, worldId, createdByUserId, worldName = null, visibility = 'PRIVATE', joinPolicy = 'INVITE_ONLY', createdAt = nowIso() }) {
+  async createWorldRegistration({ slotId, worldId, createdByUserId, worldName = null, description = '', visibility = 'PRIVATE', joinPolicy = 'INVITE_ONLY', createdAt = nowIso() }) {
     return this._mutate(data => {
       slotId = Number(slotId);
       if (!Number.isInteger(slotId) || slotId < 1 || slotId > MAX_WORLD_SLOTS) throw new DomainRuleError('slotId must be between 1 and 1000');
@@ -112,7 +113,7 @@ class FileMetadataRepository {
       const slot = data.slots[String(slotId)];
       if (slot && slot.status === 'OCCUPIED') throw new DomainRuleError('World slot is already occupied', { slotId });
       if (data.worlds[worldId] && data.worlds[worldId].status === 'ACTIVE') throw new DomainRuleError('World already exists', { worldId });
-      const world = { worldId, slotId, status: 'ACTIVE', createdAt, createdByUserId, worldName, visibility, joinPolicy };
+      const world = { worldId, slotId, status: 'ACTIVE', createdAt, createdByUserId, worldName, description, visibility, joinPolicy };
       data.slots[String(slotId)] = { slotId, status: 'OCCUPIED', worldId, createdAt };
       data.worlds[worldId] = world;
       data.participationIndex[participationKey(worldId, createdByUserId)] = {
@@ -161,7 +162,83 @@ class FileMetadataRepository {
       Object.keys(data.invitations).forEach(key => {
         if (data.invitations[key] && data.invitations[key].worldId === worldId) delete data.invitations[key];
       });
+      Object.keys(data.applications).forEach(key => {
+        if (data.applications[key] && data.applications[key].worldId === worldId) delete data.applications[key];
+      });
       return { deleted: true, worldId };
+    });
+  }
+
+  async listLobbyWorlds(userId) {
+    const data = await this._read();
+    const participationByWorld = {};
+    Object.values(data.participationIndex).forEach(row => {
+      if (!row || row.status !== STATUS_ACTIVE) return;
+      participationByWorld[row.worldId] = participationByWorld[row.worldId] || [];
+      participationByWorld[row.worldId].push(row);
+    });
+    return Object.values(data.worlds)
+      .filter(world => world && world.status === 'ACTIVE')
+      .filter(world => world.visibility === 'PUBLIC' || (participationByWorld[world.worldId] || []).some(row => String(row.userId) === String(userId)))
+      .map(world => {
+        const participants = participationByWorld[world.worldId] || [];
+        const mine = participants.some(row => String(row.userId) === String(userId));
+        const application = data.applications[participationKey(world.worldId, userId)] || null;
+        return {
+          ...clone(world),
+          participantCount: participants.length,
+          isMember: mine,
+          applicationStatus: application ? application.status : null
+        };
+      })
+      .sort((a, b) => Number(a.slotId) - Number(b.slotId));
+  }
+
+  async getParticipation({ worldId, userId }) {
+    const data = await this._read();
+    const row = data.participationIndex[participationKey(worldId, userId)];
+    return row && row.status === STATUS_ACTIVE ? clone(row) : null;
+  }
+
+  async createWorldApplication({ worldId, userId, displayName = '', createdAt = nowIso() }) {
+    return this._mutate(data => {
+      const world = data.worlds[worldId];
+      if (!world || world.status !== 'ACTIVE') throw new PersistenceNotFoundError('Active world not found', { worldId });
+      if (world.visibility !== 'PUBLIC' || world.joinPolicy !== 'APPLICATION') throw new DomainRuleError('World does not accept applications');
+      const participation = data.participationIndex[participationKey(worldId, userId)];
+      if (participation && participation.status === STATUS_ACTIVE) throw new DomainRuleError('User already participates in this world');
+      const key = participationKey(worldId, userId);
+      const existing = data.applications[key];
+      if (existing && existing.status === 'PENDING') throw new DomainRuleError('Application already pending');
+      const application = { applicationId:key, worldId, userId, displayName, status:'PENDING', createdAt };
+      data.applications[key] = application;
+      return application;
+    });
+  }
+
+  async listWorldApplications(worldId) {
+    const data = await this._read();
+    return Object.values(data.applications)
+      .filter(row => row && row.worldId === worldId && row.status === 'PENDING')
+      .map(clone)
+      .sort((a,b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  }
+
+  async getWorldApplication({ worldId, userId }) {
+    const data = await this._read();
+    const row = data.applications[participationKey(worldId, userId)];
+    return row ? clone(row) : null;
+  }
+
+  async resolveWorldApplication({ worldId, userId, status, resolvedByUserId }) {
+    return this._mutate(data => {
+      const key = participationKey(worldId, userId);
+      const row = data.applications[key];
+      if (!row || row.status !== 'PENDING') throw new PersistenceNotFoundError('Pending application not found', { worldId, userId });
+      row.status = status;
+      row.resolvedAt = nowIso();
+      row.resolvedByUserId = resolvedByUserId;
+      return row;
     });
   }
 

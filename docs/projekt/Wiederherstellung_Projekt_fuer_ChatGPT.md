@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.29.6
+# Wiederherstellung Kabinenfieber - KF_0.30.0
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.29.6`
+Version: `KF_0.30.0`
 
 Build-Label:
 
-`KF_0.29.6 - Takeover Creation Race Fix`
+`KF_0.30.0 - Startbereich & Spielwelt-Lobby`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.29.6.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.30.0.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -35,6 +35,46 @@ Aktuelle ZIP nach Export soll `KF_0.29.6.zip` heissen.
 - Bestehende Systeme vor neuen Features sauber abschliessen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
+
+
+## KF_0.30.0 – Startbereich & Spielwelt-Lobby
+
+Freigegebener groesserer Abschlussblock fuer Login -> Lobby -> Welt -> Vereinswahl -> Buero.
+
+Aktueller Ablauf:
+- ohne Auth: Login/Registrierung.
+- nach Auth: immer Spielwelt-Lobby.
+- Lobby listet alle oeffentlich sichtbaren Welten und eigene private Welten.
+- `Aktive Welten x/5` wird aus dem Participation Index berechnet.
+- offene Welt: direkter Join.
+- Bewerbungswelt: Bewerbung persistieren; World Admin kann annehmen/ablehnen.
+- private Welt: nur bestehende Memberships sichtbar; Einladungs-UI ist noch kein eigener fertiger Block.
+- Mitglied mit Club: Oeffnen -> Buero.
+- Mitglied ohne Club: Oeffnen -> Vereinsauswahl.
+- belegte Clubs werden aus aktiven `WorldRecord.memberships` abgeleitet und in der Clubauswahl gesperrt.
+- neue Welt: lokale Initialisierung darf intern erfolgen, aber die Clubauswahl erst nach bestaetigtem POST /api/v1/worlds zeigen.
+- normaler Austritt setzt Participation auf LEFT und Membership auf left.
+- letzter Teilnehmer -> komplette Welt loeschen.
+- letzter Admin mit weiteren Spielern -> Adminuebergabe erforderlich.
+- Weltloeschung nur als Admin und nur ohne weitere aktive Spieler.
+
+Neue API-Vertragsversion: `0.30.0`.
+Neue Lifecycle-Endpunkte:
+- `POST /api/v1/worlds/:id/join`
+- `POST /api/v1/worlds/:id/apply`
+- `GET /api/v1/worlds/:id/applications`
+- `PUT /api/v1/worlds/:id/application`
+- `POST /api/v1/worlds/:id/leave`
+- `DELETE /api/v1/worlds/:id`
+
+Datenwahrheit:
+- Registry-Metadaten inkl. Beschreibung: Metadata Repository/Firestore.
+- Beteiligungsindex fuer Lobby/5er-Limit: Participation Index.
+- fachliche User-/Rollen-/Club-Zuordnung: ausschliesslich `WorldRecord.memberships`.
+- keine persistente Lobby-Kopie.
+- Runtime vor Delete entladen; Object Store und Registry werden beim Delete bereinigt.
+
+Pflichtregression: `tests/run_kf_0_30_0_start_lobby_world_lifecycle_test.js` plus komplette bisherige Regression-Suite.
 
 
 ## KF_0.29.6 – Takeover Creation Race Fix

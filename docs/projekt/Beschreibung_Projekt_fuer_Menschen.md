@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.29.6
+# Kabinenfieber - Stand KF_0.30.0
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.29.6`
+App-Version: `KF_0.30.0`
 
 Persistierte Schemas:
 
@@ -16,6 +16,38 @@ Persistierte Schemas:
 - WorldRecord: `kf-world-record-0.27.2`
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
+
+
+## KF_0.30.0 – Startbereich & Spielwelt-Lobby
+
+KF_0.30.0 schliesst den Einstieg in Kabinenfieber als zusammenhaengenden Welt-Lifecycle ab. Nach dem Login ist die Spielwelt-Lobby die zentrale Startseite. Sie zeigt alle sichtbaren oeffentlichen Welten sowie die eigenen privaten Welten in einer Tabelle mit Slot, Name, Beschreibung, Saison, Teilnehmerzahl/Kapazitaet, Zugang, eigenem Status und kontextabhaengigen Aktionen.
+
+Wesentliche Aenderungen:
+
+- sichtbarer Zaehler `Aktive Welten: x / 5`; die Zahl wird aus dem Participation Index abgeleitet und nicht separat gespeichert.
+- Filter fuer `Alle Welten / Meine Welten` sowie `Offen / Bewerbung / Einladung`.
+- Weltbeschreibung ist Registry-Metadatum in Firestore/File-Metadata.
+- offene Welten koennen direkt betreten werden; Bewerbungswelten speichern eine serverseitige Bewerbung, die World Admins annehmen oder ablehnen koennen.
+- Austritt entfernt die eigene aktive Teilnahme. Ist der austretende Spieler der letzte Teilnehmer, wird die Welt vollstaendig geloescht.
+- ein letzter World Admin mit weiteren Spielern muss vor dem Austritt die Administration an einen aktiven Mitspieler uebertragen.
+- eine Welt mit weiteren aktiven Spielern kann nicht ueber die normale Loeschaktion entfernt werden.
+- Weltloeschung entfernt Registry/Slot/Participation/Einladungen/Bewerbungen und den kompletten GCS-/Object-Store-Prefix der Welt; die Runtime wird vorher entladen.
+- neue Welten werden lokal initialisiert, aber die Vereinsauswahl wird erst nach erfolgreicher serverseitiger Weltanlage freigegeben. Damit existiert kein spielbarer halbfertiger Create-Zustand mehr.
+- die bestehende Vereinsauswahl bleibt erhalten. Bereits von anderen aktiven Memberships belegte Vereine werden aus `WorldRecord.memberships` abgeleitet, sichtbar als belegt markiert und clientseitig nicht auswaehlbar; die serverseitige Doppelbelegungspruefung bleibt autoritativ.
+- Rueckkehr aus dem Spiel fuehrt zur Lobby, ohne den User auszuloggen.
+
+Zentrale Datenquellen:
+
+- User/Auth: bestehende Auth-Repositories.
+- Weltname, Beschreibung, Slot, Visibility, JoinPolicy: World Registry / Metadata Repository.
+- aktive Beteiligungen und 5er-Limit: Participation Index.
+- Rolle, Trainername und Verein: `WorldRecord.memberships`.
+- Welt-/Match-/Finanzzustand: bestehender WorldRecord/Object Store plus Current-Season-Segmente.
+- Runtime ist Cache/Beschleunigung und keine persistente Wahrheit.
+
+API-/Remote-Vertrag: Browser, Service und API stehen auf `0.30.0`, da Join/Apply/Leave/Delete/Application-Endpunkte neu hinzugekommen sind.
+
+Regression: `tests/run_kf_0_30_0_start_lobby_world_lifecycle_test.js` prueft u. a. 5er-Limit, Freigabe eines Slots nach Loeschung, Direct Join, Austritt, Bewerbung/Annahme, Adminuebergabe, automatische Weltloeschung beim letzten Teilnehmer sowie Lobby-/Vereinsbelegungs-Invarianten.
 
 
 ## KF_0.29.6 – Takeover Creation Race Fix

@@ -11,8 +11,8 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const SERVICE_VERSION = '0.29.6';
-const API_VERSION = '0.29.5';
+const SERVICE_VERSION = '0.30.0';
+const API_VERSION = '0.30.0';
 
 let persistenceVerificationState = {
   status: 'pending',
@@ -68,7 +68,7 @@ function applyCors(req, headers) {
     headers['access-control-allow-origin'] = origin;
     headers.vary = headers.vary ? `${headers.vary}, Origin` : 'Origin';
   }
-  headers['access-control-allow-methods'] = 'GET,POST,PUT,OPTIONS';
+  headers['access-control-allow-methods'] = 'GET,POST,PUT,DELETE,OPTIONS';
   headers['access-control-allow-headers'] = 'Authorization,Content-Type,Content-Encoding';
   headers['access-control-max-age'] = '600';
   return headers;
@@ -273,6 +273,7 @@ const server = http.createServer(async (req, res) => {
         userId: auth.user.userId,
         worldRecord: body.worldRecord,
         worldName: body.worldName,
+        description: body.description,
         visibility: body.visibility,
         joinPolicy: body.joinPolicy,
         matches: body.matches || [],
@@ -285,6 +286,81 @@ const server = http.createServer(async (req, res) => {
         currentSeason: result.currentSeason,
         membership: result.membership
       });
+      return;
+    }
+
+    const joinWorldId = worldIdFromPath(pathname, '/join');
+    if (req.method === 'POST' && joinWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.joinWorld({
+        userId: auth.user.userId,
+        displayName: auth.user.displayName || auth.user.loginName,
+        worldId: joinWorldId
+      });
+      await sendJson(req, res, 200, { ok:true, ...result });
+      return;
+    }
+
+    const applyWorldId = worldIdFromPath(pathname, '/apply');
+    if (req.method === 'POST' && applyWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const application = await persistence.worldSessions.applyToWorld({
+        userId:auth.user.userId,
+        displayName:auth.user.displayName || auth.user.loginName,
+        worldId:applyWorldId
+      });
+      await sendJson(req, res, 201, { ok:true, application });
+      return;
+    }
+
+    const applicationsWorldId = worldIdFromPath(pathname, '/applications');
+    if (req.method === 'GET' && applicationsWorldId) {
+      const auth = await requireAuth(req);
+      const applications = await persistence.worldSessions.listApplications({ userId:auth.user.userId, worldId:applicationsWorldId });
+      await sendJson(req, res, 200, { ok:true, applications });
+      return;
+    }
+
+    const applicationAcceptWorldId = worldIdFromPath(pathname, '/application');
+    if (req.method === 'PUT' && applicationAcceptWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.resolveApplication({
+        actorUserId:auth.user.userId,
+        worldId:applicationAcceptWorldId,
+        applicantUserId:body.userId,
+        accept:Boolean(body.accept)
+      });
+      await sendJson(req, res, 200, { ok:true, result });
+      return;
+    }
+
+    const leaveWorldId = worldIdFromPath(pathname, '/leave');
+    if (req.method === 'POST' && leaveWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.leaveWorld({
+        userId:auth.user.userId,
+        worldId:leaveWorldId,
+        transferAdminToUserId:body.transferAdminToUserId || null
+      });
+      await sendJson(req, res, 200, { ok:true, ...result });
+      return;
+    }
+
+    const deleteWorldId = worldIdFromPath(pathname);
+    if (req.method === 'DELETE' && deleteWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.deleteWorld({ userId:auth.user.userId, worldId:deleteWorldId });
+      await sendJson(req, res, 200, { ok:true, ...result });
       return;
     }
 
