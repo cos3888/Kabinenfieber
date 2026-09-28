@@ -73,10 +73,11 @@ function makeWorldRecord(worldId,userId){
   });
   await runtime.unloadWorld('world-0292');
   const reloaded=await sessions.openWorld({userId,worldId:'world-0292'});
-  check('Played matchday reload preserves club, exact slot, match and finance truth',
+  const lazyMatch=await sessions.loadMatchDetail({userId,worldId:'world-0292',matchId:'matchday-1'});
+  check('Played matchday reload preserves club, exact slot, lazy match and finance truth',
     matchdaySaved.revision===takeoverSaved.revision+1&&reloaded.membership.clubId==='club-a'&&
     reloaded.worldRecord.gameState.calendar.currentSlotKey==='w2-end'&&
-    reloaded.matches.length===1&&reloaded.matches[0].id==='matchday-1'&&
+    reloaded.matches.length===0&&lazyMatch&&lazyMatch.id==='matchday-1'&&
     reloaded.financeEvents.length===1&&reloaded.financeEvents[0].id==='finance-matchday-1');
 
   const app=await fs.readFile(path.join(__dirname,'..','src','app.bundle.js'),'utf8');
@@ -106,7 +107,7 @@ function makeWorldRecord(worldId,userId){
     server.includes("const API_VERSION = '0.30.0';")&&server.includes('function requireClientVersion(body)'));
 
   check('Production entry cache-busts the current browser bundle',
-    index.includes('app.bundle.js?v=0.30.1')&&index.includes('app.css?v=0.30.1'));
+    index.includes('app.bundle.js?v=0.31.0')&&index.includes('app.css?v=0.31.0'));
 
   console.log(JSON.stringify(report,null,2));
   process.exit(report.passed?0:1);
