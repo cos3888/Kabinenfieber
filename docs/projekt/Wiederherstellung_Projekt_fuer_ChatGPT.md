@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.29.6
+# Wiederherstellung Kabinenfieber - KF_0.30.0
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.29.6`
+Version: `KF_0.30.0`
 
 Build-Label:
 
-`KF_0.29.6 - Takeover Creation Race Fix`
+`KF_0.30.0 - Startbereich & Spielwelt-Lobby`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.29.6.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.30.0.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,84 @@ Aktuelle ZIP nach Export soll `KF_0.29.6.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.30.0 – Startbereich & Spielwelt-Lobby
+
+Freigegebener grosser Abschlussblock fuer Login -> Lobby -> Welt-Lifecycle -> Vereinsauswahl -> Buero.
+
+### Aktueller UI-/Ablaufstand
+
+- nicht angemeldet: Login/Registrierung.
+- angemeldet: direkt Spielwelt-Lobby, kein vorgeschaltetes altes Startmenue.
+- Lobby-Tabelle: Slot, Name/Beschreibung, Saison, Teilnehmer, Zugang, eigener Status, Aktionen.
+- Filter: Alle/Meine Welten und OPEN/APPLICATION/INVITE_ONLY.
+- persoenliche aktive Teilnahmen werden als x / 5 aus dem Participation Index dargestellt.
+- Weltanlage ist bei 5/5 bereits in der Lobby gesperrt.
+- Weltanlage zeigt nur den wirklich implementierten Startmodus classic.
+- nach lokaler Initialisierung bleibt der Browser visuell in der Lobby; erst erfolgreicher POST /api/v1/worlds oeffnet die Vereinsauswahl.
+- Welt ohne eigenen Verein -> Vereinsauswahl; Welt mit eigener clubId -> Buero.
+
+### API 0.30.0
+
+Browser, Service und Remote/API-Vertrag sind gemeinsam 0.30.0.
+
+Neue/erweiterte Pfade:
+- GET /api/v1/worlds: sichtbare Welten + activeWorldCount/maxActiveWorlds.
+- POST /api/v1/worlds: zusaetzlich Beschreibung und Startmodus-Metadaten.
+- POST /api/v1/worlds/:id/join: direkter Beitritt nur PUBLIC+OPEN.
+- POST /api/v1/worlds/:id/apply: Bewerbung nur PUBLIC+APPLICATION.
+- GET /api/v1/worlds/:id/applications: nur World-Admin.
+- POST /api/v1/worlds/:id/applications/decision: Annahme/Ablehnung nur World-Admin.
+- GET /api/v1/worlds/:id/members: Admin-Mitgliederverwaltung.
+- POST /api/v1/worlds/:id/admin-transfer: Adminrecht an aktiven Teilnehmer uebertragen.
+- POST /api/v1/worlds/:id/leave: Teilnehmer verlaesst Welt; letzter Teilnehmer loescht automatisch.
+- DELETE /api/v1/worlds/:id: serverseitiger Admin-Loeschpfad vorhanden.
+- bestehende /club, /slot, /snapshot und Open-Pfade bleiben erhalten.
+
+### Datenwahrheit
+
+- Weltmetadaten und Bewerbungen: Metadata Store / Firestore.
+- Participation Index: Such-/Lobbyindex und Quelle fuer x/5; keine Vereins-/Rollenwahrheit.
+- Mitgliedschaft, PLAYER/WORLD_ADMIN, clubId: ausschliesslich WorldRecord.memberships.
+- belegte Vereine in der Vereinsauswahl werden direkt daraus abgeleitet.
+- WorldRecord/Object Store bleibt Spielwahrheit.
+- Runtime muss vor Loeschung entladen werden.
+- Loeschung entfernt Object-Store-Prefix sowie Registry, Slot, Participations, Invitations und Applications.
+- keine doppelte persistente Spielwahrheit.
+
+### Sicherheits-/Lifecycle-Regeln
+
+- direktes Join und angenommene Bewerbung pruefen weiterhin serverseitig das Limit MAX_ACTIVE_WORLDS_PER_USER = 5.
+- offene Bewerbung selbst verbraucht noch keinen aktiven Weltplatz.
+- ein Spieler kann keinen bereits menschlich belegten Verein uebernehmen; Client deaktiviert den Verein, Server prueft weiterhin autoritativ.
+- normaler Spieler darf austreten.
+- letzter Admin mit weiteren Spielern darf nicht austreten; zuerst Admin-Uebergabe.
+- einziger Teilnehmer -> Austritt loescht die Welt vollstaendig.
+
+### Tests
+
+Pflichttest: tests/run_kf_0_30_0_world_lobby_lifecycle_test.js.
+
+Er muss mindestens pruefen:
+- Registry-Metadaten und erster Admin.
+- oeffentliche Sichtbarkeit fuer Nichtmitglieder.
+- activeWorldCount/maxActiveWorlds.
+- OPEN-Join -> Membership ohne Verein.
+- getrennte Vereinsuebernahme und Konfliktschutz.
+- normaler Austritt.
+- letzter Teilnehmer -> Welt/Manifest/Registry weg und Platz wieder frei.
+- APPLICATION-Bewerbung ohne aktiven Weltplatz.
+- Admin-Annahme -> Membership und aktiver Platz.
+- Admin-Uebergabe -> bisheriger letzter Admin kann austreten.
+- Browser-Lobby, Server-First-Erstellung, belegte Vereine und 0.30.0-Versionen.
+
+tests/run_current_regression_suite.js muss den 0.30.0-Test enthalten. Alte Regressionen mit Current-Version-Assertions wurden auf 0.30.0 angepasst, ohne ihre historischen fachlichen Invarianten zu entfernen.
+
+Persistierte Schemas bleiben:
+- kf-core-0.27.2
+- kf-world-record-0.27.2
+
+Cloud Run bis auf Weiteres: max instances = 1.
 
 ## KF_0.29.6 – Takeover Creation Race Fix
 
