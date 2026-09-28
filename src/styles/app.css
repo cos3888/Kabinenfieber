@@ -6405,3 +6405,22 @@ button,.filter-chip,.lineup-subtab,.ghost-btn,.primary-btn,.secondary-btn,.small
 .kf-world-create-label{display:grid;gap:7px;color:var(--muted);font-size:13px}
 .kf-world-create-label select.kf-auth-input{appearance:auto}
 .kf-world-create-error{min-height:18px;color:#ffd0d0;font-size:13px}
+
+
+/* KF_0.30.0 - Spielwelt-Lobby */
+.kf-lobby-screen{overflow:auto;padding:24px}
+.kf-lobby-shell{width:min(1500px,96vw);margin:0 auto;padding:22px;border-radius:22px;background:rgba(9,20,31,.92);border:1px solid rgba(255,255,255,.10);box-shadow:0 22px 50px rgba(0,0,0,.28)}
+.kf-lobby-header,.kf-lobby-toolbar,.kf-lobby-brand,.kf-lobby-head-actions,.kf-world-actions{display:flex;align-items:center}
+.kf-lobby-header{justify-content:space-between;gap:20px;margin-bottom:18px}
+.kf-lobby-brand{gap:14px}.kf-lobby-brand h1{margin:0;font-size:28px}.kf-lobby-brand p{margin:4px 0 0;color:var(--muted)}
+.kf-lobby-logo{width:76px;height:76px;object-fit:contain}
+.kf-lobby-head-actions{gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.kf-lobby-toolbar{gap:16px;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.035)}
+.kf-world-table-wrap{overflow:auto;border-radius:14px;border:1px solid rgba(255,255,255,.08)}
+.kf-world-table{min-width:1060px;margin:0!important}.kf-world-table th{white-space:nowrap}.kf-world-table td{vertical-align:middle}
+.kf-world-table td:nth-child(2){min-width:270px}.kf-world-table td:nth-child(2) strong{display:block}.kf-world-table td:nth-child(2) small{display:block;margin-top:4px;color:var(--muted);line-height:1.3}
+.kf-world-actions{gap:7px;flex-wrap:wrap}.kf-world-secondary{padding:8px 10px!important}
+.kf-application-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.club-tile.is-occupied{opacity:.52}.club-tile.is-occupied .club-select-btn{cursor:not-allowed}
+.kf-club-occupied{display:block;margin-top:4px;font-size:11px;color:var(--muted);text-align:center}
+@media(max-width:900px){.kf-lobby-screen{padding:10px}.kf-lobby-shell{width:100%;padding:14px}.kf-lobby-header{align-items:flex-start;flex-direction:column}.kf-lobby-head-actions{justify-content:flex-start}}
