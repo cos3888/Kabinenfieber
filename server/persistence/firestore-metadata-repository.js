@@ -65,8 +65,12 @@ class FirestoreMetadataRepository {
     if (!worldDoc.exists || worldDoc.data().status !== 'ACTIVE') throw new PersistenceNotFoundError('Active world not found', { worldId });
     const world = worldDoc.data();
     if (world.visibility !== 'PUBLIC' || world.joinPolicy !== 'APPLICATION') throw new DomainRuleError('World does not accept applications');
-    const participationDoc = await this._participation(worldId, userId).get();
+    const [participationDoc, activeSnap] = await Promise.all([
+      this._participation(worldId, userId).get(),
+      this.db.collection(this.names.participation).where('userId', '==', userId).where('status', '==', STATUS_ACTIVE).get()
+    ]);
     if (participationDoc.exists && participationDoc.data().status === STATUS_ACTIVE) throw new DomainRuleError('User already participates in this world');
+    if (activeSnap.size >= MAX_ACTIVE_WORLDS_PER_USER) throw new DomainRuleError('User already participates in five active worlds');
     const ref = this._application(worldId, userId);
     const existing = await ref.get();
     if (existing.exists && existing.data().status === 'OPEN') return existing.data();
