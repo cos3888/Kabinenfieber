@@ -106,7 +106,7 @@ function makeWorldRecord(worldId,userId){
     server.includes("const API_VERSION = '0.29.5';")&&server.includes('function requireClientVersion(body)'));
 
   check('Production entry cache-busts the current browser bundle',
-    index.includes('app.bundle.js?v=0.29.5')&&index.includes('app.css?v=0.29.5'));
+    index.includes('app.bundle.js?v=0.29.6')&&index.includes('app.css?v=0.29.6'));
 
   console.log(JSON.stringify(report,null,2));
   process.exit(report.passed?0:1);

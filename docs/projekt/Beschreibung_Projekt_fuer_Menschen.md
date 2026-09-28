@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.29.5
+# Kabinenfieber - Stand KF_0.29.6
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.29.5`
+App-Version: `KF_0.29.6`
 
 Persistierte Schemas:
 
@@ -17,6 +17,25 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.29.6 – Takeover Creation Race Fix
+
+Der Browser-Praxistest von KF_0.29.5 zeigte unmittelbar nach der Weltanlage, dass kein Verein uebernommen werden konnte. Cloud Run, Build und API wurden kontrolliert und liefen tatsaechlich auf KF_0.29.5 / API 0.29.5. Ursache war damit kein Deploymentfehler, sondern eine Race Condition im neuen schnellen Vereinsuebernahme-Pfad.
+
+Aenderungen:
+
+- der dedizierte `/club`-Commit bleibt bestehen; es gibt keinen Rueckfall auf den langsamen Vollsnapshot.
+- `kf029CommitClubTakeover(...)` wartet zwingend auf eine noch laufende `KF029Remote.createPromise`.
+- die fuer `/club` verwendete `expectedRevision` wird erst **nach** abgeschlossener Weltanlage gelesen.
+- schlaegt die Weltanlage fehl, wird kein `/club`-Request gesendet und die lokale vorlaeufige Vereinszuordnung sauber zurueckgesetzt.
+- waehrend die Vereinsuebernahme bereits laeuft, werden weitere Klicks abgefangen; der Button wird sichtbar deaktiviert.
+- Browser-/Service-Build stehen auf `0.29.6`; der Remote/API-Vertrag bleibt `0.29.5`, da sich die Server-API nicht geaendert hat.
+
+Zentrale Datenquelle bleibt `WorldRecord.memberships`; die Revisionswahrheit bleibt das serverseitige World-Manifest. `createPromise` ist ausschliesslich technischer Synchronisationszustand im Browser und keine persistente Spielwahrheit. Es entsteht keine doppelte Datenhaltung.
+
+Regression: `tests/run_kf_0_29_6_takeover_creation_race_test.js` fuehrt den Takeover-Helper isoliert aus und prueft, dass vor Abschluss der Welterstellung kein `/club`-Request entsteht, danach die neu erzeugte Revision verwendet wird und ein fehlgeschlagener Create den Takeover vollstaendig verhindert.
+
+Betriebshinweis aus der Fehlersuche: In der Cloud-Run-Oberflaeche wurde fuer die aktuelle Revision `max instances = 3` angezeigt. Projektregel bleibt **max instances = 1**, bis eine verteilte Lock-/Lease-Logik existiert; die Cloud-Konfiguration muss daher wieder auf 1 gesetzt werden.
 
 ## KF_0.29.5 – Progress Checkpoints & Save Performance
 
