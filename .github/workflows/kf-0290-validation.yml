@@ -7,6 +7,7 @@ on:
       - kf-0.29.2-save-integrity-world-navigation
       - kf-0.29.3-backend-compatibility
       - kf-0.30.0-start-lobby-world-lifecycle
+      - kf-0.30.1-performance-delta-correctness
 concurrency:
   group: kf029-validation
   cancel-in-progress: true
@@ -25,6 +26,7 @@ jobs:
       - run: npm run test:0292
       - run: npm run test:0293
       - run: npm run test:0300
+      - run: npm run test:0301
       - run: npm test -- --full
       - run: node --check server/index.js
       - run: node --check server/services/auth-service.js
