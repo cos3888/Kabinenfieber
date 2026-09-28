@@ -134,6 +134,12 @@ async function create(service,id,userId,access='PRIVATE'){
     check('Direct join also respects five-active-world limit',
       !!joinLimitError&&/five active worlds/i.test(String(joinLimitError.message||'')));
 
+    await create(service,'application-limit-world','u3','APPLICATION');
+    let applicationLimitError=null;
+    try{await service.applyToWorld({userId:'u1',displayName:'User 1',worldId:'application-limit-world'});}catch(error){applicationLimitError=error;}
+    check('Applications also respect five-active-world limit',
+      !!applicationLimitError&&/five active worlds/i.test(String(applicationLimitError.message||'')));
+
     await service.deleteWorld({userId:'u1',worldId:'u1-world-2'});
     const joined=await service.joinWorld({userId:'u1',displayName:'User 1',worldId:'open-world'});
     check('Open world direct join creates a membership without club',
