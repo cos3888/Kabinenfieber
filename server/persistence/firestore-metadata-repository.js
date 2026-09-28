@@ -20,6 +20,7 @@ class FirestoreMetadataRepository {
       participation: `${collectionPrefix}_world_participation_index`,
       invitations: `${collectionPrefix}_invitations`,
       applications: `${collectionPrefix}_applications`,
+      progression: `${collectionPrefix}_world_progression`,
       system: `${collectionPrefix}_system`
     };
   }
@@ -27,6 +28,7 @@ class FirestoreMetadataRepository {
   _slot(slotId) { return this.db.collection(this.names.slots).doc(String(Number(slotId)).padStart(4, '0')); }
   _world(worldId) { return this.db.collection(this.names.worlds).doc(String(worldId)); }
   _participation(worldId, userId) { return this.db.collection(this.names.participation).doc(participationId(worldId, userId)); }
+  _progression(worldId) { return this.db.collection(this.names.progression).doc(String(worldId)); }
 
   async listActiveWorldIdsForUser(userId) {
     const snap = await this.db.collection(this.names.participation).where('userId', '==', userId).where('status', '==', STATUS_ACTIVE).get();
@@ -167,6 +169,7 @@ class FirestoreMetadataRepository {
     const batch = this.db.batch();
     batch.delete(worldRef);
     batch.delete(this._slot(world.slotId));
+    batch.delete(this._progression(worldId));
     participations.docs.forEach(doc => batch.delete(doc.ref));
     invitations.docs.forEach(doc => batch.delete(doc.ref));
     applications.docs.forEach(doc => batch.delete(doc.ref));
@@ -208,6 +211,92 @@ class FirestoreMetadataRepository {
   async getParticipation({ worldId, userId }) {
     const doc = await this._participation(worldId, userId).get();
     return doc.exists && doc.data().status === STATUS_ACTIVE ? doc.data() : null;
+  }
+
+  async getWorldProgression(worldId) {
+    const doc = await this._progression(worldId).get();
+    return doc.exists ? doc.data() : null;
+  }
+
+  async markTrainerReady({ worldId, userId, expectedRevision, activeUserIds, deadlineAt, leaseMs = 120000 }) {
+    const ref = this._progression(worldId);
+    const active = Array.from(new Set((activeUserIds || []).map(String)));
+    if (!active.includes(String(userId))) throw new DomainRuleError('User is not an active trainer in this world');
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      let state = doc.exists ? doc.data() : null;
+      if (!state || Number(state.revision) !== Number(expectedRevision)) {
+        state = {
+          worldId,
+          revision:Number(expectedRevision),
+          status:'WAITING',
+          readyUserIds:[],
+          deadlineAt:null,
+          leaseId:null,
+          leaseExpiresAt:null
+        };
+      }
+      const now = Date.now();
+      if (state.status === 'PROCESSING' && state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
+        state.status='WAITING';
+        state.leaseId=null;
+        state.leaseExpiresAt=null;
+      }
+      state.readyUserIds = Array.from(new Set([...(state.readyUserIds || []).map(String), String(userId)]));
+      if (!state.deadlineAt) state.deadlineAt = deadlineAt || new Date(now + 120000).toISOString();
+      let shouldAdvance = false;
+      if (state.status !== 'PROCESSING') {
+        const allReady = active.length > 0 && active.every(id => state.readyUserIds.includes(id));
+        const expired = state.deadlineAt && new Date(state.deadlineAt).getTime() <= now;
+        if (allReady || expired) {
+          state.status='PROCESSING';
+          state.leaseId=crypto.randomUUID();
+          state.leaseExpiresAt=new Date(now + Math.max(30000, Number(leaseMs || 120000))).toISOString();
+          shouldAdvance=true;
+        }
+      }
+      tx.set(ref, state);
+      return { ...state, activeTrainerCount:active.length, readyTrainerCount:state.readyUserIds.filter(id => active.includes(id)).length, shouldAdvance };
+    });
+  }
+
+  async completeWorldProgress({ worldId, expectedRevision, nextRevision, leaseId }) {
+    const ref = this._progression(worldId);
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) throw new DomainRuleError('Progression state not found');
+      const state = doc.data();
+      if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
+      if (state.status !== 'PROCESSING' || String(state.leaseId || '') !== String(leaseId || '')) throw new DomainRuleError('Progression lease mismatch');
+      const next = {
+        worldId,
+        revision:Number(nextRevision),
+        status:'WAITING',
+        readyUserIds:[],
+        deadlineAt:null,
+        leaseId:null,
+        leaseExpiresAt:null
+      };
+      tx.set(ref, next);
+      return next;
+    });
+  }
+
+  async releaseWorldProgress({ worldId, expectedRevision, leaseId }) {
+    const ref = this._progression(worldId);
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) return null;
+      const state = doc.data();
+      if (Number(state.revision) !== Number(expectedRevision)) return state;
+      if (state.status === 'PROCESSING' && String(state.leaseId || '') === String(leaseId || '')) {
+        state.status='WAITING';
+        state.leaseId=null;
+        state.leaseExpiresAt=null;
+        tx.set(ref, state);
+      }
+      return state;
+    });
   }
 
   async createWorldApplication({ worldId, userId, displayName = '', createdAt = nowIso() }) {
