@@ -38,7 +38,8 @@ const core=[
   'tests/run_kf_0_29_4_authoritative_world_reload_test.js',
   'tests/run_kf_0_29_5_progress_checkpoint_performance_test.js',
   'tests/run_kf_0_29_6_takeover_creation_race_test.js',
-  'tests/run_kf_0_30_0_start_lobby_world_lifecycle_test.js'
+  'tests/run_kf_0_30_0_start_lobby_world_lifecycle_test.js',
+  'tests/run_kf_0_30_1_delta_correctness_performance_test.js'
 ];
 const extended=[
   'tests/run_current_ui_ownership_pipeline_test.js',
