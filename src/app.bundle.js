@@ -24383,7 +24383,11 @@ var KF029Remote = {
   checkpointReason: '',
   committedMatchIds: {},
   committedFinanceIds: {},
-  committedGameState: null
+  committedGameState: null,
+  progression: null,
+  progressLeaseId: null,
+  progressTimer: null,
+  progressRequestPending: false
 };
 try { KF029Remote.token = window.localStorage.getItem(KF029_AUTH_STORAGE_KEY) || null; } catch (error) {}
 
@@ -24684,6 +24688,80 @@ function kf029InstallLoadedWorld(data){
   }
   renderApp(); renderModal();
 }
+function kf031ClearProgressTimer(){
+  if (KF029Remote.progressTimer) {
+    clearTimeout(KF029Remote.progressTimer);
+    KF029Remote.progressTimer=null;
+  }
+}
+function kf031ProgressMessage(state){
+  if (!state) return '';
+  var ready=Number(state.readyTrainerCount || ((state.readyUserIds||[]).length) || 0);
+  var total=Number(state.activeTrainerCount || 0);
+  var suffix='';
+  if (state.deadlineAt) {
+    var seconds=Math.max(0,Math.ceil((new Date(state.deadlineAt).getTime()-Date.now())/1000));
+    suffix=' · '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
+  }
+  if (state.status==='PROCESSING') return 'Spieltag wird von einem Trainer verarbeitet ...';
+  return String(ready)+'/'+String(total||'?')+' Trainer bereit'+suffix;
+}
+async function kf031RequestReadyAndMaybeAdvance(actionEl){
+  if (!KF029Remote.user || !AppState.worldRecord || KF029Remote.progressRequestPending) return null;
+  KF029Remote.progressRequestPending=true;
+  kf031ClearProgressTimer();
+  var record=AppState.worldRecord;
+  var expectedRevision=KF029Remote.revision;
+  try {
+    var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(record.id)+'/ready',{
+      method:'POST',
+      body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION,expectedRevision:expectedRevision}
+    });
+    var state=data&&data.progression||null;
+    KF029Remote.progression=state;
+    KF029Remote.message=kf031ProgressMessage(state);
+    renderApp();
+    if (state && state.shouldAdvance && state.leaseId) {
+      KF029Remote.progressLeaseId=state.leaseId;
+      KF029Remote.message='Spieltag wird verarbeitet ...';
+      renderApp();
+      var beforeSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
+      var beforeSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
+      kf029BaseHandleAction('office-advance',actionEl);
+      var afterSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
+      var afterSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
+      if(afterSlot!==beforeSlot || afterSeason!==beforeSeason){
+        await kf029CommitHardCheckpoint('calendar-slot');
+        KF029Remote.progression=null;
+        KF029Remote.progressLeaseId=null;
+        KF029Remote.message='Spielstand gespeichert.';
+        renderApp();
+      } else {
+        KF029Remote.progressLeaseId=null;
+        KF029Remote.progression=null;
+      }
+      return state;
+    }
+    KF029Remote.progressTimer=setTimeout(function(){
+      KF029Remote.progressTimer=null;
+      void kf031RequestReadyAndMaybeAdvance(actionEl);
+    },1000);
+    return state;
+  } catch(error) {
+    if (error && error.status===409 && record && record.id) {
+      KF029Remote.message='Die Welt wurde von einem anderen Trainer fortgesetzt. Neuer Stand wird geladen ...';
+      renderApp();
+      await kf029LoadWorld(record.id);
+      return null;
+    }
+    KF029Remote.error='Fortschritt konnte nicht abgestimmt werden: '+(error.message||'Unbekannter Fehler');
+    renderApp();
+    throw error;
+  } finally {
+    KF029Remote.progressRequestPending=false;
+  }
+}
+
 async function kf031EnsureMatchDetail(matchId){
   var world = AppState.world;
   if (!world || !AppState.worldRecord || !matchId) return null;
@@ -24797,6 +24875,9 @@ function kf029ConfirmWorldCreate(){
   KF029Remote.committedMatchIds={};
   KF029Remote.committedFinanceIds={};
   KF029Remote.committedGameState=null;
+  KF029Remote.progression=null;
+  KF029Remote.progressLeaseId=null;
+  kf031ClearProgressTimer();
   KF029Remote.error='';
   KF029Remote.message='Neue Welt wird vorbereitet ...';
   startNewCareer();
@@ -24898,6 +24979,7 @@ function kf029SaveProgressCheckpoint(reason){
           expectedRevision:KF029Remote.revision,
           clientVersion:KF029_REMOTE_CONTRACT_VERSION,
           worldDelta:worldDelta,
+          progressLeaseId:KF029Remote.progressLeaseId || null,
           season:season,
           slotKey:slotKey,
           matches:deltaMatches,
@@ -25319,14 +25401,7 @@ handleAction = function(action, actionEl){
     return;
   }
   if (action === 'office-advance' && KF029Remote.user && AppState.worldRecord) {
-    var beforeAdvanceSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
-    var beforeAdvanceSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
-    kf029BaseHandleAction(action, actionEl);
-    var afterAdvanceSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
-    var afterAdvanceSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
-    if(afterAdvanceSlot!==beforeAdvanceSlot || afterAdvanceSeason!==beforeAdvanceSeason){
-      void kf029CommitHardCheckpoint('calendar-slot').catch(function(){});
-    }
+    void kf031RequestReadyAndMaybeAdvance(actionEl).catch(function(){});
     return;
   }
   kf029BaseHandleAction(action, actionEl);
