@@ -61,8 +61,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.29.5';
-  var KF_BUILD_LABEL = 'KF_0.29.5 - Progress Checkpoints & Save Performance';
+  var KF_VERSION = '0.29.6';
+  var KF_BUILD_LABEL = 'KF_0.29.6 - Takeover Creation Race Fix';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -2863,6 +2863,8 @@ function displayedTrainerLabel(world, club){
     var selectedSquad = selectedClub ? world.squads[selectedClub.id] : null;
     var selectedAverage = selectedSquad ? averageOverall(world, selectedSquad.playerIds) : 0;
     var selectedFinanceSnap = selectedClub && world.clubFinances ? buildFinanceSnapshot(world, selectedClub, 'current') : null;
+    var takeoverBusy = typeof KF029Remote !== 'undefined' && KF029Remote &&
+      KF029Remote.checkpointPending && KF029Remote.checkpointReason === 'take-over-club';
 
     var countryTabs = uniqueCountries(world).map(function(country){
       var active = country === countryName ? ' is-active' : '';
@@ -2933,7 +2935,7 @@ function displayedTrainerLabel(world, club){
       '        <button class="ghost-btn" type="button" data-action="return-start">Zurück zum Startmenü</button>' +
       '      </div>' +
       '      <div class="selection-footer-right">' +
-      '        <button class="primary-btn" type="button" data-action="take-over-club">Verein übernehmen</button>' +
+      '        <button class="primary-btn" type="button" data-action="take-over-club"' + (takeoverBusy ? ' disabled aria-disabled="true"' : '') + '>' + (takeoverBusy ? 'Verein wird übernommen ...' : 'Verein übernehmen') + '</button>' +
       '      </div>' +
       '    </div>' +
       '  </div>' +
@@ -20452,6 +20454,12 @@ function handleAction(action, actionEl){
   if (action === 'select-club') { selectClub(actionEl.getAttribute('data-club-id') || ''); return; }
   if (action === 'open-club-profile') { openClubProfile(actionEl.getAttribute('data-club-id') || ''); return; }
   if (action === 'take-over-club') {
+    if (typeof KF029Remote !== 'undefined' && KF029Remote &&
+        KF029Remote.checkpointPending && KF029Remote.checkpointReason === 'take-over-club') {
+      KF029Remote.message='Die Vereinsübernahme wird bereits serverseitig vorbereitet.';
+      renderApp();
+      return;
+    }
     var selectedId = AppState.ui.selectedClubId;
     var world = AppState.world;
     var club = world && world.clubs && world.clubs.byId ? world.clubs.byId[selectedId] : null;
@@ -20487,10 +20495,11 @@ function handleAction(action, actionEl){
       KF029Remote.checkpointPending=true;
       KF029Remote.checkpointFailed=false;
       KF029Remote.checkpointReason='take-over-club';
-      void kf029Request('/api/v1/worlds/' + encodeURIComponent(AppState.worldRecord.id) + '/club', {
-        method:'PUT',
-        body:{ expectedRevision:KF029Remote.revision, clientVersion:KF029_REMOTE_CONTRACT_VERSION, clubId:selectedId }
-      }).then(function(data){
+      KF029Remote.message=KF029Remote.createPromise
+        ? 'Spielwelt wird noch serverseitig vorbereitet ...'
+        : 'Vereinsübernahme wird gespeichert ...';
+      renderApp();
+      void kf029CommitClubTakeover(AppState.worldRecord.id, selectedId).then(function(data){
         KF029Remote.revision=Number(data.revision);
         KF029Remote.currentSeason=Number(data.currentSeason || KF029Remote.currentSeason || 1);
         KF029Remote.lastSavedAt=data.committedAt || new Date().toISOString();
@@ -20500,7 +20509,10 @@ function handleAction(action, actionEl){
         KF029Remote.message='Vereinsübernahme gespeichert.';
         finishTakeover();
       }).catch(function(error){
-        return kf029Request('/api/v1/worlds/' + encodeURIComponent(AppState.worldRecord.id)).then(function(reloaded){
+        var recoveryRequest = error && error.kfWorldCreationFailed
+          ? Promise.reject(error)
+          : kf029Request('/api/v1/worlds/' + encodeURIComponent(AppState.worldRecord.id));
+        return recoveryRequest.then(function(reloaded){
           var recoveredMembership=reloaded && reloaded.membership;
           if(!recoveredMembership || String(recoveredMembership.clubId||'')!==String(selectedId)) throw error;
           KF029Remote.revision=Number(reloaded.revision);
@@ -24682,6 +24694,31 @@ function kf029ConfirmWorldCreate(){
     renderModal();renderApp();
     throw error;
   }).finally(function(){KF029Remote.createPromise=null;});
+}
+async function kf029CommitClubTakeover(worldId, clubId){
+  if (KF029Remote.createPromise) {
+    KF029Remote.message='Spielwelt wird noch serverseitig vorbereitet ...';
+    renderApp();
+    try {
+      await KF029Remote.createPromise;
+    } catch (error) {
+      if (error && typeof error === 'object') error.kfWorldCreationFailed=true;
+      throw error;
+    }
+  }
+  if (KF029Remote.revision == null) {
+    var missingRevision=new Error('Spielwelt ist serverseitig noch nicht bereit.');
+    missingRevision.kfWorldCreationFailed=true;
+    throw missingRevision;
+  }
+  return kf029Request('/api/v1/worlds/' + encodeURIComponent(worldId) + '/club', {
+    method:'PUT',
+    body:{
+      expectedRevision:KF029Remote.revision,
+      clientVersion:KF029_REMOTE_CONTRACT_VERSION,
+      clubId:clubId
+    }
+  });
 }
 async function kf029RecoverCommittedProgress(record, slotKey, deltaMatches, deltaFinance){
   try {
