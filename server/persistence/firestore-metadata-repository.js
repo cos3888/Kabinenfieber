@@ -19,6 +19,7 @@ class FirestoreMetadataRepository {
       worlds: `${collectionPrefix}_worlds`,
       participation: `${collectionPrefix}_world_participation_index`,
       invitations: `${collectionPrefix}_invitations`,
+      applications: `${collectionPrefix}_applications`,
       system: `${collectionPrefix}_system`
     };
   }
@@ -26,6 +27,7 @@ class FirestoreMetadataRepository {
   _slot(slotId) { return this.db.collection(this.names.slots).doc(String(Number(slotId)).padStart(4, '0')); }
   _world(worldId) { return this.db.collection(this.names.worlds).doc(String(worldId)); }
   _participation(worldId, userId) { return this.db.collection(this.names.participation).doc(participationId(worldId, userId)); }
+  _application(worldId, userId) { return this.db.collection(this.names.applications).doc(participationId(worldId, userId)); }
 
   async listActiveWorldIdsForUser(userId) {
     const snap = await this.db.collection(this.names.participation).where('userId', '==', userId).where('status', '==', STATUS_ACTIVE).get();
@@ -35,6 +37,42 @@ class FirestoreMetadataRepository {
   async listActiveUserIdsForWorld(worldId) {
     const snap = await this.db.collection(this.names.participation).where('worldId', '==', worldId).where('status', '==', STATUS_ACTIVE).get();
     return snap.docs.map(doc => doc.data().userId);
+  }
+
+  async getParticipation(worldId, userId) {
+    const doc = await this._participation(worldId, userId).get();
+    return doc.exists ? doc.data() : null;
+  }
+
+  async listVisibleWorldRegistrations(userId) {
+    const [worldSnap, mineSnap] = await Promise.all([
+      this.db.collection(this.names.worlds).where('status', '==', 'ACTIVE').get(),
+      this.db.collection(this.names.participation).where('userId', '==', userId).where('status', '==', STATUS_ACTIVE).get()
+    ]);
+    const mine = new Set(mineSnap.docs.map(doc => String(doc.data().worldId)));
+    return worldSnap.docs.map(doc => doc.data())
+      .filter(world => world && (world.visibility === 'PUBLIC' || mine.has(String(world.worldId))))
+      .sort((a,b) => Number(a.slotId) - Number(b.slotId));
+  }
+
+  async getApplication(worldId, userId) {
+    const doc = await this._application(worldId, userId).get();
+    return doc.exists ? doc.data() : null;
+  }
+
+  async createApplication({ worldId, userId, displayName = null, createdAt = nowIso() }) {
+    const worldDoc = await this._world(worldId).get();
+    if (!worldDoc.exists || worldDoc.data().status !== 'ACTIVE') throw new PersistenceNotFoundError('Active world not found', { worldId });
+    const world = worldDoc.data();
+    if (world.visibility !== 'PUBLIC' || world.joinPolicy !== 'APPLICATION') throw new DomainRuleError('World does not accept applications');
+    const participationDoc = await this._participation(worldId, userId).get();
+    if (participationDoc.exists && participationDoc.data().status === STATUS_ACTIVE) throw new DomainRuleError('User already participates in this world');
+    const ref = this._application(worldId, userId);
+    const existing = await ref.get();
+    if (existing.exists && existing.data().status === 'OPEN') return existing.data();
+    const row = { worldId, userId, displayName, status:'OPEN', createdAt };
+    await ref.set(row);
+    return row;
   }
 
   async getWorld(worldId) {
@@ -129,15 +167,17 @@ class FirestoreMetadataRepository {
     if (expectedCreatedByUserId && String(world.createdByUserId) !== String(expectedCreatedByUserId)) {
       throw new DomainRuleError('World creator does not match rollback request', { worldId });
     }
-    const [participations, invitations] = await Promise.all([
+    const [participations, invitations, applications] = await Promise.all([
       this.db.collection(this.names.participation).where('worldId', '==', worldId).get(),
-      this.db.collection(this.names.invitations).where('worldId', '==', worldId).get()
+      this.db.collection(this.names.invitations).where('worldId', '==', worldId).get(),
+      this.db.collection(this.names.applications).where('worldId', '==', worldId).get()
     ]);
     const batch = this.db.batch();
     batch.delete(worldRef);
     batch.delete(this._slot(world.slotId));
     participations.docs.forEach(doc => batch.delete(doc.ref));
     invitations.docs.forEach(doc => batch.delete(doc.ref));
+    applications.docs.forEach(doc => batch.delete(doc.ref));
     await batch.commit();
     return { deleted: true, worldId };
   }
