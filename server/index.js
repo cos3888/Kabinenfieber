@@ -11,8 +11,8 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const SERVICE_VERSION = '0.29.6';
-const API_VERSION = '0.29.5';
+const SERVICE_VERSION = '0.30.0';
+const API_VERSION = '0.30.0';
 
 let persistenceVerificationState = {
   status: 'pending',
@@ -68,7 +68,7 @@ function applyCors(req, headers) {
     headers['access-control-allow-origin'] = origin;
     headers.vary = headers.vary ? `${headers.vary}, Origin` : 'Origin';
   }
-  headers['access-control-allow-methods'] = 'GET,POST,PUT,OPTIONS';
+  headers['access-control-allow-methods'] = 'GET,POST,PUT,DELETE,OPTIONS';
   headers['access-control-allow-headers'] = 'Authorization,Content-Type,Content-Encoding';
   headers['access-control-max-age'] = '600';
   return headers;
@@ -260,8 +260,8 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && pathname === '/api/v1/worlds') {
       const auth = await requireAuth(req);
-      const worlds = await persistence.worldSessions.listWorlds(auth.user.userId);
-      await sendJson(req, res, 200, { ok: true, worlds });
+      const lobby = await persistence.worldSessions.listWorlds(auth.user.userId);
+      await sendJson(req, res, 200, { ok: true, ...lobby });
       return;
     }
 
@@ -273,6 +273,8 @@ const server = http.createServer(async (req, res) => {
         userId: auth.user.userId,
         worldRecord: body.worldRecord,
         worldName: body.worldName,
+        description: body.description,
+        startVariant: body.startVariant,
         visibility: body.visibility,
         joinPolicy: body.joinPolicy,
         matches: body.matches || [],
@@ -285,6 +287,60 @@ const server = http.createServer(async (req, res) => {
         currentSeason: result.currentSeason,
         membership: result.membership
       });
+      return;
+    }
+
+    const joinWorldId = worldIdFromPath(pathname, '/join');
+    if (req.method === 'POST' && joinWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.joinWorld({
+        userId: auth.user.userId,
+        displayName: auth.user.displayName,
+        worldId: joinWorldId
+      });
+      await sendJson(req, res, 200, { ok: true, ...result });
+      return;
+    }
+
+    const applicationWorldId = worldIdFromPath(pathname, '/apply');
+    if (req.method === 'POST' && applicationWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const application = await persistence.worldSessions.applyToWorld({
+        userId: auth.user.userId,
+        displayName: auth.user.displayName,
+        worldId: applicationWorldId
+      });
+      await sendJson(req, res, 200, { ok: true, application });
+      return;
+    }
+
+    const leaveWorldId = worldIdFromPath(pathname, '/leave');
+    if (req.method === 'POST' && leaveWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.leaveWorld({
+        userId: auth.user.userId,
+        worldId: leaveWorldId
+      });
+      await sendJson(req, res, 200, { ok: true, ...result });
+      return;
+    }
+
+    const deleteWorldId = worldIdFromPath(pathname);
+    if (req.method === 'DELETE' && deleteWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.deleteWorld({
+        userId: auth.user.userId,
+        worldId: deleteWorldId
+      });
+      await sendJson(req, res, 200, { ok: true, ...result });
       return;
     }
 
