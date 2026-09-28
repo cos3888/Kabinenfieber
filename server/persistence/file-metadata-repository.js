@@ -29,9 +29,10 @@ class FileMetadataRepository {
       parsed.participationIndex = parsed.participationIndex || {};
       parsed.invitations = parsed.invitations || {};
       parsed.applications = parsed.applications || {};
+      parsed.progression = parsed.progression || {};
       return parsed;
     } catch (error) {
-      if (error && error.code === 'ENOENT') return { schemaVersion: 1, slots: {}, worlds: {}, participationIndex: {}, invitations: {}, applications: {} };
+      if (error && error.code === 'ENOENT') return { schemaVersion: 1, slots: {}, worlds: {}, participationIndex: {}, invitations: {}, applications: {}, progression: {} };
       throw error;
     }
   }
@@ -191,6 +192,7 @@ class FileMetadataRepository {
       Object.keys(data.applications).forEach(key => {
         if (data.applications[key] && data.applications[key].worldId === worldId) delete data.applications[key];
       });
+      if (data.progression) delete data.progression[worldId];
       return { deleted: true, worldId };
     });
   }
@@ -225,6 +227,87 @@ class FileMetadataRepository {
     const data = await this._read();
     const row = data.participationIndex[participationKey(worldId, userId)];
     return row && row.status === STATUS_ACTIVE ? clone(row) : null;
+  }
+
+  async getWorldProgression(worldId) {
+    const data = await this._read();
+    const row = data.progression && data.progression[worldId];
+    return row ? clone(row) : null;
+  }
+
+  async markTrainerReady({ worldId, userId, expectedRevision, activeUserIds, deadlineAt, leaseMs = 120000 }) {
+    return this._mutate(data => {
+      data.progression = data.progression || {};
+      const active = Array.from(new Set((activeUserIds || []).map(String)));
+      if (!active.includes(String(userId))) throw new DomainRuleError('User is not an active trainer in this world');
+      let state = data.progression[worldId] || null;
+      if (!state || Number(state.revision) !== Number(expectedRevision)) {
+        state = {
+          worldId,
+          revision:Number(expectedRevision),
+          status:'WAITING',
+          readyUserIds:[],
+          deadlineAt:null,
+          leaseId:null,
+          leaseExpiresAt:null
+        };
+      }
+      const now = Date.now();
+      if (state.status === 'PROCESSING' && state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
+        state.status='WAITING';
+        state.leaseId=null;
+        state.leaseExpiresAt=null;
+      }
+      state.readyUserIds = Array.from(new Set([...(state.readyUserIds || []).map(String), String(userId)]));
+      if (!state.deadlineAt) state.deadlineAt = deadlineAt || new Date(now + 120000).toISOString();
+      let shouldAdvance = false;
+      if (state.status !== 'PROCESSING') {
+        const allReady = active.length > 0 && active.every(id => state.readyUserIds.includes(id));
+        const expired = state.deadlineAt && new Date(state.deadlineAt).getTime() <= now;
+        if (allReady || expired) {
+          state.status='PROCESSING';
+          state.leaseId=crypto.randomUUID();
+          state.leaseExpiresAt=new Date(now + Math.max(30000, Number(leaseMs || 120000))).toISOString();
+          shouldAdvance=true;
+        }
+      }
+      data.progression[worldId]=state;
+      return { ...state, activeTrainerCount:active.length, readyTrainerCount:state.readyUserIds.filter(id => active.includes(id)).length, shouldAdvance };
+    });
+  }
+
+  async completeWorldProgress({ worldId, expectedRevision, nextRevision, leaseId }) {
+    return this._mutate(data => {
+      data.progression = data.progression || {};
+      const state = data.progression[worldId];
+      if (!state || Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
+      if (state.status !== 'PROCESSING' || String(state.leaseId || '') !== String(leaseId || '')) throw new DomainRuleError('Progression lease mismatch');
+      const next = {
+        worldId,
+        revision:Number(nextRevision),
+        status:'WAITING',
+        readyUserIds:[],
+        deadlineAt:null,
+        leaseId:null,
+        leaseExpiresAt:null
+      };
+      data.progression[worldId]=next;
+      return next;
+    });
+  }
+
+  async releaseWorldProgress({ worldId, expectedRevision, leaseId }) {
+    return this._mutate(data => {
+      data.progression = data.progression || {};
+      const state = data.progression[worldId];
+      if (!state || Number(state.revision) !== Number(expectedRevision)) return state || null;
+      if (state.status === 'PROCESSING' && String(state.leaseId || '') === String(leaseId || '')) {
+        state.status='WAITING';
+        state.leaseId=null;
+        state.leaseExpiresAt=null;
+      }
+      return state;
+    });
   }
 
   async createWorldApplication({ worldId, userId, displayName = '', createdAt = nowIso() }) {
