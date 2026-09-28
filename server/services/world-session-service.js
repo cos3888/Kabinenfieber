@@ -99,6 +99,9 @@ class WorldSessionService {
       const members = activeMemberships(record);
       const membership = membershipForUser(record, userId);
       const application = membership ? null : await this.metadata.getApplication(worldId, userId);
+      const openApplications = membership && membership.role === 'WORLD_ADMIN'
+        ? await this.metadata.listApplicationsForWorld(worldId)
+        : [];
       worlds.push({
         worldId,
         slotId: meta.slotId,
@@ -115,6 +118,7 @@ class WorldSessionService {
         mine: Boolean(membership),
         membership: membership ? clone(membership) : null,
         applicationStatus: application && application.status || null,
+        openApplicationCount: openApplications.length,
         canJoin: !membership && meta.visibility === 'PUBLIC' && meta.joinPolicy === 'OPEN',
         canApply: !membership && meta.visibility === 'PUBLIC' && meta.joinPolicy === 'APPLICATION' && !(application && application.status === 'OPEN')
       });
@@ -148,6 +152,41 @@ class WorldSessionService {
 
   async applyToWorld({ userId, displayName, worldId }) {
     return this.metadata.createApplication({ worldId, userId, displayName });
+  }
+
+  async listApplications({ actorUserId, worldId }) {
+    const record = await this.worlds.loadWorldRecord(worldId);
+    const actor = membershipForUser(record, actorUserId);
+    if (!actor || actor.role !== 'WORLD_ADMIN') throw new DomainRuleError('Only a world admin may review applications');
+    return this.metadata.listApplicationsForWorld(worldId);
+  }
+
+  async decideApplication({ actorUserId, worldId, applicantUserId, decision }) {
+    const record = await this.worlds.loadWorldRecord(worldId);
+    const actor = membershipForUser(record, actorUserId);
+    if (!actor || actor.role !== 'WORLD_ADMIN') throw new DomainRuleError('Only a world admin may review applications');
+    const applications = await this.metadata.listApplicationsForWorld(worldId);
+    const application = applications.find(row => String(row.userId) === String(applicantUserId));
+    if (!application) throw new DomainRuleError('Open application not found');
+    const normalized = String(decision || '').toUpperCase();
+    if (normalized === 'REJECT') {
+      await this.metadata.setApplicationStatus({ worldId, userId: applicantUserId, status:'REJECTED' });
+      return { accepted:false };
+    }
+    if (normalized !== 'ACCEPT') throw new DomainRuleError('Invalid application decision');
+    await this.metadata.addParticipationIndex({ worldId, userId: applicantUserId });
+    try {
+      const manifest = await this.worlds.getManifest(worldId);
+      const current = await this.worlds.loadWorldRecord(worldId);
+      const membership = createMembershipForUser(current, { userId: applicantUserId, displayName: application.displayName });
+      const committed = await this.worlds.commitWorldRecord({ worldRecord: current, expectedRevision: manifest.revision });
+      await this.metadata.setApplicationStatus({ worldId, userId: applicantUserId, status:'ACCEPTED' });
+      await this.runtime.unloadWorld(worldId);
+      return { accepted:true, membership:clone(membership), revision:Number(committed.revision) };
+    } catch (error) {
+      await this.metadata.removeParticipationIndex({ worldId, userId: applicantUserId }).catch(() => {});
+      throw error;
+    }
   }
 
   async leaveWorld({ userId, worldId }) {
