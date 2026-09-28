@@ -93,8 +93,13 @@ function makeWorldRecord({ worldId, userId, trainerId='trainer-a', clubId=null }
     created.registration.slotId===1 && created.membership.role===ROLE_WORLD_ADMIN);
 
   const metadataDisk=JSON.parse(await fs.readFile(metadataFile,'utf8'));
-  check('Metadata participation index stays rebuildable and stores no club/role truth',
-    !JSON.stringify(metadataDisk).includes('clubId') && !JSON.stringify(metadataDisk).includes('WORLD_ADMIN'));
+  const participationProjection=metadataDisk.participationIndex[worldId+'__'+registered.user.userId];
+  check('Metadata participation index stays rebuildable and carries only a derived lobby projection',
+    participationProjection&&participationProjection.derivedIndex===true&&
+    participationProjection.trainerId==='trainer-a'&&
+    participationProjection.role===ROLE_WORLD_ADMIN&&
+    participationProjection.clubId===null&&
+    typeof participationProjection.projectionUpdatedAt==='string');
 
   const listed=await sessions.listWorlds(registered.user.userId);
   check('Authenticated user world list resolves through participation index', listed.length===1 && listed[0].worldId===worldId);
@@ -114,10 +119,12 @@ function makeWorldRecord({ worldId, userId, trainerId='trainer-a', clubId=null }
 
   await runtime.unloadWorld(worldId);
   const reloaded=await sessions.openWorld({userId:registered.user.userId,worldId});
-  check('WorldRecord plus current-season match/finance details round-trip after unload',
+  const lazyReloadedMatch=await sessions.loadMatchDetail({userId:registered.user.userId,worldId,matchId:'match-1'});
+  check('WorldRecord and finance state round-trip while full matches stay lazy after unload',
     reloaded.worldRecord.gameState.meta.testMarker==='saved' &&
     reloaded.membership.clubId==='club-a' &&
-    reloaded.matches.length===1 && reloaded.matches[0].id==='match-1' &&
+    reloaded.matches.length===0 &&
+    lazyReloadedMatch&&lazyReloadedMatch.id==='match-1' &&
     reloaded.financeEvents.length===1 && reloaded.financeEvents[0].id==='finance-1');
 
   check('Stale revision cannot overwrite newer truth', await expectCode(
@@ -160,8 +167,11 @@ function makeWorldRecord({ worldId, userId, trainerId='trainer-a', clubId=null }
     metadataRepository:new FileMetadataRepository({filePath:metadataFile})
   });
   const afterRestart=await runtimeAfterRestart.openWorld({userId:registered.user.userId,worldId});
-  check('Fresh runtime manager restores world after simulated server restart',
-    afterRestart.worldRecord.gameState.meta.testMarker==='saved' && afterRestart.matches.length===1);
+  const restartLazyMatch=await runtimeAfterRestart.loadMatchDetail({userId:registered.user.userId,worldId,matchId:'match-1'});
+  check('Fresh runtime manager restores world after simulated server restart with lazy match details',
+    afterRestart.worldRecord.gameState.meta.testMarker==='saved' &&
+    afterRestart.matches.length===0 &&
+    restartLazyMatch&&restartLazyMatch.id==='match-1');
 
   const multiplayerRecord=JSON.parse(JSON.stringify(afterRestart.worldRecord));
   multiplayerRecord.memberships.byTrainerId['trainer-b']={
