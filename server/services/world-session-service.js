@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const { DomainRuleError } = require('../persistence/errors');
 const { ROLE_WORLD_ADMIN, ensureWorldMembershipRoles, activeMemberships, membershipForUser } = require('../domain/world-memberships');
-const { MAX_WORLD_SLOTS } = require('../persistence/file-metadata-repository');
+const { MAX_WORLD_SLOTS, MAX_ACTIVE_WORLDS_PER_USER } = require('../persistence/file-metadata-repository');
 const { normalizeWorldName, normalizeWorldAccess } = require('../domain/world-metadata');
 
 function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
@@ -160,6 +160,10 @@ class WorldSessionService {
   }
 
   async applyToWorld({ userId, displayName, worldId }) {
+    const activeWorldIds = await this.metadata.listActiveWorldIdsForUser(userId);
+    if (activeWorldIds.length >= MAX_ACTIVE_WORLDS_PER_USER) {
+      throw new DomainRuleError('User already participates in five active worlds');
+    }
     return this.metadata.createWorldApplication({ worldId, userId, displayName });
   }
 
