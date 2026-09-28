@@ -71,10 +71,11 @@ function makeWorldRecord(worldId,userId){
   });
 
   const after1=await sessions.openWorld({userId,worldId});
-  check('First slot commit persists only its detail segment and current world state',
+  const after1Match=await sessions.loadMatchDetail({userId,worldId,matchId:'m1'});
+  check('First slot commit persists its detail segment while world opening stays lazy for full matches',
     saved1.revision===takeover.revision+1&&
     after1.worldRecord.gameState.calendar.currentSlotKey==='w1'&&
-    after1.matches.length===1&&after1.matches[0].id==='m1'&&
+    after1.matches.length===0&&after1Match&&after1Match.id==='m1'&&
     after1.financeEvents.length===1&&after1.financeEvents[0].id==='e1');
 
   const slot2=JSON.parse(JSON.stringify(after1.worldRecord));
@@ -89,10 +90,14 @@ function makeWorldRecord(worldId,userId){
 
   await runtime.unloadWorld(worldId);
   const reloaded=await sessions.openWorld({userId,worldId});
-  check('Second slot sends only new details while reload reconstructs both committed slots',
+  const [reloadedM1,reloadedM2]=await Promise.all([
+    sessions.loadMatchDetail({userId,worldId,matchId:'m1'}),
+    sessions.loadMatchDetail({userId,worldId,matchId:'m2'})
+  ]);
+  check('Second slot sends only new details while reload keeps full matches lazy and finances coherent',
     saved2.revision===saved1.revision+1&&
     reloaded.worldRecord.gameState.calendar.currentSlotKey==='w2'&&
-    reloaded.matches.map(x=>x.id).sort().join(',')==='m1,m2'&&
+    reloaded.matches.length===0&&reloadedM1&&reloadedM1.id==='m1'&&reloadedM2&&reloadedM2.id==='m2'&&
     reloaded.financeEvents.map(x=>x.id).sort().join(',')==='e1,e2');
 
   const app=await fs.readFile(path.join(__dirname,'..','src','app.bundle.js'),'utf8');
