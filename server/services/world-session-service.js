@@ -288,6 +288,51 @@ class WorldSessionService {
     return { deleted:true, worldId };
   }
 
+  async getProgression({ userId, worldId }) {
+    const participation = await this.metadata.getParticipation({ worldId, userId });
+    if (!participation) throw new DomainRuleError('User is not a member of this world');
+    const manifest = await this.worlds.getManifest(worldId);
+    if (!manifest) throw new DomainRuleError('Active world not found');
+    const stored = await this.metadata.getWorldProgression(worldId);
+    if (!stored || Number(stored.revision) !== Number(manifest.revision)) {
+      return {
+        worldId,
+        revision:Number(manifest.revision),
+        status:'WAITING',
+        readyUserIds:[],
+        deadlineAt:null,
+        leaseId:null,
+        leaseExpiresAt:null,
+        shouldAdvance:false
+      };
+    }
+    return stored;
+  }
+
+  async markReady({ userId, worldId, expectedRevision }) {
+    const participation = await this.metadata.getParticipation({ worldId, userId });
+    if (!participation) throw new DomainRuleError('User is not a member of this world');
+    const manifest = await this.worlds.getManifest(worldId);
+    if (!manifest) throw new DomainRuleError('Active world not found');
+    if (Number(expectedRevision) !== Number(manifest.revision)) {
+      const error = new Error('World revision mismatch');
+      error.code = 'PERSISTENCE_CONFLICT';
+      error.details = { worldId, expectedRevision, actualRevision:manifest.revision };
+      throw error;
+    }
+    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    const meta = await this.metadata.getWorld(worldId);
+    const durationSeconds = Math.max(15, Number((meta && meta.roundDurationSeconds) || 120));
+    return this.metadata.markTrainerReady({
+      worldId,
+      userId,
+      expectedRevision:Number(manifest.revision),
+      activeUserIds,
+      deadlineAt:new Date(Date.now() + durationSeconds * 1000).toISOString(),
+      leaseMs:120000
+    });
+  }
+
   async openWorld({ userId, worldId }) {
     return this.runtime.openWorld({ userId, worldId });
   }
@@ -300,8 +345,39 @@ class WorldSessionService {
     return this.runtime.saveSnapshot({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents });
   }
 
-  async saveSlot({ userId, worldId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches, financeEvents }) {
-    return this.runtime.saveSlot({ userId, worldId, worldRecord, worldDelta, expectedRevision, season, slotKey, matches, financeEvents });
+  async saveSlot({ userId, worldId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches, financeEvents, progressLeaseId = null }) {
+    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    if (activeUserIds.length > 1 && !progressLeaseId) throw new DomainRuleError('Multiplayer slot progress requires a progress lease');
+    if (progressLeaseId) {
+      const state = await this.metadata.getWorldProgression(worldId);
+      if (!state ||
+          Number(state.revision) !== Number(expectedRevision) ||
+          state.status !== 'PROCESSING' ||
+          String(state.leaseId || '') !== String(progressLeaseId)) {
+        throw new DomainRuleError('Progression lease mismatch');
+      }
+    }
+    try {
+      const result = await this.runtime.saveSlot({ userId, worldId, worldRecord, worldDelta, expectedRevision, season, slotKey, matches, financeEvents });
+      if (progressLeaseId) {
+        await this.metadata.completeWorldProgress({
+          worldId,
+          expectedRevision:Number(expectedRevision),
+          nextRevision:Number(result.revision),
+          leaseId:progressLeaseId
+        }).catch(() => {});
+      }
+      return result;
+    } catch (error) {
+      if (progressLeaseId) {
+        await this.metadata.releaseWorldProgress({
+          worldId,
+          expectedRevision:Number(expectedRevision),
+          leaseId:progressLeaseId
+        }).catch(() => {});
+      }
+      throw error;
+    }
   }
 
   async assignClub({ userId, worldId, clubId, expectedRevision }) {
