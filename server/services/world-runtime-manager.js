@@ -1,6 +1,7 @@
 'use strict';
 
 const { DomainRuleError, PersistenceConflictError } = require('../persistence/errors');
+const { applyWorldDelta } = require('../domain/world-delta');
 const {
   activeMemberships,
   membershipForUser,
@@ -189,21 +190,41 @@ class WorldRuntimeManager {
     });
   }
 
-  async saveSlot({ worldId, userId, worldRecord, expectedRevision, season, slotKey, matches = [], financeEvents = [] }) {
+  async saveSlot({ worldId, userId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches = [], financeEvents = [] }) {
     return this._enqueue(worldId, async () => {
       const runtime = await this._load(worldId);
       if (Number(expectedRevision) !== Number(runtime.revision)) {
         throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: runtime.revision });
       }
-      const nextRecord = this._canonicalizeSingleUserSnapshot(runtime, userId, worldRecord);
-      const manifest = await this.worldPersistence.commitSlot({
-        worldRecord: nextRecord,
-        season,
-        slotKey,
-        matches,
-        financeEvents,
-        expectedRevision: runtime.revision
-      });
+      const membership = membershipForUser(runtime.worldRecord, userId);
+      if (!membership) throw new DomainRuleError('User is not a member of this world');
+
+      let nextRecord = null;
+      let undoDelta = null;
+      if (worldDelta) {
+        const applied = applyWorldDelta(runtime.worldRecord, worldDelta, { captureUndo: true });
+        nextRecord = applied.worldRecord;
+        undoDelta = applied.undoDelta;
+      } else {
+        nextRecord = this._canonicalizeSingleUserSnapshot(runtime, userId, worldRecord);
+      }
+
+      let manifest;
+      try {
+        manifest = await this.worldPersistence.commitSlot({
+          worldId,
+          worldRecord: worldDelta ? null : nextRecord,
+          worldDelta,
+          season,
+          slotKey,
+          matches,
+          financeEvents,
+          expectedRevision: runtime.revision
+        });
+      } catch (error) {
+        if (undoDelta) applyWorldDelta(runtime.worldRecord, undoDelta);
+        throw error;
+      }
       runtime.worldRecord = nextRecord;
       runtime.revision = Number(manifest.revision);
       runtime.currentSeason = Number(manifest.currentSeason);
