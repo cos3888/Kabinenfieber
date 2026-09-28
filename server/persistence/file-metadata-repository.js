@@ -73,6 +73,32 @@ class FileMetadataRepository {
     return data.worlds[worldId] ? clone(data.worlds[worldId]) : null;
   }
 
+  async setWorldLobbyProjection({ worldId, currentSeason = 1, maxPlayers = 0, clubNamesById = {} }) {
+    return this._mutate(data => {
+      const world = data.worlds[worldId];
+      if (!world) throw new PersistenceNotFoundError('World not found', { worldId });
+      world.currentSeason = Number(currentSeason || 1);
+      world.maxPlayers = Number(maxPlayers || 0);
+      world.clubNamesById = clone(clubNamesById || {});
+      world.projectionUpdatedAt = nowIso();
+      return world;
+    });
+  }
+
+  async setParticipationProjection({ worldId, userId, trainerId = null, clubId = null, role = null, trainerDisplayName = null }) {
+    return this._mutate(data => {
+      const key = participationKey(worldId, userId);
+      const row = data.participationIndex[key];
+      if (!row || row.status !== STATUS_ACTIVE) throw new PersistenceNotFoundError('Active participation index not found', { worldId, userId });
+      row.trainerId = trainerId || row.trainerId || null;
+      row.clubId = clubId || null;
+      row.role = role || row.role || 'PLAYER';
+      if (trainerDisplayName) row.trainerDisplayName = trainerDisplayName;
+      row.projectionUpdatedAt = nowIso();
+      return row;
+    });
+  }
+
   async getSlot(slotId) {
     const data = await this._read();
     return data.slots[String(Number(slotId))] ? clone(data.slots[String(Number(slotId))]) : null;
