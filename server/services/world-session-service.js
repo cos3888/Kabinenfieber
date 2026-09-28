@@ -262,6 +262,10 @@ class WorldSessionService {
     return this.runtime.openWorld({ userId, worldId });
   }
 
+  async loadMatchDetail({ userId, worldId, matchId }) {
+    return this.runtime.loadMatchDetail({ userId, worldId, matchId });
+  }
+
   async saveWorld({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents }) {
     return this.runtime.saveSnapshot({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents });
   }
