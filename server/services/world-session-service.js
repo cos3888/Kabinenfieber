@@ -91,11 +91,18 @@ class WorldSessionService {
       if (!manifest) continue;
       let membership = null;
       let active = [];
+      let clubName = null;
+      let maxPlayers = 0;
       try {
         const record = await this.worlds.loadWorldRecord(meta.worldId);
         ensureWorldMembershipRoles(record);
         active = activeMemberships(record);
         membership = membershipForUser(record, userId);
+        const clubs = record.gameState && record.gameState.clubs;
+        maxPlayers = clubs && Array.isArray(clubs.order) ? clubs.order.length : 0;
+        if (membership && membership.clubId && clubs && clubs.byId && clubs.byId[membership.clubId]) {
+          clubName = clubs.byId[membership.clubId].name || clubs.byId[membership.clubId].clubName || membership.clubId;
+        }
       } catch (_) {}
       worlds.push({
         worldId: meta.worldId,
@@ -109,8 +116,10 @@ class WorldSessionService {
         revision: Number(manifest.revision),
         currentSeason: Number(manifest.currentSeason || 1),
         participantCount: Number(meta.participantCount || active.length || 0),
+        maxPlayers,
         isMember: Boolean(membership),
         membership: membership ? clone(membership) : null,
+        clubName,
         applicationStatus: meta.applicationStatus || null,
         isAdmin: Boolean(membership && membership.role === ROLE_WORLD_ADMIN)
       });
