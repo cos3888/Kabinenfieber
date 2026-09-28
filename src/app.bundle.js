@@ -61,8 +61,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.29.6';
-  var KF_BUILD_LABEL = 'KF_0.29.6 - Takeover Creation Race Fix';
+  var KF_VERSION = '0.30.0';
+  var KF_BUILD_LABEL = 'KF_0.30.0 - Startbereich & Spielwelt-Lobby';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -24338,7 +24338,7 @@ migrateWorldDataTruthToCurrent=function(world){
 
 var KF029_BACKEND_BASE_URL = String(window.KF_BACKEND_BASE_URL || 'https://kabinenfieber-backend-458781449503.us-central1.run.app').replace(/\/+$/,'');
 // Remote contract stays independent from the browser/game build. 0.29.1 backends ignore this field; 0.29.2+ use it to guard incompatible snapshot writes.
-var KF029_REMOTE_CONTRACT_VERSION = '0.29.5';
+var KF029_REMOTE_CONTRACT_VERSION = '0.30.0';
 var KF029_AUTH_STORAGE_KEY = 'kf.auth.token';
 var KF029_AUTOSAVE_DEBOUNCE_MS = 1400;
 var KF029Remote = {
@@ -24350,7 +24350,9 @@ var KF029Remote = {
   membership: null,
   busy: false,
   restoring: false,
-  showWorldList: false,
+  showWorldList: true,
+  lobbyOnlyMine: false,
+  lobbyAccess: 'ALL',
   error: '',
   message: '',
   createPromise: null,
@@ -24500,6 +24502,7 @@ async function kf029Login(registerMode){
     kf029SetToken(data.token);
     kf029SetUser(data.user);
     await kf029RefreshWorldList();
+    KF029Remote.showWorldList=true;
     KF029Remote.message = registerMode ? 'Benutzer angelegt und angemeldet.' : 'Erfolgreich angemeldet.';
   } catch (error) {
     KF029Remote.error = error.message || 'Anmeldung fehlgeschlagen.';
@@ -24619,7 +24622,7 @@ async function kf029CreateRemoteWorld(){
   var config = KF029Remote.pendingWorldConfig || {};
   var data = await kf029Request('/api/v1/worlds', {
     method:'POST',
-    body:{ clientVersion:KF029_REMOTE_CONTRACT_VERSION, worldRecord:record, worldName:config.worldName, visibility:config.visibility, joinPolicy:config.joinPolicy, matches:kf029CurrentMatches(), financeEvents:kf029CurrentFinanceEvents() }
+    body:{ clientVersion:KF029_REMOTE_CONTRACT_VERSION, worldRecord:record, worldName:config.worldName, description:config.description || '', visibility:config.visibility, joinPolicy:config.joinPolicy, matches:kf029CurrentMatches(), financeEvents:kf029CurrentFinanceEvents() }
   });
   KF029Remote.revision = Number(data.revision);
   KF029Remote.currentSeason = Number(data.currentSeason || (((record.gameState||{}).meta||{}).seasonNumber)||1);
@@ -24653,6 +24656,7 @@ function kf029OpenWorldCreateModal(){
     bodyHtml:
       '<div class="kf-world-create-form">' +
       '<label class="kf-world-create-label">Name der Spielwelt<input id="kf-world-name" class="kf-auth-input" maxlength="40" placeholder="z. B. Nordlicht Karriere"></label>' +
+      '<label class="kf-world-create-label">Beschreibung<textarea id="kf-world-description" class="kf-auth-input" maxlength="200" rows="3" placeholder="z. B. Langzeitwelt für aktive Manager"></textarea></label>' +
       '<label class="kf-world-create-label">Beitritt zur Spielwelt<select id="kf-world-access" class="kf-auth-input">' +
       '<option value="PRIVATE:INVITE_ONLY">Private Welt · nur Einladungen</option>' +
       '<option value="PUBLIC:APPLICATION">Bewerbungswelt · Beitritt nach Freigabe</option>' +
@@ -24667,15 +24671,19 @@ function kf029OpenWorldCreateModal(){
 }
 function kf029ConfirmWorldCreate(){
   var nameInput=document.getElementById('kf-world-name');
+  var descriptionInput=document.getElementById('kf-world-description');
   var accessInput=document.getElementById('kf-world-access');
   var worldName=String(nameInput&&nameInput.value||'').trim().replace(/\s+/g,' ');
+  var description=String(descriptionInput&&descriptionInput.value||'').trim().replace(/\s+/g,' ').slice(0,200);
   var errorNode=document.getElementById('kf-world-create-error');
   if(worldName.length<3||worldName.length>40){
     if(errorNode)errorNode.textContent='Der Weltname muss 3 bis 40 Zeichen lang sein.';
     return;
   }
+  var activeWorldCount=(KF029Remote.worlds||[]).filter(function(world){return world&&world.isMember;}).length;
+  if(activeWorldCount>=5){ if(errorNode)errorNode.textContent='Du bist bereits an 5 aktiven Spielwelten beteiligt. Verlasse oder lösche zuerst eine Welt.'; return; }
   var access=kf029WorldAccessConfig(accessInput&&accessInput.value);
-  KF029Remote.pendingWorldConfig={worldName:worldName,visibility:access.visibility,joinPolicy:access.joinPolicy};
+  KF029Remote.pendingWorldConfig={worldName:worldName,description:description,visibility:access.visibility,joinPolicy:access.joinPolicy};
   closeModal();renderModal();
   KF029Remote.revision=null;
   KF029Remote.membership=null;
@@ -24684,14 +24692,22 @@ function kf029ConfirmWorldCreate(){
   KF029Remote.error='';
   KF029Remote.message='Neue Welt wird vorbereitet ...';
   startNewCareer();
+  setCurrentView('start');
+  renderApp();
   KF029Remote.createPromise=kf029CreateRemoteWorld().then(function(data){
     KF029Remote.pendingWorldConfig=null;
+    KF029Remote.message='Spielwelt erstellt. Wähle jetzt deinen Verein.';
+    goToClubSelection();
     return data;
   }).catch(function(error){
-    KF029Remote.error='Die neue Welt konnte nicht auf dem Server angelegt werden: '+(error.message||'Unbekannter Fehler');
+    var limit=/five active worlds/i.test(String(error&&error.message||''));
+    KF029Remote.error=limit ? 'Du bist bereits an 5 aktiven Spielwelten beteiligt. Verlasse oder lösche zuerst eine Welt.' : 'Die neue Welt konnte nicht auf dem Server angelegt werden: '+(error.message||'Unbekannter Fehler');
     KF029Remote.message='';
-    openModal({title:'Server-Speicherung fehlgeschlagen',body:KF029Remote.error});
-    renderModal();renderApp();
+    resetState();
+    KF029Remote.showWorldList=true;
+    void kf029RefreshWorldList().finally(function(){renderApp();renderModal();});
+    openModal({title:limit?'Maximale Anzahl erreicht':'Spielwelt konnte nicht erstellt werden',body:KF029Remote.error});
+    renderModal();
     throw error;
   }).finally(function(){KF029Remote.createPromise=null;});
 }
