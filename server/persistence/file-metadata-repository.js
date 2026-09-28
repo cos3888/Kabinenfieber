@@ -13,6 +13,7 @@ const MAX_ACTIVE_WORLDS_PER_USER = 5;
 function nowIso() { return new Date().toISOString(); }
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function participationKey(worldId, userId) { return `${worldId}__${userId}`; }
+function applicationKey(worldId, userId) { return `${worldId}__${userId}`; }
 
 class FileMetadataRepository {
   constructor({ filePath }) {
@@ -28,9 +29,10 @@ class FileMetadataRepository {
       parsed.worlds = parsed.worlds || {};
       parsed.participationIndex = parsed.participationIndex || {};
       parsed.invitations = parsed.invitations || {};
+      parsed.applications = parsed.applications || {};
       return parsed;
     } catch (error) {
-      if (error && error.code === 'ENOENT') return { schemaVersion: 1, slots: {}, worlds: {}, participationIndex: {}, invitations: {} };
+      if (error && error.code === 'ENOENT') return { schemaVersion: 1, slots: {}, worlds: {}, participationIndex: {}, invitations: {}, applications: {} };
       throw error;
     }
   }
@@ -65,6 +67,45 @@ class FileMetadataRepository {
     return Object.values(data.participationIndex)
       .filter(p => p.worldId === worldId && p.status === STATUS_ACTIVE)
       .map(p => p.userId);
+  }
+
+  async getParticipation(worldId, userId) {
+    const data = await this._read();
+    const row = data.participationIndex[participationKey(worldId, userId)];
+    return row ? clone(row) : null;
+  }
+
+  async listVisibleWorldRegistrations(userId) {
+    const data = await this._read();
+    const activeMine = new Set(Object.values(data.participationIndex)
+      .filter(p => p.userId === userId && p.status === STATUS_ACTIVE)
+      .map(p => String(p.worldId)));
+    return Object.values(data.worlds)
+      .filter(world => world && world.status === 'ACTIVE' && (world.visibility === 'PUBLIC' || activeMine.has(String(world.worldId))))
+      .map(world => clone(world))
+      .sort((a,b) => Number(a.slotId) - Number(b.slotId));
+  }
+
+  async getApplication(worldId, userId) {
+    const data = await this._read();
+    const row = data.applications[applicationKey(worldId, userId)];
+    return row ? clone(row) : null;
+  }
+
+  async createApplication({ worldId, userId, displayName = null, createdAt = nowIso() }) {
+    return this._mutate(data => {
+      const world = data.worlds[worldId];
+      if (!world || world.status !== 'ACTIVE') throw new PersistenceNotFoundError('Active world not found', { worldId });
+      if (world.visibility !== 'PUBLIC' || world.joinPolicy !== 'APPLICATION') throw new DomainRuleError('World does not accept applications');
+      const participant = data.participationIndex[participationKey(worldId, userId)];
+      if (participant && participant.status === STATUS_ACTIVE) throw new DomainRuleError('User already participates in this world');
+      const key = applicationKey(worldId, userId);
+      const existing = data.applications[key];
+      if (existing && existing.status === 'OPEN') return existing;
+      const row = { worldId, userId, displayName, status:'OPEN', createdAt };
+      data.applications[key] = row;
+      return row;
+    });
   }
 
   async getWorld(worldId) {
@@ -160,6 +201,9 @@ class FileMetadataRepository {
       });
       Object.keys(data.invitations).forEach(key => {
         if (data.invitations[key] && data.invitations[key].worldId === worldId) delete data.invitations[key];
+      });
+      Object.keys(data.applications).forEach(key => {
+        if (data.applications[key] && data.applications[key].worldId === worldId) delete data.applications[key];
       });
       return { deleted: true, worldId };
     });
