@@ -25017,7 +25017,10 @@ function kf030WorldActionHtml(world){
   if(world.mine){
     var primary='<button class="primary-btn kf-lobby-action" type="button" data-action="kf-load-world" data-world-id="'+escapeHtml(world.worldId)+'">'+(world.membership&&world.membership.clubId?'Öffnen':'Verein wählen')+'</button>';
     var leaveLabel=Number(world.participantCount||0)<=1?'Welt löschen':'Austreten';
-    return primary+'<button class="ghost-btn kf-lobby-action" type="button" data-action="kf-leave-world" data-world-id="'+escapeHtml(world.worldId)+'" data-world-name="'+escapeHtml(world.worldName||'Spielwelt')+'">'+leaveLabel+'</button>';
+    var applications=(world.membership&&world.membership.role==='WORLD_ADMIN'&&Number(world.openApplicationCount||0)>0)
+      ? '<button class="secondary-btn kf-lobby-action" type="button" data-action="kf-review-applications" data-world-id="'+escapeHtml(world.worldId)+'">Bewerbungen ('+escapeHtml(world.openApplicationCount)+')</button>'
+      : '';
+    return primary+applications+'<button class="ghost-btn kf-lobby-action" type="button" data-action="kf-leave-world" data-world-id="'+escapeHtml(world.worldId)+'" data-world-name="'+escapeHtml(world.worldName||'Spielwelt')+'">'+leaveLabel+'</button>';
   }
   if(world.applicationStatus==='OPEN') return '<button class="ghost-btn kf-lobby-action" type="button" disabled>Bewerbung läuft</button>';
   if(world.canJoin) return '<button class="primary-btn kf-lobby-action" type="button" data-action="kf-join-world" data-world-id="'+escapeHtml(world.worldId)+'">Beitreten</button>';
@@ -25084,6 +25087,31 @@ renderStartView = function(){
   }
   return kf030RenderLobby();
 };
+
+async function kf030ReviewApplications(worldId){
+  KF029Remote.error='';
+  try{
+    var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/applications');
+    var rows=(data.applications||[]).map(function(row){
+      return '<div class="kf-application-row"><div><strong>'+escapeHtml(row.displayName||'Spieler')+'</strong><span>'+escapeHtml(row.userId||'')+'</span></div>'+
+        '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-application-decision" data-world-id="'+escapeHtml(worldId)+'" data-user-id="'+escapeHtml(row.userId)+'" data-decision="ACCEPT">Annehmen</button>'+
+        '<button class="ghost-btn" type="button" data-action="kf-application-decision" data-world-id="'+escapeHtml(worldId)+'" data-user-id="'+escapeHtml(row.userId)+'" data-decision="REJECT">Ablehnen</button></div></div>';
+    }).join('');
+    openModal({title:'Bewerbungen',bodyHtml:rows||'<div class="notice">Keine offenen Bewerbungen.</div>'});
+    renderModal();
+  }catch(error){KF029Remote.error='Bewerbungen konnten nicht geladen werden: '+(error.message||'Unbekannter Fehler');renderApp();}
+}
+async function kf030DecideApplication(worldId,userId,decision){
+  try{
+    await kf029Request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/applications/decision',{
+      method:'POST',body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION,applicantUserId:userId,decision:decision}
+    });
+    await kf029RefreshWorldList();
+    KF029Remote.message=decision==='ACCEPT'?'Bewerbung angenommen.':'Bewerbung abgelehnt.';
+    await kf030ReviewApplications(worldId);
+    renderApp();
+  }catch(error){KF029Remote.error='Bewerbung konnte nicht bearbeitet werden: '+(error.message||'Unbekannter Fehler');closeModal();renderModal();renderApp();}
+}
 
 async function kf030JoinWorld(worldId){
   if(Number(KF029Remote.activeWorldCount||0)>=Number(KF029Remote.maxActiveWorlds||5)){
@@ -25164,6 +25192,8 @@ handleAction = function(action, actionEl){
     openModal({title:'Mein Profil',bodyHtml:'<div class="notice"><strong>'+escapeHtml(KF029Remote.user.displayName||'Spieler')+'</strong><br>Benutzer-ID: '+escapeHtml(KF029Remote.user.userId||'-')+'<br><br>Weitere Profiloptionen werden auf dieser zentralen Kontoebene ergänzt.</div>'});
     renderModal(); return;
   }
+  if (action === 'kf-review-applications') { void kf030ReviewApplications(actionEl.getAttribute('data-world-id')||''); return; }
+  if (action === 'kf-application-decision') { void kf030DecideApplication(actionEl.getAttribute('data-world-id')||'',actionEl.getAttribute('data-user-id')||'',actionEl.getAttribute('data-decision')||''); return; }
   if (action === 'kf-join-world') { void kf030JoinWorld(actionEl.getAttribute('data-world-id')||''); return; }
   if (action === 'kf-apply-world') { void kf030ApplyWorld(actionEl.getAttribute('data-world-id')||''); return; }
   if (action === 'kf-leave-world') { kf030ConfirmLeaveWorld(actionEl.getAttribute('data-world-id')||'',actionEl.getAttribute('data-world-name')||'Spielwelt'); return; }
