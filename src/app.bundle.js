@@ -61,8 +61,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.30.1';
-  var KF_BUILD_LABEL = 'KF_0.30.1 - Delta-Korrektheit & Match-Delta-Performance';
+  var KF_VERSION = '0.31.0';
+  var KF_BUILD_LABEL = 'KF_0.31.0 - Authoritative Persistence & Progression Foundation';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -24382,9 +24382,52 @@ var KF029Remote = {
   checkpointFailed: false,
   checkpointReason: '',
   committedMatchIds: {},
-  committedFinanceIds: {}
+  committedFinanceIds: {},
+  committedGameState: null
 };
 try { KF029Remote.token = window.localStorage.getItem(KF029_AUTH_STORAGE_KEY) || null; } catch (error) {}
+
+function kf031CloneJson(value){
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+function kf031IsObject(value){
+  return !!value && typeof value === 'object';
+}
+function kf031BuildWorldDelta(record){
+  if (!record || !record.id || !record.gameState || !KF029Remote.committedGameState) return null;
+  var ops = [];
+  function visit(before, after, path){
+    if (before === after) return;
+    var beforeObject = kf031IsObject(before);
+    var afterObject = kf031IsObject(after);
+    if (!beforeObject || !afterObject || Array.isArray(before) !== Array.isArray(after)) {
+      ops.push({ path:path.slice(), value:kf031CloneJson(after) });
+      return;
+    }
+    if (Array.isArray(after)) {
+      if (after.length < before.length) {
+        ops.push({ path:path.slice(), value:kf031CloneJson(after) });
+        return;
+      }
+      var common = Math.min(before.length, after.length);
+      for (var ai=0; ai<common; ai+=1) visit(before[ai], after[ai], path.concat(String(ai)));
+      for (var aj=common; aj<after.length; aj+=1) ops.push({ path:path.concat(String(aj)), value:kf031CloneJson(after[aj]) });
+      return;
+    }
+    var seen = {};
+    Object.keys(before).forEach(function(key){
+      seen[key]=1;
+      if (!Object.prototype.hasOwnProperty.call(after,key)) ops.push({ path:path.concat(key), delete:true });
+      else visit(before[key], after[key], path.concat(key));
+    });
+    Object.keys(after).forEach(function(key){
+      if (seen[key]) return;
+      ops.push({ path:path.concat(key), value:kf031CloneJson(after[key]) });
+    });
+  }
+  visit(KF029Remote.committedGameState, record.gameState, ['gameState']);
+  return { schemaVersion:'kf-world-delta-0.31.0', worldId:String(record.id), ops:ops };
+}
 
 function kf029SetToken(token){
   KF029Remote.token = token || null;
@@ -24599,6 +24642,7 @@ function kf029InstallLoadedWorld(data){
   setWorldRecord(record);
   kf029RestoreCurrentDetails(record.gameState, data.matches || [], data.financeEvents || []);
   kf029MarkCommittedDetails(data.matches || [], data.financeEvents || []);
+  KF029Remote.committedGameState = kf031CloneJson(record.gameState);
   invalidateRuntimeDerivedIndex(record.gameState);
   WorldRepository.save(record);
 
@@ -24669,6 +24713,7 @@ async function kf029CreateRemoteWorld(){
     record.memberships.byTrainerId[data.membership.trainerId].role = data.membership.role || record.memberships.byTrainerId[data.membership.trainerId].role;
   }
   kf029MarkCommittedDetails(kf029CurrentMatches(), kf029CurrentFinanceEvents());
+  KF029Remote.committedGameState = kf031CloneJson(record.gameState);
   await kf029RefreshWorldList();
   KF029Remote.message = 'Neue Welt ist auf dem Server gespeichert.';
   renderApp();
@@ -24727,6 +24772,7 @@ function kf029ConfirmWorldCreate(){
   KF029Remote.membership=null;
   KF029Remote.committedMatchIds={};
   KF029Remote.committedFinanceIds={};
+  KF029Remote.committedGameState=null;
   KF029Remote.error='';
   KF029Remote.message='Neue Welt wird vorbereitet ...';
   startNewCareer();
@@ -24798,6 +24844,7 @@ async function kf029RecoverCommittedProgress(record, slotKey, deltaMatches, delt
     KF029Remote.lastCommittedSlotKey = slotKey;
     KF029Remote.lastSavedAt = new Date().toISOString();
     kf029AcceptCommittedDelta(deltaMatches, deltaFinance);
+    KF029Remote.committedGameState = kf031CloneJson(serverRecord.gameState);
     return { revision:KF029Remote.revision, currentSeason:KF029Remote.currentSeason, recovered:true };
   } catch (recoveryError) {
     return null;
@@ -24814,6 +24861,8 @@ function kf029SaveProgressCheckpoint(reason){
   if (!slotKey) return kf029SaveRemoteWorld(reason || 'progress-checkpoint');
   var deltaMatches = kf029PendingMatches();
   var deltaFinance = kf029PendingFinanceEvents();
+  var worldDelta = kf031BuildWorldDelta(record);
+  if (!worldDelta) return kf029SaveRemoteWorld(reason || 'progress-checkpoint');
   var run = KF029Remote.saveChain.catch(function(){}).then(async function(){
     if (KF029Remote.createPromise) await KF029Remote.createPromise;
     if (!AppState.worldRecord || KF029Remote.revision == null) return null;
@@ -24824,7 +24873,7 @@ function kf029SaveProgressCheckpoint(reason){
         body:{
           expectedRevision:KF029Remote.revision,
           clientVersion:KF029_REMOTE_CONTRACT_VERSION,
-          worldRecord:record,
+          worldDelta:worldDelta,
           season:season,
           slotKey:slotKey,
           matches:deltaMatches,
@@ -24842,6 +24891,7 @@ function kf029SaveProgressCheckpoint(reason){
     KF029Remote.lastCommittedSlotKey = slotKey;
     KF029Remote.error = '';
     kf029AcceptCommittedDelta(deltaMatches, deltaFinance);
+    KF029Remote.committedGameState = kf031CloneJson(record.gameState);
     return data;
   });
   KF029Remote.saveChain = run.catch(function(){});
@@ -24876,6 +24926,7 @@ function kf029SaveRemoteWorld(reason){
     KF029Remote.lastCommittedSlotKey = (((record.gameState||{}).calendar||{}).currentSlotKey) || null;
     KF029Remote.error = '';
     kf029MarkCommittedDetails(kf029CurrentMatches(), kf029CurrentFinanceEvents());
+    KF029Remote.committedGameState = kf031CloneJson(record.gameState);
     return data;
   });
   KF029Remote.saveChain = run.catch(function(){});
@@ -24960,6 +25011,7 @@ function kf029DiscardLoadedWorldToList(){
   KF029Remote.lastCommittedSlotKey=null;
   KF029Remote.committedMatchIds={};
   KF029Remote.committedFinanceIds={};
+  KF029Remote.committedGameState=null;
   KF029Remote.error='';
   KF029Remote.message='';
   returnToStart();
