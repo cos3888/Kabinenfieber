@@ -87,9 +87,11 @@ function makeWorldRecord(worldId,userId){
   });
   await runtime.unloadWorld('world-0291');
   const reopened=await sessions.openWorld({userId,worldId:'world-0291'});
-  check('Committed calendar checkpoint reloads at the exact saved slot and season',
+  const lazyCheckpointMatch=await sessions.loadMatchDetail({userId,worldId:'world-0291',matchId:'match-checkpoint'});
+  check('Committed calendar checkpoint reloads at the exact saved slot and season with lazy match detail',
     saved.currentSeason===2&&reopened.worldRecord.gameState.calendar.currentSlotKey==='w5-end'&&
-    reopened.worldRecord.gameState.meta.seasonNumber===2&&reopened.matches[0].id==='match-checkpoint'&&
+    reopened.worldRecord.gameState.meta.seasonNumber===2&&reopened.matches.length===0&&
+    lazyCheckpointMatch&&lazyCheckpointMatch.id==='match-checkpoint'&&
     reopened.financeEvents[0].id==='finance-checkpoint');
 
   const app=await fs.readFile(path.join(__dirname,'..','src','app.bundle.js'),'utf8');
