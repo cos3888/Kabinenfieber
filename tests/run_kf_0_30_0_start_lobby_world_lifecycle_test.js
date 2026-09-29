@@ -14,6 +14,7 @@ const root=path.resolve(__dirname,'..');
 const app=fs.readFileSync(path.join(root,'src','app.bundle.js'),'utf8');
 const server=fs.readFileSync(path.join(root,'server','index.js'),'utf8');
 const index=fs.readFileSync(path.join(root,'index.html'),'utf8');
+const currentVersion=String(JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).version||'');
 
 const report={version:'0.30.0',passed:true,checks:[]};
 function check(name,ok,details={}){report.checks.push({name,ok:!!ok,details});if(!ok)report.passed=false;}
@@ -73,11 +74,13 @@ async function create(service,id,userId,access='PRIVATE'){
 (async()=>{
   check('World participation limit remains five',MAX_ACTIVE_WORLDS_PER_USER===5);
   check('Browser and backend use the lifecycle contract on the current package version',
-    app.includes("var KF_VERSION = '0.31.0';")&&
+    !!currentVersion&&
+    app.includes("var KF_VERSION = '"+currentVersion+"';")&&
     app.includes("var KF029_REMOTE_CONTRACT_VERSION = '0.30.0';")&&
-    server.includes("const SERVICE_VERSION = '0.31.0';")&&
+    server.includes("const SERVICE_VERSION = '"+currentVersion+"';")&&
     server.includes("const API_VERSION = '0.30.0';")&&
-    index.includes('app.bundle.js?v=0.31.0')&&index.includes('app.css?v=0.31.0'));
+    index.includes('app.bundle.js?v='+currentVersion)&&index.includes('app.css?v='+currentVersion),
+    {currentVersion});
 
   check('Lobby exposes filters and active-world counter',
     app.includes('Aktive Welten: ')&&
