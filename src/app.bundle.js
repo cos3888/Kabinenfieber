@@ -25253,23 +25253,27 @@ async function kf029RecoverCommittedProgress(record, slotKey, deltaMatches, delt
 }
 function kf029SaveProgressCheckpoint(reason){
   if (!KF029Remote.user || !AppState.worldRecord) return Promise.resolve(null);
-  var record = AppState.worldRecord;
-  var season = Number((((record.gameState||{}).meta||{}).seasonNumber)||1);
-  if (KF029Remote.currentSeason != null && Number(KF029Remote.currentSeason) !== season) {
+  var initialRecord=AppState.worldRecord;
+  var initialSeason=Number((((initialRecord.gameState||{}).meta||{}).seasonNumber)||1);
+  if (KF029Remote.currentSeason != null && Number(KF029Remote.currentSeason) !== initialSeason) {
     return kf029SaveRemoteWorld(reason || 'season-transition');
   }
-  var slotKey = ((((record.gameState||{}).calendar||{}).currentSlotKey) || '');
-  if (!slotKey) return kf029SaveRemoteWorld(reason || 'progress-checkpoint');
-  var deltaMatches = kf029PendingMatches();
-  var deltaFinance = kf029PendingFinanceEvents();
-  var worldDelta = kf031BuildWorldDelta(record);
-  if (!worldDelta) return kf029SaveRemoteWorld(reason || 'progress-checkpoint');
-  var run = KF029Remote.saveChain.catch(function(){}).then(async function(){
+  var initialSlotKey=((((initialRecord.gameState||{}).calendar||{}).currentSlotKey) || '');
+  if (!initialSlotKey) return kf029SaveRemoteWorld(reason || 'progress-checkpoint');
+  var run=KF029Remote.saveChain.catch(function(){}).then(async function(){
     if (KF029Remote.createPromise) await KF029Remote.createPromise;
-    if (!AppState.worldRecord || KF029Remote.revision == null) return null;
+    var record=AppState.worldRecord;
+    if (!record || KF029Remote.revision == null) return null;
+    var season=Number((((record.gameState||{}).meta||{}).seasonNumber)||1);
+    var slotKey=((((record.gameState||{}).calendar||{}).currentSlotKey) || '');
+    var deltaMatches=kf029PendingMatches();
+    var deltaFinance=kf029PendingFinanceEvents();
+    var worldDelta=kf031BuildWorldDelta(record);
+    if (!worldDelta) throw new Error('Delta-Basis für Fortschritt fehlt.');
+    var sentSequence=Number(KF029Remote.managementChangeSequence);
     var data;
     try {
-      data = await kf029Request('/api/v1/worlds/' + encodeURIComponent(record.id) + '/slot', {
+      data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(record.id)+'/slot',{
         method:'PUT',
         body:{
           expectedRevision:KF029Remote.revision,
@@ -25283,81 +25287,97 @@ function kf029SaveProgressCheckpoint(reason){
         }
       });
     } catch (saveError) {
-      var recovered = await kf029RecoverCommittedProgress(record, slotKey, deltaMatches, deltaFinance);
-      if (recovered) return recovered;
+      var recovered=await kf029RecoverCommittedProgress(record,slotKey,deltaMatches,deltaFinance);
+      if (recovered) {
+        KF029Remote.managementConfirmedSequence=Math.max(KF029Remote.managementConfirmedSequence,sentSequence);
+        var recoveredRemaining=kf031BuildWorldDelta(record);
+        KF029Remote.managementDirty=kf031DeltaHasOps(recoveredRemaining);
+        if (KF029Remote.managementDirty && !KF029Remote.managementQueued) {
+          setTimeout(function(){ void kf031QueueManagementSave('post-checkpoint').catch(function(){}); },0);
+        }
+        return recovered;
+      }
       throw saveError;
     }
-    KF029Remote.revision = Number(data.revision);
-    KF029Remote.currentSeason = Number(data.currentSeason || season);
-    KF029Remote.lastSavedAt = data.committedAt || new Date().toISOString();
-    KF029Remote.lastCommittedSlotKey = slotKey;
-    KF029Remote.error = '';
-    kf029AcceptCommittedDelta(deltaMatches, deltaFinance);
-    KF029Remote.committedGameState = kf031CloneJson(record.gameState);
+    KF029Remote.revision=Number(data.revision);
+    KF029Remote.currentSeason=Number(data.currentSeason || season);
+    KF029Remote.lastSavedAt=data.committedAt || new Date().toISOString();
+    KF029Remote.lastCommittedSlotKey=slotKey;
+    KF029Remote.error='';
+    kf029AcceptCommittedDelta(deltaMatches,deltaFinance);
+    kf031ApplyCommittedWorldDelta(worldDelta);
+    KF029Remote.managementConfirmedSequence=Math.max(KF029Remote.managementConfirmedSequence,sentSequence);
+    var remaining=kf031BuildWorldDelta(record);
+    KF029Remote.managementDirty=kf031DeltaHasOps(remaining);
+    KF029Remote.managementFailed=false;
+    KF029Remote.managementError='';
+    if (KF029Remote.managementDirty && !KF029Remote.managementQueued) {
+      setTimeout(function(){ void kf031QueueManagementSave('post-checkpoint').catch(function(){}); },0);
+    }
     return data;
   });
-  KF029Remote.saveChain = run.catch(function(){});
+  KF029Remote.saveChain=run.catch(function(){});
   return run.catch(function(error){
-    KF029Remote.error = error && error.status === 409
-      ? 'Die Welt wurde zwischenzeitlich veraendert. Bitte lade sie neu, statt den Serverstand zu ueberschreiben.'
-      : ('Speichern fehlgeschlagen: ' + (error.message || 'Unbekannter Fehler'));
+    KF029Remote.error=error && error.status===409
+      ? 'Die Welt wurde zwischenzeitlich verändert. Der Serverstand wurde nicht überschrieben.'
+      : ('Speichern fehlgeschlagen: '+(error.message || 'Unbekannter Fehler'));
     renderApp();
     throw error;
   });
 }
 function kf029SaveRemoteWorld(reason){
   if (!KF029Remote.user || !AppState.worldRecord) return Promise.resolve(null);
-  var run = KF029Remote.saveChain.catch(function(){}).then(async function(){
+  var run=KF029Remote.saveChain.catch(function(){}).then(async function(){
     if (KF029Remote.createPromise) await KF029Remote.createPromise;
     if (!AppState.worldRecord || KF029Remote.revision == null) return null;
-    var record = AppState.worldRecord;
-    var data = await kf029Request('/api/v1/worlds/' + encodeURIComponent(record.id) + '/snapshot', {
+    var liveRecord=AppState.worldRecord;
+    var snapshotRecord=kf031CloneJson(liveRecord);
+    var snapshotMatches=kf031CloneJson(kf029CurrentMatches()) || [];
+    var snapshotFinance=kf031CloneJson(kf029CurrentFinanceEvents()) || [];
+    var sentSequence=Number(KF029Remote.managementChangeSequence);
+    var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(snapshotRecord.id)+'/snapshot',{
       method:'PUT',
       body:{
         expectedRevision:KF029Remote.revision,
         clientVersion:KF029_REMOTE_CONTRACT_VERSION,
-        worldRecord:record,
-        matches:kf029CurrentMatches(),
-        financeEvents:kf029CurrentFinanceEvents(),
+        worldRecord:snapshotRecord,
+        matches:snapshotMatches,
+        financeEvents:snapshotFinance,
         progressLeaseId:KF029Remote.progressLeaseId || null,
-        reason:reason || 'autosave'
+        reason:reason || 'snapshot'
       }
     });
-    KF029Remote.revision = Number(data.revision);
-    KF029Remote.currentSeason = Number(data.currentSeason || (((record.gameState||{}).meta||{}).seasonNumber)||1);
-    KF029Remote.lastSavedAt = data.committedAt || new Date().toISOString();
-    KF029Remote.lastCommittedSlotKey = (((record.gameState||{}).calendar||{}).currentSlotKey) || null;
-    KF029Remote.error = '';
-    kf029MarkCommittedDetails(kf029CurrentMatches(), kf029CurrentFinanceEvents());
-    KF029Remote.committedGameState = kf031CloneJson(record.gameState);
+    KF029Remote.revision=Number(data.revision);
+    KF029Remote.currentSeason=Number(data.currentSeason || (((snapshotRecord.gameState||{}).meta||{}).seasonNumber)||1);
+    KF029Remote.lastSavedAt=data.committedAt || new Date().toISOString();
+    KF029Remote.lastCommittedSlotKey=(((snapshotRecord.gameState||{}).calendar||{}).currentSlotKey) || null;
+    KF029Remote.error='';
+    kf029MarkCommittedDetails(snapshotMatches,snapshotFinance);
+    KF029Remote.committedGameState=kf031CloneJson(snapshotRecord.gameState);
+    KF029Remote.managementConfirmedSequence=Math.max(KF029Remote.managementConfirmedSequence,sentSequence);
+    var remaining=kf031BuildWorldDelta(liveRecord);
+    KF029Remote.managementDirty=kf031DeltaHasOps(remaining);
+    KF029Remote.managementFailed=false;
+    KF029Remote.managementError='';
+    if (KF029Remote.managementDirty && !KF029Remote.managementQueued) {
+      setTimeout(function(){ void kf031QueueManagementSave('post-snapshot').catch(function(){}); },0);
+    }
     return data;
   });
-  KF029Remote.saveChain = run.catch(function(){});
+  KF029Remote.saveChain=run.catch(function(){});
   return run.catch(function(error){
-    KF029Remote.error = error && error.status === 409
-      ? 'Die Welt wurde zwischenzeitlich veraendert. Bitte lade sie neu, statt den Serverstand zu ueberschreiben.'
-      : ('Autosave fehlgeschlagen: ' + (error.message || 'Unbekannter Fehler'));
+    KF029Remote.error=error && error.status===409
+      ? 'Die Welt wurde zwischenzeitlich verändert. Bitte lade sie neu, statt den Serverstand zu überschreiben.'
+      : ('Snapshot-Speicherung fehlgeschlagen: '+(error.message || 'Unbekannter Fehler'));
     renderApp();
     throw error;
   });
 }
 function kf029ScheduleAutosave(reason, immediate){
-  if(!KF029Remote.user||!AppState.worldRecord)return;
-  KF029Remote.autosaveReason=reason||'decision';
-  if(KF029Remote.autosaveTimer){clearTimeout(KF029Remote.autosaveTimer);KF029Remote.autosaveTimer=null;}
-  if(immediate){
-    void kf029SaveRemoteWorld(KF029Remote.autosaveReason).catch(function(){});
-    return;
-  }
-  KF029Remote.autosaveTimer=setTimeout(function(){
-    KF029Remote.autosaveTimer=null;
-    void kf029SaveRemoteWorld(KF029Remote.autosaveReason||'decision').catch(function(){});
-  },KF029_AUTOSAVE_DEBOUNCE_MS);
+  kf031MarkManagementDirty(reason || 'management',!!immediate);
 }
 function kf029FlushAutosave(reason){
-  if(KF029Remote.autosaveTimer){clearTimeout(KF029Remote.autosaveTimer);KF029Remote.autosaveTimer=null;}
-  if(!KF029Remote.user||!AppState.worldRecord)return KF029Remote.saveChain.catch(function(){});
-  return kf029SaveRemoteWorld(reason||'checkpoint');
+  return kf031FlushManagementSave(reason || 'flush');
 }
 function kf029CheckpointFailureMessage(reason){
   if(reason==='calendar-slot') return 'Der vollständig verarbeitete Kalenderslot wurde noch nicht vom Server bestätigt.';
