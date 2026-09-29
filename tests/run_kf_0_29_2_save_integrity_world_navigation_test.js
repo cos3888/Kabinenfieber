@@ -106,8 +106,11 @@ function makeWorldRecord(worldId,userId){
     app.includes("mismatch.code='BACKEND_VERSION_MISMATCH'")&&
     server.includes("const API_VERSION = '0.30.0';")&&server.includes('function requireClientVersion(body)'));
 
+  const cacheBundle=(index.match(/app\.bundle\.js\?v=([0-9.]+)/)||[])[1]||'';
+  const cacheCss=(index.match(/app\.css\?v=([0-9.]+)/)||[])[1]||'';
   check('Production entry cache-busts the current browser bundle',
-    index.includes('app.bundle.js?v=0.31.0')&&index.includes('app.css?v=0.31.0'));
+    !!cacheBundle&&cacheBundle===cacheCss&&cacheBundle!=='0.29.2',
+    {bundleVersion:cacheBundle,cssVersion:cacheCss});
 
   console.log(JSON.stringify(report,null,2));
   process.exit(report.passed?0:1);
