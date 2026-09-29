@@ -419,6 +419,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const integrityWorldId = worldIdFromPath(pathname, '/integrity');
+    if (req.method === 'GET' && integrityWorldId) {
+      const auth = await requireAuth(req);
+      const integrity = await persistence.worldSessions.inspectWorldIntegrity({
+        userId: auth.user.userId,
+        worldId: integrityWorldId
+      });
+      await sendJson(req, res, 200, { ok:true, integrity });
+      return;
+    }
+
     const matchDetailRoute = pathname.match(/^\/api\/v1\/worlds\/([^/]+)\/matches\/([^/]+)$/);
     if (req.method === 'GET' && matchDetailRoute) {
       const auth = await requireAuth(req);
