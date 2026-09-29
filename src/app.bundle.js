@@ -25005,6 +25005,12 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
   var record=AppState.worldRecord;
   var expectedRevision=KF029Remote.revision;
   try {
+    await kf031FlushManagementSave('ready');
+    if (kf031ManagementBlocksProgress()) {
+      throw new Error('Die letzten Managementänderungen sind noch nicht serverseitig bestätigt.');
+    }
+    record=AppState.worldRecord;
+    expectedRevision=KF029Remote.revision;
     var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(record.id)+'/ready',{
       method:'POST',
       body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION,expectedRevision:expectedRevision}
@@ -25026,10 +25032,10 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
         await kf029CommitHardCheckpoint('calendar-slot');
         KF029Remote.progression=null;
         KF029Remote.progressLeaseId=null;
-        KF029Remote.message='Spielstand gespeichert.';
+        KF029Remote.message=KF029Remote.managementDirty ? 'Spielstand bestätigt · neue Änderungen werden gespeichert.' : 'Spielstand gespeichert.';
         renderApp();
       } else {
-        await kf031ReleaseProgressLease(record.id, expectedRevision, state.leaseId);
+        await kf031ReleaseProgressLease(record.id,expectedRevision,state.leaseId);
         KF029Remote.progressLeaseId=null;
         KF029Remote.progression=null;
       }
@@ -25041,6 +25047,11 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
     },1000);
     return state;
   } catch(error) {
+    if (error && error.code==='MANAGEMENT_SAVE_FAILED') {
+      KF029Remote.message='Weiter wartet: Die letzten Managementänderungen konnten noch nicht bestätigt werden.';
+      renderApp();
+      return null;
+    }
     if (error && error.status===409 && record && record.id) {
       KF029Remote.message='Die Welt wurde von einem anderen Trainer fortgesetzt. Neuer Stand wird geladen ...';
       renderApp();
@@ -25048,7 +25059,7 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
       return null;
     }
     if (KF029Remote.progressLeaseId) {
-      await kf031ReleaseProgressLease(record && record.id, expectedRevision, KF029Remote.progressLeaseId);
+      await kf031ReleaseProgressLease(record && record.id,expectedRevision,KF029Remote.progressLeaseId);
       KF029Remote.progressLeaseId=null;
     }
     KF029Remote.error='Fortschritt konnte nicht abgestimmt werden: '+(error.message||'Unbekannter Fehler');
