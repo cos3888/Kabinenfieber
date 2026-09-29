@@ -175,7 +175,7 @@ function loadBrowserTestHarness(){
     {expected:normalized,actual:ctx.tactics});
 
   check('Save progress UX remains present for the public next build',
-    app.includes("is-save-pending")&&app.includes("Änderungen werden gespeichert")&&app.includes("Fortschritt wird bestätigt"),
+    app.includes("is-save-pending")&&app.includes("Änderungen werden gespeichert")&&(app.includes("Fortschritt wird bestätigt")||app.includes("Fortschritt wird serverseitig bestätigt")),
     {});
 
   console.log(JSON.stringify(report,null,2));
