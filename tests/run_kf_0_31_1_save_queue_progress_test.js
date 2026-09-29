@@ -167,23 +167,35 @@ function makeWorldRecord(worldId,userId){
     const perfCreated=await sessions.createWorld({userId:'perf',worldRecord:perfRecord,worldName:'Delta Chain',visibility:'PRIVATE',joinPolicy:'INVITE_ONLY'});
     let perfRevision=perfCreated.revision;
     const perfBase=await worlds.getManifest(perfWorld);
-    const chainStart=Date.now();
-    for(let i=1;i<=120;i++){
+    const perfMilestones=[50,100,250,500];
+    const perfColdLoadMs={};
+    let chainWriteMs=0;
+    let perfManifest=perfBase;
+    let perfCold=null;
+    for(let i=1;i<=perfMilestones[perfMilestones.length-1];i++){
       const d=delta(perfWorld,[{path:['gameState','squads','club-a','tactics','managementSequence'],value:i}]);
+      const writeStart=Date.now();
       const saved=await sessions.saveManagementDelta({userId:'perf',worldId:perfWorld,worldDelta:d,expectedRevision:perfRevision});
+      chainWriteMs+=Date.now()-writeStart;
       perfRevision=saved.revision;
+      if(perfMilestones.includes(i)){
+        perfManifest=await worlds.getManifest(perfWorld);
+        await runtime.unloadWorld(perfWorld);
+        const coldStart=Date.now();
+        perfCold=await sessions.openWorld({userId:'perf',worldId:perfWorld});
+        perfColdLoadMs[String(i)]=Date.now()-coldStart;
+        check('Delta chain '+i+' reconstructs latest value without rewriting base snapshot',
+          perfCold.worldRecord.gameState.squads['club-a'].tactics.managementSequence===i&&
+          perfManifest.worldRecordPath===perfBase.worldRecordPath&&
+          perfManifest.worldDeltaPaths.length===i,
+          {deltaCount:i,coldLoadMs:perfColdLoadMs[String(i)]});
+      }
     }
-    const chainWriteMs=Date.now()-chainStart;
-    const perfManifest=await worlds.getManifest(perfWorld);
-    await runtime.unloadWorld(perfWorld);
-    const coldStart=Date.now();
-    const perfCold=await sessions.openWorld({userId:'perf',worldId:perfWorld});
-    const coldLoadMs=Date.now()-coldStart;
-    check('Long management-delta chain reconstructs the latest authoritative value without rewriting the base snapshot',
-      perfCold.worldRecord.gameState.squads['club-a'].tactics.managementSequence===120&&
+    check('500-delta chain keeps the base WorldRecord and reconstructs the authoritative final value',
+      perfCold&&perfCold.worldRecord.gameState.squads['club-a'].tactics.managementSequence===500&&
       perfManifest.worldRecordPath===perfBase.worldRecordPath&&
-      perfManifest.worldDeltaPaths.length===120,
-      {deltaCount:perfManifest.worldDeltaPaths.length,coldLoadMs,chainWriteMs});
+      perfManifest.worldDeltaPaths.length===500,
+      {deltaCount:perfManifest.worldDeltaPaths.length,coldLoadMs:perfColdLoadMs['500'],chainWriteMs});
 
     const app=await fs.readFile(path.resolve(__dirname,'..','src','app.bundle.js'),'utf8');
     const css=await fs.readFile(path.resolve(__dirname,'..','src','styles','app.css'),'utf8');
@@ -249,7 +261,8 @@ function makeWorldRecord(worldId,userId){
       slotDeltaBytes:Buffer.byteLength(JSON.stringify(slotDelta)),
       deltaChainCount:perfManifest.worldDeltaPaths.length,
       deltaChainWriteMs:chainWriteMs,
-      deltaChainColdLoadMs:coldLoadMs
+      deltaChainColdLoadMs:perfColdLoadMs['500'],
+      deltaChainColdLoadMsByCount:perfColdLoadMs
     };
   }finally{
     await fs.rm(root,{recursive:true,force:true});
