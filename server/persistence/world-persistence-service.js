@@ -124,8 +124,13 @@ class WorldPersistenceService {
     if (!manifest) throw new PersistenceNotFoundError('World manifest not found');
     const worldRecord = await decodeJsonGzip(await this._readBody(manifest.worldRecordPath));
     const deltaPaths = Array.isArray(manifest.worldDeltaPaths) ? manifest.worldDeltaPaths.filter(Boolean) : [];
-    const deltas = await this._loadJsonGzipObjects(deltaPaths);
-    for (const delta of deltas) applyWorldDelta(worldRecord, delta);
+
+    // World deltas are authoritative in manifest order. Load, decode and apply
+    // one delta at a time so reconstructed deltas do not accumulate in memory.
+    for (const deltaPath of deltaPaths) {
+      const delta = await decodeJsonGzip(await this._readBody(deltaPath));
+      applyWorldDelta(worldRecord, delta);
+    }
     return worldRecord;
   }
 
