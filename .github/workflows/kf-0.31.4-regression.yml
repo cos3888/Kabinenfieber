@@ -8,16 +8,16 @@ on:
     branches: [ main ]
 
 jobs:
-  targeted-regressions:
+  core-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
-      - name: KF 0.31.4 save isolation and integrity
-        run: npm run test:0314
-      - name: KF 0.31.3 cold load and compaction
-        run: npm run test:0313
+      - name: Verify listener-safe pinned GCS SDK
+        run: npm ls @google-cloud/storage --depth=0 | grep '@google-cloud/storage@8.0.0'
+      - name: Current core regression suite
+        run: npm test

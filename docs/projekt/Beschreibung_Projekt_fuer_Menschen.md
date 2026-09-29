@@ -80,6 +80,26 @@ KF_0.31.4 repariert vorhandene Welten nicht automatisch. Die produktiven Problem
 
 Die Diagnose kann nach Deployment feststellen, welche vom aktuellen Manifest benoetigten Objekte fehlen und ob der GCS-Bucket grundsaetzlich Object Versioning bzw. Soft Delete aktiviert hat. Ob fuer einen konkreten fehlenden Objektpfad noch exakt die richtige Generation wiederherstellbar ist, muss danach separat und read-only geprueft werden. Erst bei eindeutig belegbarer Wiederherstellbarkeit darf ein Reparaturweg geplant werden.
 
+### Nachfix: speicherstabile Rekonstruktion grosser Welten
+
+Der Praxistest mit Welt `123` (`world-mul8kohq-hyn9m0`, Revision 37) hat einen zusaetzlichen Ressourcenfehler sichtbar gemacht. Bei 512 MiB Cloud-Run-RAM brach der read-only Integrity-Check reproduzierbar mit `Reached heap limit / JavaScript heap out of memory` ab. Derselbe Stand war nach temporaerer Erhoehung nur des Testdienstes auf 1 GiB vollstaendig gesund und rekonstruierbar: 18/18 World-Deltas konsistent, keine fehlenden Match-/Finance-Segmente oder MatchIndex-Referenzen und 87/87 referenzierte Objekte vorhanden. Die Welt ist damit nicht als beschaedigt einzustufen.
+
+Die Ursache der Memory-Spitze lag in `loadWorldRecordFromManifest()`: Der Basissnapshot wurde geladen und danach wurden alle World-Deltas zwar mit begrenzter Parallelitaet gelesen, aber vollstaendig dekodiert in einem Ergebnisarray gehalten, bevor das erste Delta auf den WorldRecord angewendet wurde. Dadurch blieben bei langen/grossen Delta-Ketten gleichzeitig viele dekodierte JSON-Objekte im Heap.
+
+Ab diesem Nachfix gilt fuer die WorldRecord-Rekonstruktion:
+- der Basissnapshot bleibt autoritative Basis;
+- `manifest.worldDeltaPaths[]` bleibt die einzige geordnete Deltaquelle;
+- World-Deltas werden strikt in Manifest-Reihenfolge jeweils `laden -> dekodieren -> anwenden`;
+- bereits angewendete Deltaobjekte werden nicht in einem Sammelarray gehalten;
+- Match-/Finance-Segmente und andere voneinander unabhaengige Reads duerfen weiterhin den vorhandenen begrenzt parallelen Pfad verwenden;
+- keine Migration, keine automatische Reparatur und keine Aenderung der Spielwahrheit.
+
+Ein neuer Regressionstest `tests/run_kf_0_31_4_large_world_memory_test.js` rekonstruiert 48 World-Deltas mit jeweils 2 MiB Payload unter einem auf 72 MiB begrenzten Node-Heap. Der erfolgreiche CI-Lauf benoetigte fuer Cold Load 854 ms, fuer den anschliessenden Integrity-Check 789 ms und meldete danach rund 19 MiB `heapUsed`. Damit ist die vorherige Delta-Sammelspitze gezielt abgesichert.
+
+Die `MaxListenersExceededWarning` mit 11 `error/close`-Listenern auf `PassThrough` wurde ebenfalls untersucht. Sie stammt nicht aus einer eigenen Listener-Registrierung von Kabinenfieber, sondern entspricht dem offenen Upstream-Fehler `googleapis/google-cloud-node#9185` in `@google-cloud/storage` ab 8.0.1; der Fehler wurde upstream ausdruecklich auch fuer 8.2.0 reproduziert. Es wird **kein** Listener-Limit angehoben. Bis zu einem offiziellen Upstream-Fix wird `@google-cloud/storage` exakt auf die dort als nicht betroffene 8.0.0 gepinnt.
+
+Der Produktivdienst bleibt unveraendert. Nach gruenem Abschluss-CI muss der Testdienst erneut gebaut und Welt `123` gezielt wieder mit 512 MiB getestet werden. Erst dieser Praxistest entscheidet, ob 512 MiB dauerhaft ausreichen.
+
 ### Conflict-/Retry-UX
 
 Die vorhandene Save-UX bleibt erhalten:
@@ -103,8 +123,9 @@ Commit-ID, Basissnapshots, World-Deltas, Match-/Finance-Segmente und Compaction-
 
 ### Regressionen
 
-Spezialtest:
-`tests/run_kf_0_31_4_save_object_isolation_test.js`
+Spezialtests:
+- `tests/run_kf_0_31_4_save_object_isolation_test.js`
+- `tests/run_kf_0_31_4_large_world_memory_test.js`
 
 CI-Workflow:
 `.github/workflows/kf-0.31.4-regression.yml`

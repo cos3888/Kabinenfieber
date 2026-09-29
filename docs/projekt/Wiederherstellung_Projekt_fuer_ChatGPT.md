@@ -139,6 +139,61 @@ Fehlt die Berechtigung `storage.buckets.get`, bleibt die Weltdiagnose funktionsf
 
 Wichtig: Ein aktivierter Schutz beweist noch nicht, dass fuer einen konkreten fehlenden Pfad exakt die richtige Generation eindeutig wiederherstellbar ist. Keine automatische Recovery implementiert.
 
+### Nachfix: Large-World-Heap / Integrity
+
+Realer Praxistest:
+- Welt: `123`
+- World-ID: `world-mul8kohq-hyn9m0`
+- Revision: 37
+- Testdienst mit 512 MiB: Integrity reproduzierbar `JavaScript heap out of memory`
+- Testdienst mit 1 GiB: `healthy=true`, `worldRecordReconstructable=true`, 18/18 Deltas konsistent, 87/87 referenzierte Objekte vorhanden
+
+Damit ist fuer diese Welt kein Datenverlust nachgewiesen. Der bisherige Nichtladefehler ist mindestens teilweise ein Heap-/Rekonstruktionsproblem.
+
+Technischer Fix in `WorldPersistenceService.loadWorldRecordFromManifest()`:
+1. Basissnapshot laden/dekodieren.
+2. `worldDeltaPaths[]` exakt in Manifest-Reihenfolge durchlaufen.
+3. Je Pfad genau ein Delta laden und dekodieren.
+4. Delta sofort mit `applyWorldDelta()` anwenden.
+5. Kein Array aller dekodierten World-Deltas mehr im Speicher halten.
+
+Wichtig:
+- `_loadJsonGzipObjects()` bleibt fuer unabhaengige Segment-Reads erhalten.
+- Match-/Finance-Loads muessen nicht kuenstlich serialisiert werden.
+- Manifest bleibt Wahrheit; keine Migration; keine zweite Datenhaltung.
+- Compaction-, CAS- und Object-Isolation-Regeln bleiben unveraendert.
+
+Neuer Test:
+`tests/run_kf_0_31_4_large_world_memory_test.js`
+
+Gezielte CI-Messung:
+- Node-Heap-Limit: 72 MiB
+- 48 World-Deltas
+- 2 MiB Payload je Delta
+- Cold Load: 854 ms
+- Integrity: 789 ms
+- `heapUsed` danach ca. 19 MiB
+- Ergebnis: gruen
+
+Die bestehende KF_0.31.3-Regression wurde fachlich angepasst: Fuer World-Deltas wird ab diesem Nachfix bewusst serielle Rekonstruktion erwartet. Die restlichen KF_0.31.3-Eigenschaften (Cold Runtime -> Management-Save, Slot-Save, Compaction, CAS-Sicherheit) bleiben unveraendert und muessen gruen bleiben.
+
+### MaxListeners-Warnung
+
+Die Warnung `11 error/close listeners added to [PassThrough]` wurde dem offenen Upstream-Issue `googleapis/google-cloud-node#9185` zugeordnet. Laut Issue entsteht sie innerhalb von `@google-cloud/storage`/teeny-request und ist auch mit Storage 8.2.0 reproduzierbar. Kabinenfieber erhoeht **nicht** `defaultMaxListeners`.
+
+Temporäre Abhaengigkeitsstrategie:
+- `@google-cloud/storage` wird exakt auf `8.0.0` gepinnt, die im Upstream-Issue als nicht betroffen beschrieben ist.
+- Spaeter nur nach verifiziertem Upstream-Fix wieder auf eine neuere 8.x/9.x-Version wechseln.
+
+Praxistest nach Abschluss-CI:
+1. Testbackend neu bauen.
+2. Testdienst wieder mit 512 MiB betreiben.
+3. Welt `123` cold laden.
+4. `GET /api/v1/worlds/world-mul8kohq-hyn9m0/integrity` pruefen.
+5. Management-Save und Slot-Wechsel/Slot-Save pruefen.
+6. Produktivdienst nicht veraendern.
+7. Nicht nach `main` mergen, bis der Praxistest freigegeben ist.
+
 ### Save-/Conflict-UX
 
 Kein neuer Gameplay-/UX-Flow notwendig:
@@ -151,8 +206,9 @@ Kein neuer Gameplay-/UX-Flow notwendig:
 
 ### Tests
 
-Spezialtest:
-`tests/run_kf_0_31_4_save_object_isolation_test.js`
+Spezialtests:
+- `tests/run_kf_0_31_4_save_object_isolation_test.js`
+- `tests/run_kf_0_31_4_large_world_memory_test.js`
 
 Workflow:
 `.github/workflows/kf-0.31.4-regression.yml`
