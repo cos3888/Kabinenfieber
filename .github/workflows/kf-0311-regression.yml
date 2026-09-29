@@ -1,11 +1,11 @@
-name: KF 0.31.1 Regression
+name: KF 0.31.2 Regression
 
 on:
   pull_request:
     branches: [ main ]
   push:
     branches:
-      - fix/kf-0.31.1-save-queue-progress-ux
+      - fix/kf-0.31.2-lobby-ui-save-integrity
 
 jobs:
   regression:
@@ -17,6 +17,8 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
+      - name: KF 0.31.2 lobby and UI integrity regression
+        run: npm run test:0312
       - name: KF 0.31.1 save queue regression
         run: npm run test:0311
       - name: Current core regression suite
