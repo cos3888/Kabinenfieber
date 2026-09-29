@@ -114,6 +114,20 @@ npm: `npm run test:0311`
 
 Der aktuelle Core-Regression-Runner enthaelt nun sowohl KF_0.31.0 als auch KF_0.31.1. Der Spezialtest prueft Delta-Persistenz/Reload, Revisionskette A→B, konkurrierende Saves, Mehrspieler-Stale-Revisions, Progressionspfad-Schutz, Slot→Folgedelta, lange Delta-Kette sowie statische Client-Invarianten gegen den urspruenglichen False-ACK-Race.
 
+### Letzte UX-/Persistenzabsicherung in KF_0.31.1
+
+Mail-Lesestatus ist fachlicher Weltzustand. `open-mail-center` und `select-mail` können über `markMailRead(...)` mutieren und werden deshalb zusammen mit `toggle-mail-read`, `delete-mail` und `delete-all-mail` dirty-getrackt. Ein Modal-Close flusht vorhandene Managementänderungen ebenfalls sofort.
+
+`KF031_MANAGEMENT_VIEWS` umfasst aktuell `office`, `squad`, `lineup`, `contracts`, `squad-planning`, `finance` und `sponsoring`, damit ein Wechsel aus diesen Bereichen einen ausstehenden Dirty-State unverzüglich in die Save Queue gibt, ohne die Navigation zu blockieren.
+
+Im Ready-Pfad wird nach einem lokalen `office-advance`, der keinen Kalenderslot verändert hat, erneut ein WorldDelta gegen die bestätigte Basis geprüft. Existieren dabei Managementänderungen (z. B. lokal veränderter Mailzustand), werden sie wieder dirty markiert und anschließend normal gespeichert.
+
+### Sicherheitsgrenze für den nächsten Mehrspieler-Schritt
+
+`saveManagementDelta` prüft Membership, Revision und den Progressions-Scope. Damit kann der Management-Endpunkt Kalender/Meta sowie zentrale Match-/Saisonwahrheit nicht als normale Managementänderung überschreiben.
+
+Der Endpunkt akzeptiert aber weiterhin generische `gameState`-Deltas und besitzt noch keine vollständige serverseitige Pfad-Ownership-Prüfung pro kontrolliertem Verein. Vor echtem offenem Mehrspielerbetrieb muss deshalb sichergestellt werden, dass ein Trainer nicht per manipuliertem Request fremde Vereinsbereiche verändert. Bevorzugt: klare Ownership-Regeln für zulässige Pfade oder schrittweise fachliche Domain-Commands; keine zweite Schattenwelt und kein paralleler Mobile-/Desktop-Datenpfad.
+
 ### Datenwahrheit / Mobile
 
 Keine neue fachliche Wahrheit: Spieler/Vertraege bleiben `world.players.byId`, Aufstellung/Taktik `world.squads`, Kalender `world.calendar`, historische Matches `world.history.matches`, Regeln/Texte `StaticData`. Save-Queue-Zustand und ACK-Basis sind nur Synchronisationsmetadaten.
