@@ -25710,6 +25710,7 @@ function kf029StartNewCareer(){
 
 var kf029BaseHandleAction = handleAction;
 handleAction = function(action, actionEl){
+  var kf031BeforeView=AppState && AppState.ui ? AppState.ui.currentView : '';
   if (action === 'open-match-info' && KF029Remote.user && AppState.worldRecord) {
     var lazyMatchId=actionEl && actionEl.getAttribute ? (actionEl.getAttribute('data-match-id') || '') : '';
     void kf031EnsureMatchDetail(lazyMatchId).then(function(){
@@ -25721,6 +25722,14 @@ handleAction = function(action, actionEl){
     return;
   }
   if (action === 'kf-retry-checkpoint') { void kf029RetryCheckpoint().catch(function(){}); return; }
+  if (action === 'kf-retry-management-save') {
+    KF029Remote.managementFailed=false;
+    KF029Remote.managementError='';
+    KF029Remote.error='';
+    KF029Remote.managementDirty=true;
+    void kf031QueueManagementSave('manual-retry').catch(function(){});
+    return;
+  }
   if (action === 'kf-exit-world-discard') { void kf029ExitWorldToList(true); return; }
   var progressAction = action === 'office-advance' || action === 'calendar-sim-until-confirm' ||
     (action === 'lineup-goalkeeper-autofix' && ['advance','sim-until'].indexOf(actionEl && actionEl.getAttribute('data-mode')) >= 0);
@@ -25764,10 +25773,11 @@ handleAction = function(action, actionEl){
     return;
   }
   if (action === 'office-options' && KF029Remote.user) {
-    var saved = KF029Remote.lastSavedAt ? new Date(KF029Remote.lastSavedAt).toLocaleString('de-DE') : 'Noch kein Fortschritts-Speicherpunkt';
+    var saved = KF029Remote.lastSavedAt ? new Date(KF029Remote.lastSavedAt).toLocaleString('de-DE') : 'Noch keine Serverbestätigung';
+    var saveLabel=KF029Remote.managementFailed ? 'Fehler – Änderungen bleiben vorgemerkt' : (kf031ManagementBlocksProgress() ? 'Speicherung läuft / steht aus' : 'Aktueller Stand bestätigt');
     openModal({ title:'Welt & Optionen', bodyHtml:
-      '<div class="notice"><strong>Fortschrittsspeicherung aktiv</strong><br>Gespeichert wird bei Vereinsübernahme sowie nach vollständig verarbeitetem Kalender-/Spieltag-Fortschritt. Reine Managementänderungen werden mit dem nächsten Fortschritt übernommen.<br><br><strong>Serverwelt:</strong> Revision ' + escapeHtml(KF029Remote.revision == null ? '-' : KF029Remote.revision) + '<br><strong>Letzter Speicherpunkt:</strong> ' + escapeHtml(saved) + '</div>' +
-      '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-exit-world">Zur Weltliste</button></div>'
+      '<div class="notice"><strong>Delta-Autosave aktiv</strong><br>Managementänderungen werden gebündelt als kleine Deltas gespeichert. Beim Verlassen eines Managementmenüs wird sofort geflusht; endgültige Entscheidungen gehen direkt in die Save Queue. Der Kalender darf erst weiterlaufen, wenn der aktuelle Stand bestätigt ist.<br><br><strong>Serverwelt:</strong> Revision ' + escapeHtml(KF029Remote.revision == null ? '-' : KF029Remote.revision) + '<br><strong>Speicherstatus:</strong> ' + escapeHtml(saveLabel) + '<br><strong>Letzte Bestätigung:</strong> ' + escapeHtml(saved) + '</div>' +
+      '<div class="action-row">'+(KF029Remote.managementFailed?'<button class="secondary-btn" type="button" data-action="kf-retry-management-save">Speichern erneut versuchen</button>':'')+'<button class="primary-btn" type="button" data-action="kf-exit-world">Zur Weltliste</button></div>'
     });
     renderModal(); return;
   }
@@ -25780,6 +25790,12 @@ handleAction = function(action, actionEl){
     return;
   }
   kf029BaseHandleAction(action, actionEl);
+  kf031TrackActionMutation(action,actionEl);
+  var kf031AfterView=AppState && AppState.ui ? AppState.ui.currentView : '';
+  if (kf031BeforeView && kf031BeforeView!==kf031AfterView && KF031_MANAGEMENT_VIEWS[kf031BeforeView] &&
+      (KF029Remote.managementDirty || KF029Remote.managementSaving || KF029Remote.managementQueued || KF029Remote.autosaveTimer)) {
+    void kf031FlushManagementSave('leave-'+kf031BeforeView).catch(function(){});
+  }
 };
 
 var kf029BaseBoot = boot;
@@ -25790,7 +25806,7 @@ boot = function(){
     autosaveRoot.dataset.kf029AutosaveBound='1';
     if(typeof window.addEventListener==='function'){
       window.addEventListener('beforeunload',function(event){
-        if(!KF029Remote.checkpointPending && !KF029Remote.autosaveTimer)return;
+        if(!KF029Remote.checkpointPending && !KF029Remote.autosaveTimer && !KF029Remote.managementDirty && !KF029Remote.managementSaving && !KF029Remote.managementQueued && !KF029Remote.managementFailed)return;
         event.preventDefault();
         event.returnValue='';
       });
