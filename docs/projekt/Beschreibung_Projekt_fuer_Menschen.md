@@ -48,6 +48,8 @@ Scheitert der Slot-Checkpoint, darf die wartende Management-Queue den unbestaeti
 
 Alle Saves verwenden dieselbe monotone Welt-Revision. Gleichzeitige Saves mit derselben Ausgangsrevision koennen nicht beide gewinnen. Bei 409 wird der aktuelle Serverstand geladen. Disjunkte lokale Pfade koennen auf die neue Revision rebasiert werden; wurde derselbe Pfad anderweitig veraendert, gibt es kein stilles Last-Write-Wins.
 
+Die technische Regression misst den Cold Load der anwachsenden Delta-Kette bei 50, 100, 250 und 500 Management-Deltas. Dabei muss der Basis-WorldRecord unveraendert bleiben und der jeweils letzte autoritative Managementwert korrekt rekonstruiert werden.
+
 ### Zentrale Datenquellen
 
 - Spieler/Vertraege: `world.players.byId`
