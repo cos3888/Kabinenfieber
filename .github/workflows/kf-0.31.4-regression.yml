@@ -1,0 +1,19 @@
+name: KF 0.31.4 Pre-Fix Race Reproduction
+
+on:
+  push:
+    branches:
+      - fix/kf-0.31.4-save-object-isolation-integrity
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Reproduce cross-instance save object race
+        run: node tests/run_kf_0_31_4_save_object_isolation_test.js
