@@ -59,6 +59,7 @@
     "test:0312": "node tests/run_kf_0_31_2_lobby_ui_integrity_test.js",
     "test:0313": "node tests/run_kf_0_31_3_cold_load_compaction_test.js",
     "test:0314": "node tests/run_kf_0_31_4_save_object_isolation_test.js",
+    "test:0314-draw": "node tests/run_kf_0_31_4_authoritative_draw_progression_test.js",
     "test:0314-memory": "node tests/run_kf_0_31_4_large_world_memory_test.js"
   },
   "dependencies": {

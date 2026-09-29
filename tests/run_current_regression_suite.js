@@ -2,6 +2,7 @@ const cp=require('child_process'),path=require('path');
 const root=path.resolve(__dirname,'..');
 const full=process.argv.includes('--full');
 const core=[
+  'tests/run_kf_0_31_4_authoritative_draw_progression_test.js',
   'tests/run_current_source_integrity_test.js',
   'tests/run_architecture_guard_test.js',
   'tests/run_current_multiworld_readiness_test.js',

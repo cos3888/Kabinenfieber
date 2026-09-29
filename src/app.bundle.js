@@ -9983,9 +9983,15 @@ function advanceCareerRound(world){
   var nextSlot = nextCalendarSlot(world);
   if (!nextSlot) return { advanced:false, reason:'season-end' };
   var dueCupDraws = ensureDueNationalCupDraws(world, nextSlot, { activeClubId: ((AppState.session || {}).activeClubId || null) });
-  if (dueCupDraws.visibleDraw) return { advanced:true, type:'cup-draw', currentSlot: currentCalendarSlot(world), cupDraw: dueCupDraws.visibleDraw, backgroundDraws: dueCupDraws.draws };
   var dueFieberDraws = ensureDueFieberCupDraws(world, nextSlot, { activeClubId: ((AppState.session || {}).activeClubId || null) });
-  if (dueFieberDraws.visibleDraw) return { advanced:true, type:'cup-draw', currentSlot: currentCalendarSlot(world), cupDraw: dueFieberDraws.visibleDraw, backgroundDraws: dueFieberDraws.draws };
+  var dueVisibleDraws = [];
+  (dueCupDraws.visibleDraws || (dueCupDraws.visibleDraw ? [dueCupDraws.visibleDraw] : [])).forEach(function(draw){
+    if (draw && !dueVisibleDraws.some(function(row){ return row && row.id === draw.id; })) dueVisibleDraws.push(draw);
+  });
+  (dueFieberDraws.visibleDraws || (dueFieberDraws.visibleDraw ? [dueFieberDraws.visibleDraw] : [])).forEach(function(draw){
+    if (draw && !dueVisibleDraws.some(function(row){ return row && row.id === draw.id; })) dueVisibleDraws.push(draw);
+  });
+  if (dueVisibleDraws.length) return { advanced:true, type:'cup-draw', currentSlot: currentCalendarSlot(world), cupDraw: dueVisibleDraws[0], cupDraws: dueVisibleDraws, backgroundDraws:(dueCupDraws.draws || []).concat(dueFieberDraws.draws || []) };
   if (String(nextSlot.label || '').indexOf('Saisonübergang') === 0) {
     var seasonResult = advanceIntoNextSeason(world);
     return { advanced:true, type:'season-transition', currentSlot: currentCalendarSlot(world), seasonResult: seasonResult };
@@ -19104,6 +19110,9 @@ function ownClubIsInCupDraw(draw, clubId){
 
 function cupDrawPresentedForClub(draw, clubId){
   if (!draw || !clubId) return false;
+  var seen = (((AppState || {}).ui || {}).cupDrawPresentationSeen || {});
+  var key = String(clubId) + '|' + String(draw.id || '');
+  if (draw.id && seen[key]) return true;
   return (draw.presentedClubIds || []).indexOf(clubId) !== -1;
 }
 
@@ -19134,19 +19143,55 @@ function cupDrawPresentationWindowOpen(world, draw, nextSlot){
 }
 
 function markCupDrawPresented(world, drawId, clubId){
-  if (!world || !drawId || !clubId) return;
-  var draw = cupDrawById(world, drawId);
-  if (!draw) return;
-  draw.presentedClubIds = draw.presentedClubIds || [];
-  if (draw.presentedClubIds.indexOf(clubId) === -1) draw.presentedClubIds.push(clubId);
+  if (!world || !drawId || !clubId || !cupDrawById(world, drawId)) return;
+  AppState.ui.cupDrawPresentationSeen = AppState.ui.cupDrawPresentationSeen || {};
+  AppState.ui.cupDrawPresentationSeen[String(clubId) + '|' + String(drawId)] = true;
+}
+function cupDrawPresentationQueue(){
+  AppState.ui.cupDrawPresentationQueue = Array.isArray(AppState.ui.cupDrawPresentationQueue) ? AppState.ui.cupDrawPresentationQueue : [];
+  return AppState.ui.cupDrawPresentationQueue;
+}
+function queueCupDrawPresentations(draws){
+  var queue = cupDrawPresentationQueue();
+  var clubId = ((AppState.session || {}).activeClubId || null);
+  (draws || []).forEach(function(draw){
+    if (!draw || !draw.id || !cupDrawById(AppState.world, draw.id)) return;
+    if (clubId && cupDrawPresentedForClub(draw, clubId)) return;
+    if (String(AppState.ui.cupDrawId || '') === String(draw.id)) return;
+    if (queue.indexOf(draw.id) === -1) queue.push(draw.id);
+  });
+  return queue.slice();
+}
+function presentNextQueuedCupDraw(){
+  var queue = cupDrawPresentationQueue();
+  var clubId = ((AppState.session || {}).activeClubId || null);
+  while (queue.length) {
+    var drawId = queue.shift();
+    var draw = cupDrawById(AppState.world, drawId);
+    if (!draw) continue;
+    if (clubId && cupDrawPresentedForClub(draw, clubId)) continue;
+    AppState.ui.cupDrawId = drawId;
+    AppState.ui.cupDrawStepIndex = 0;
+    goToView('cup-draw');
+    return true;
+  }
+  AppState.ui.cupDrawId = null;
+  AppState.ui.cupDrawStepIndex = 0;
+  return false;
 }
 
 function ensureDueNationalCupDraws(world, nextSlot, options){
-  var result = { draws:[], visibleDraw:null };
+  var result = { draws:[], visibleDraw:null, visibleDraws:[] };
   if (!world || !world.calendar || !nextSlot) return result;
   var nextIndex = slotIndexForKey(world, nextSlot.key);
   var activeClubId = (options || {}).activeClubId || null;
   var backgroundOnly = !!((options || {}).backgroundOnly);
+  function addVisible(draw){
+    if (!draw || !cupDrawPresentationWindowOpen(world, draw, nextSlot) || !cupDrawShouldBePresented(draw, activeClubId)) return;
+    if (result.visibleDraws.some(function(row){ return row && row.id === draw.id; })) return;
+    result.visibleDraws.push(draw);
+    if (!result.visibleDraw) result.visibleDraw = draw;
+  }
   uniqueCountries(world).forEach(function(countryName){
     nationalCupRoundDefinitions().forEach(function(def){
       var targetSlot = nationalCupSlotForRound(world, def.roundNumber);
@@ -19159,14 +19204,14 @@ function ensureDueNationalCupDraws(world, nextSlot, options){
       if (store.byKey[key]) {
         var existingDraw = store.byId[store.byKey[key]] || null;
         if (backgroundOnly) markCupDrawBackgroundProcessed(existingDraw);
-        else if (!result.visibleDraw && cupDrawPresentationWindowOpen(world, existingDraw, nextSlot) && cupDrawShouldBePresented(existingDraw, activeClubId)) result.visibleDraw = existingDraw;
+        else addVisible(existingDraw);
         return;
       }
       var draw = createNationalCupDraw(world, countryName, def.roundNumber, nextSlot);
       if (!draw) return;
       result.draws.push(draw);
       if (backgroundOnly) markCupDrawBackgroundProcessed(draw);
-      else if (!result.visibleDraw && cupDrawPresentationWindowOpen(world, draw, nextSlot) && cupDrawShouldBePresented(draw, activeClubId)) result.visibleDraw = draw;
+      else addVisible(draw);
     });
   });
   return result;
@@ -19770,7 +19815,7 @@ function ensureFieberCupKnockoutSetup(world){
 }
 
 function ensureDueFieberCupDraws(world, nextSlot, options){
-  var result={draws:[], visibleDraw:null};
+  var result={draws:[], visibleDraw:null, visibleDraws:[]};
   if (!world || !world.calendar || Number((world.meta||{}).seasonNumber||1)<=1 || !nextSlot) return result;
   ensureFieberCupQualificationProgression(world);
   var activeClubId=(options||{}).activeClubId||null;
@@ -19785,7 +19830,12 @@ function ensureDueFieberCupDraws(world, nextSlot, options){
     allDraws.forEach(function(draw){ if (draw && draw.competition === 'fiebercup' && draw.roundType !== 'final') markCupDrawBackgroundProcessed(draw); });
     return result;
   }
-  allDraws.forEach(function(draw){ if(!result.visibleDraw && cupDrawPresentationWindowOpen(world, draw, nextSlot) && cupDrawShouldBePresented(draw,activeClubId)) result.visibleDraw=draw; });
+  allDraws.forEach(function(draw){
+    if (!draw || !cupDrawPresentationWindowOpen(world, draw, nextSlot) || !cupDrawShouldBePresented(draw,activeClubId)) return;
+    if (result.visibleDraws.some(function(row){ return row && row.id === draw.id; })) return;
+    result.visibleDraws.push(draw);
+    if (!result.visibleDraw) result.visibleDraw=draw;
+  });
   return result;
 }
 
@@ -20598,7 +20648,7 @@ function handleAction(action, actionEl){
   if (action === 'open-active-club-profile') { var currentClub = activeClub(); if (currentClub) openClubProfile(currentClub.id); return; }
   if (action === 'cup-draw-next') { var activeDrawNext = cupDrawById(AppState.world, AppState.ui.cupDrawId); var maxDrawStepsNext = ((activeDrawNext || {}).steps || []).length; AppState.ui.cupDrawStepIndex = Math.min(maxDrawStepsNext, Number(AppState.ui.cupDrawStepIndex || 0) + 1); renderApp(); return; }
   if (action === 'cup-draw-complete') { var activeDrawComplete = cupDrawById(AppState.world, AppState.ui.cupDrawId); AppState.ui.cupDrawStepIndex = (((activeDrawComplete || {}).steps || []).length); renderApp(); return; }
-  if (action === 'cup-draw-continue') { markCupDrawPresented(AppState.world, AppState.ui.cupDrawId, ((AppState.session || {}).activeClubId || null)); AppState.ui.cupDrawId = null; AppState.ui.cupDrawStepIndex = 0; goToView('office'); return; }
+  if (action === 'cup-draw-continue') { markCupDrawPresented(AppState.world, AppState.ui.cupDrawId, ((AppState.session || {}).activeClubId || null)); AppState.ui.cupDrawId = null; AppState.ui.cupDrawStepIndex = 0; if (presentNextQueuedCupDraw()) return; goToView('office'); return; }
   if (action === 'office-options') { openModal({ title:'Optionen', body:'Der Optionsbereich wird in einem späteren Block ergänzt.' }); renderModal(); return; }
   if (action === 'goto-office') { if (maybePromptGoalkeeperBeforeNavigation('office')) return; goToView('office'); return; }
   if (action === 'matchday-tab') { var nextMatchdayTab = actionEl.getAttribute('data-tab') || 'results'; AppState.ui.matchdayTab = nextMatchdayTab; renderApp(); return; }
@@ -20913,9 +20963,8 @@ function handleAction(action, actionEl){
         return;
       }
       if (fixedAdvanceResult.type === 'cup-draw' && fixedAdvanceResult.cupDraw) {
-        AppState.ui.cupDrawId = fixedAdvanceResult.cupDraw.id;
-        AppState.ui.cupDrawStepIndex = 0;
-        goToView('cup-draw');
+        queueCupDrawPresentations(fixedAdvanceResult.cupDraws || [fixedAdvanceResult.cupDraw]);
+        if (!AppState.ui.deferCupDrawPresentation) presentNextQueuedCupDraw();
         return;
       }
       if ((fixedAdvanceResult.simulatedMatches || []).length) {
@@ -20988,9 +21037,8 @@ function handleAction(action, actionEl){
       return;
     }
     if (advanceResult.type === 'cup-draw' && advanceResult.cupDraw) {
-      AppState.ui.cupDrawId = advanceResult.cupDraw.id;
-      AppState.ui.cupDrawStepIndex = 0;
-      goToView('cup-draw');
+      queueCupDrawPresentations(advanceResult.cupDraws || [advanceResult.cupDraw]);
+      if (!AppState.ui.deferCupDrawPresentation) presentNextQueuedCupDraw();
       return;
     }
     if ((advanceResult.simulatedMatches || []).length) {
@@ -24486,6 +24534,15 @@ function kf031BuildWorldDelta(record){
 function kf031DeltaHasOps(delta){
   return !!(delta && Array.isArray(delta.ops) && delta.ops.length);
 }
+function kf031DeltaTouchesProgression(delta){
+  var blockedHistoryRoots={matches:1,seasonResults:1,seasonStandings:1,playerSeasons:1,playerMarketValues:1,previousSeasonRecentContext:1};
+  return !!(delta && Array.isArray(delta.ops) && delta.ops.some(function(op){
+    var path=Array.isArray(op && op.path) ? op.path.map(String) : [];
+    if (path[0] !== 'gameState') return false;
+    if (path[1] === 'calendar' || path[1] === 'meta') return true;
+    return path[1] === 'history' && !!blockedHistoryRoots[path[2]];
+  }));
+}
 function kf031JsonEqual(left,right){
   if (left === right) return true;
   try { return JSON.stringify(left) === JSON.stringify(right); } catch (error) { return false; }
@@ -25082,21 +25139,27 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
       renderApp();
       var beforeSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
       var beforeSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
-      kf029BaseHandleAction('office-advance',actionEl);
+      AppState.ui.deferCupDrawPresentation=true;
+      try {
+        kf029BaseHandleAction('office-advance',actionEl);
+      } finally {
+        AppState.ui.deferCupDrawPresentation=false;
+      }
       var afterSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
       var afterSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
-      if(afterSlot!==beforeSlot || afterSeason!==beforeSeason){
+      var postAdvanceDelta=kf031BuildWorldDelta(record);
+      var requiresProgressCheckpoint=kf031DeltaTouchesProgression(postAdvanceDelta);
+      if(afterSlot!==beforeSlot || afterSeason!==beforeSeason || requiresProgressCheckpoint){
         await kf029CommitHardCheckpoint('calendar-slot');
         KF029Remote.progression=null;
         KF029Remote.progressLeaseId=null;
         KF029Remote.message=KF029Remote.managementDirty ? 'Spielstand bestätigt · neue Änderungen werden gespeichert.' : 'Spielstand gespeichert.';
-        renderApp();
+        if (!presentNextQueuedCupDraw()) renderApp();
       } else {
         await kf031ReleaseProgressLease(record.id,expectedRevision,state.leaseId);
         KF029Remote.progressLeaseId=null;
         KF029Remote.progression=null;
-        var postReadyManagementDelta=kf031BuildWorldDelta(record);
-        if (kf031DeltaHasOps(postReadyManagementDelta)) {
+        if (kf031DeltaHasOps(postAdvanceDelta)) {
           kf031MarkManagementDirty('office-advance-local-management',false);
         }
       }
