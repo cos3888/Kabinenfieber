@@ -17902,6 +17902,17 @@ function renderOfficeView(){
   var officeNextCtxForTabs = nextOwnMatchContext(world, club);
   var officeAdvanceStartsMatch = nextAdvanceStartsOwnMatch(world, club);
   var requiredMail = officeRequiredActionMail(world);
+  var officeSaveState = (KF029Remote.checkpointFailed || KF029Remote.managementFailed) ? 'failed' :
+    ((KF029Remote.checkpointPending || KF029Remote.managementSaving || KF029Remote.managementQueued || KF029Remote.managementDirty || KF029Remote.autosaveTimer) ? 'pending' : 'clean');
+  var officeSaveBlocksAdvance = !requiredMail && officeSaveState !== 'clean';
+  var officeSaveButtonClass = requiredMail ? '' : (officeSaveState === 'failed' ? ' is-save-failed' : (officeSaveState === 'pending' ? ' is-save-pending' : ''));
+  var officeSaveButtonAttrs = officeSaveBlocksAdvance ? ' disabled aria-disabled="true" aria-busy="true" title="Weiter ist möglich, sobald der aktuelle Stand serverseitig bestätigt ist."' : '';
+  var officeSaveStatusHtml = '';
+  if (officeSaveState === 'failed') {
+    officeSaveStatusHtml = '<div class="office-save-status is-failed" role="status"><span>Speichern fehlgeschlagen · Änderungen bleiben vorgemerkt.</span><button class="ghost-btn" type="button" data-action="kf-retry-management-save">Erneut versuchen</button></div>';
+  } else if (officeSaveState === 'pending') {
+    officeSaveStatusHtml = '<div class="office-save-status is-pending" role="status">' + (KF029Remote.checkpointPending ? 'Fortschritt wird bestätigt …' : 'Änderungen werden gespeichert …') + '</div>';
+  }
   var officeShowTableTab = officeHasStandingsTabForContext(officeNextCtxForTabs);
   var officeActiveInfoTab = AppState.ui.officeInfoTab || 'next-match';
   if (officeActiveInfoTab === 'table' && !officeShowTableTab) officeActiveInfoTab = 'next-match';
@@ -17932,7 +17943,8 @@ function renderOfficeView(){
     '        <section class="office-side-card office-mail-card">' +
     '          <div class="office-mail-header"><h3>Mail-Center</h3><button class="ghost-btn office-mail-open-btn" type="button" data-action="open-mail-center">Öffnen</button></div>' +
     '          <div class="office-mail-list">' + (mailPreview || '<div class="empty-state office-empty">Keine Nachrichten.</div>') + '</div>' +
-    '          <button class="primary-btn office-advance-btn' + (requiredMail ? ' is-mail-required' : (officeAdvanceStartsMatch ? ' is-start-match' : '')) + '" type="button" data-action="office-advance">' + (requiredMail ? 'Mail' : (officeAdvanceStartsMatch ? 'Spiel starten' : 'Weiter')) + '</button>' +
+    '          <button class="primary-btn office-advance-btn' + (requiredMail ? ' is-mail-required' : (officeAdvanceStartsMatch ? ' is-start-match' : '')) + officeSaveButtonClass + '" type="button" data-action="office-advance"' + officeSaveButtonAttrs + '>' + (requiredMail ? 'Mail' : (officeAdvanceStartsMatch ? 'Spiel starten' : 'Weiter')) + '</button>' +
+    officeSaveStatusHtml +
     '        </section>' +
     '      </aside>' +
     '    </div>' +
