@@ -25524,11 +25524,11 @@ var KF031_COALESCED_MANAGEMENT_ACTIONS={
 var KF031_IMMEDIATE_MANAGEMENT_ACTIONS={
   'club-transfer-submit-offer':1,'club-transfer-submit-anyway':1,'club-transfer-insist-offer':1,'club-transfer-cancel-negotiation':1,
   'player-contract-apply-offer':1,'player-contract-submit-anyway':1,'player-contract-insist-offer':1,'player-contract-cancel-negotiation':1,
-  'squad-planning-adjust-negotiation':1,'squad-planning-cancel-negotiation':1,
+  'squad-planning-cancel-negotiation':1,
   'finance-sponsor-accept-request':1,'finance-sponsor-counter-request':1,'finance-sponsor-create-extension':1,
   'finance-sponsor-decline-request':1,'finance-sponsor-abort-request':1,'finance-sponsor-reserve-request':1,
   'kit-designer-apply':1,'player-profile-listing-add':1,'player-profile-listing-remove':1,
-  'scouting-confirm-task':1,'scouting-end-order':1,'scouting-list-assign-player':1,'scouting-list-remove-player':1
+  'scouting-confirm-task':1,'scouting-end-order':1,'scouting-list-remove-player':1
 };
 var KF031_MANAGEMENT_VIEWS={lineup:1,contracts:1,'squad-planning':1,finance:1,sponsoring:1};
 function kf031TrackActionMutation(action,actionEl){
