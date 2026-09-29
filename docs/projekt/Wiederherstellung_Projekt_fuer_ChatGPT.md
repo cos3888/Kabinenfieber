@@ -1,10 +1,10 @@
-# Wiederherstellung Kabinenfieber - KF_0.31.1
+# Wiederherstellung Kabinenfieber - KF_0.31.2
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.31.1`
+Version: `KF_0.31.2`
 
 Build-Label:
 
@@ -35,6 +35,45 @@ Aktuelle ZIP nach Export soll `KF_0.31.1.zip` heissen.
 - Bestehende Systeme vor neuen Features sauber abschliessen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
+
+## KF_0.31.2 – Lobby State & UI Save Integrity
+
+Arbeitsbranch: `fix/kf-0.31.2-lobby-ui-save-integrity`
+
+Build-Label: `KF_0.31.2 - Lobby State & UI Save Integrity`
+
+Remote-/API-Vertrag bleibt `0.30.0`. Persistierte Game-/World-Schemas sowie das Delta-Schema bleiben unverändert.
+
+### Lobby-Reparatur
+
+`WorldRecord.memberships` bleibt die einzige fachliche Vereinszuordnung. Der Metadata-/Firestore-Participation-Index ist nur eine schnelle Projektion.
+
+`WorldSessionService._repairLobbyProjectionIfLegacy(meta, userId)` erkennt alte unvollständige Projektionen und rekonstruiert sie aus dem autoritativen WorldRecord. `openWorld(...)` synchronisiert Lobby- und Participation-Projektion zusätzlich bei jedem erfolgreichen Weltöffnen, wodurch auch timestamped stale Projektionen eventual repariert werden.
+
+Keine neue persistierte Wahrheit entsteht.
+
+### UI-only Sortierung
+
+Früher lag die Sortierung der Aufstellungstabelle fälschlich unter `world.squads[clubId].lineupMaskState.sort`. Dadurch konnte eine reine Tabelleninteraktion den GameState verändern und später einen Save auslösen.
+
+Neu:
+- `AppState.ui.lineupSort`
+- `AppState.ui.lineupSortDir`
+
+`ensureLineupMaskState` erzeugt keine Sortierdaten mehr. Bestehende alte `sort`-Felder in gespeicherten Welten werden ignoriert, aber nicht beim Laden mutierend entfernt.
+
+### Match-Sicherheit
+
+Die Simulation selbst wurde nicht geändert. Der neue Test lädt den realen Browser-Bundle-Testharness, setzt einen menschlich kontrollierten Verein und beweist:
+- `buildSimulatedLineup` übernimmt die Spieler aus `lineupMaskState.playerPlacementById`;
+- die menschliche `squad.tactics` wird verwendet;
+- Tabellen-Sortieren verändert den serialisierten Weltzustand nicht.
+
+### Tests
+
+- `npm run test:0312`
+- `npm test` enthält KF_0.31.2 im Core-Runner.
+- CI-Workflow auf Branch `fix/kf-0.31.2-lobby-ui-save-integrity`.
 
 ## KF_0.31.1 – Save Queue & Progress UX
 
