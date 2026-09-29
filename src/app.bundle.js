@@ -18701,7 +18701,14 @@ function bindClubProfileModal(root){
   bindModalCloseControls(root);
 }
   function goToView(name){ setCurrentView(name); renderApp(); renderModal(); updateAppScale(); }
-  function closeActiveModal(){ closeModal(); renderModal(); }
+  function closeActiveModal(){
+    closeModal();
+    renderModal();
+    if (typeof KF029Remote!=='undefined' && !KF029Remote.managementFailed &&
+        (KF029Remote.managementDirty || KF029Remote.managementSaving || KF029Remote.managementQueued || KF029Remote.autosaveTimer)) {
+      void kf031FlushManagementSave('close-modal').catch(function(){});
+    }
+  }
   function returnToStart(){ resetState(); renderApp(); renderModal(); updateAppScale(); }
 
   function showLoadCareerInfo(){
@@ -25059,6 +25066,10 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
         await kf031ReleaseProgressLease(record.id,expectedRevision,state.leaseId);
         KF029Remote.progressLeaseId=null;
         KF029Remote.progression=null;
+        var postReadyManagementDelta=kf031BuildWorldDelta(record);
+        if (kf031DeltaHasOps(postReadyManagementDelta)) {
+          kf031MarkManagementDirty('office-advance-local-management',false);
+        }
       }
       return state;
     }
@@ -25519,7 +25530,7 @@ var KF031_COALESCED_MANAGEMENT_ACTIONS={
   'lineup-formation-change':1,'lineup-formation-select':1,'lineup-goalkeeper-self-change':1,'lineup-tactic-set':1,
   'player-profile-scout-toggle':1,'player-profile-scout-add':1,'player-profile-scout-remove':1,
   'player-profile-shadow-toggle':1,'player-profile-shadow-toggle-direct':1,'shadow-formation-change':1,'shadow-remove-player':1,
-  'delete-mail':1,'delete-all-mail':1,'toggle-mail-read':1
+  'open-mail-center':1,'select-mail':1,'delete-mail':1,'delete-all-mail':1,'toggle-mail-read':1
 };
 var KF031_IMMEDIATE_MANAGEMENT_ACTIONS={
   'club-transfer-submit-offer':1,'club-transfer-submit-anyway':1,'club-transfer-insist-offer':1,'club-transfer-cancel-negotiation':1,
@@ -25530,7 +25541,7 @@ var KF031_IMMEDIATE_MANAGEMENT_ACTIONS={
   'kit-designer-apply':1,'player-profile-listing-add':1,'player-profile-listing-remove':1,
   'scouting-confirm-task':1,'scouting-end-order':1,'scouting-list-remove-player':1
 };
-var KF031_MANAGEMENT_VIEWS={lineup:1,contracts:1,'squad-planning':1,finance:1,sponsoring:1};
+var KF031_MANAGEMENT_VIEWS={office:1,squad:1,lineup:1,contracts:1,'squad-planning':1,finance:1,sponsoring:1};
 function kf031TrackActionMutation(action,actionEl){
   if (action==='lineup-goalkeeper-autofix') {
     var mode=actionEl && actionEl.getAttribute ? actionEl.getAttribute('data-mode') : '';
@@ -25816,6 +25827,10 @@ handleAction = function(action, actionEl){
   }
   kf029BaseHandleAction(action, actionEl);
   kf031TrackActionMutation(action,actionEl);
+  if (action==='close-modal' && !KF029Remote.managementFailed &&
+      (KF029Remote.managementDirty || KF029Remote.managementSaving || KF029Remote.managementQueued || KF029Remote.autosaveTimer)) {
+    void kf031FlushManagementSave('close-modal').catch(function(){});
+  }
   var kf031AfterView=AppState && AppState.ui ? AppState.ui.currentView : '';
   if (kf031BeforeView && kf031BeforeView!==kf031AfterView && KF031_MANAGEMENT_VIEWS[kf031BeforeView] &&
       (KF029Remote.managementDirty || KF029Remote.managementSaving || KF029Remote.managementQueued || KF029Remote.autosaveTimer)) {
