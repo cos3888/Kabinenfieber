@@ -44,7 +44,7 @@ function makeWorldRecord(worldId,userId){
 (async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'kf0311-'));
   const metadata=new FileMetadataRepository({filePath:path.join(root,'metadata.json')});
-  const worlds=new WorldPersistenceService({objectStore:new LocalObjectStore({rootDir:path.join(root,'objects')})});
+  const worlds=new WorldPersistenceService({objectStore:new LocalObjectStore({rootDir:path.join(root,'objects')}),deltaCompactionThreshold:100000});
   const runtime=new WorldRuntimeManager({worldPersistence:worlds,metadataRepository:metadata,idleMs:60000});
   const sessions=new WorldSessionService({metadataRepository:metadata,worldPersistence:worlds,runtimeManager:runtime});
   try{
