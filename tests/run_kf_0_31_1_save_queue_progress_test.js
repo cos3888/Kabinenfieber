@@ -169,7 +169,7 @@ function makeWorldRecord(worldId,userId){
     const perfBase=await worlds.getManifest(perfWorld);
     const chainStart=Date.now();
     for(let i=1;i<=120;i++){
-      const d=delta(perfWorld,[{path:['gameState','meta','managementSequence'],value:i}]);
+      const d=delta(perfWorld,[{path:['gameState','squads','club-a','tactics','managementSequence'],value:i}]);
       const saved=await sessions.saveManagementDelta({userId:'perf',worldId:perfWorld,worldDelta:d,expectedRevision:perfRevision});
       perfRevision=saved.revision;
     }
@@ -180,7 +180,7 @@ function makeWorldRecord(worldId,userId){
     const perfCold=await sessions.openWorld({userId:'perf',worldId:perfWorld});
     const coldLoadMs=Date.now()-coldStart;
     check('Long management-delta chain reconstructs the latest authoritative value without rewriting the base snapshot',
-      perfCold.worldRecord.gameState.meta.managementSequence===120&&
+      perfCold.worldRecord.gameState.squads['club-a'].tactics.managementSequence===120&&
       perfManifest.worldRecordPath===perfBase.worldRecordPath&&
       perfManifest.worldDeltaPaths.length===120,
       {deltaCount:perfManifest.worldDeltaPaths.length,coldLoadMs,chainWriteMs});
