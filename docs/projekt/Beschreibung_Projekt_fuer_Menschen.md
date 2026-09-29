@@ -59,6 +59,18 @@ Alle Saves verwenden dieselbe monotone Welt-Revision. Gleichzeitige Saves mit de
 
 Save-Queue-Flags, Revision und `committedGameState` sind technische Synchronisationszustaende und keine konkurrierende Gameplay-Datenhaltung.
 
+### Bedienzustände und Menüwechsel
+
+Auch Mailzustände gehören zur Weltwahrheit: das Öffnen/Auswählen einer Mail kann den Lesestatus verändern und wird deshalb wie andere kleine Managementänderungen gebündelt gespeichert. Beim Schließen eines Modals sowie beim Verlassen relevanter Managementansichten wird ein vorhandener Dirty-State sofort der Save Queue zugeführt; die Navigation selbst bleibt dabei frei benutzbar.
+
+Die Flush-Erkennung umfasst neben Aufstellung, Verträgen, Kaderplanung und Finanzen auch Büro und Kaderansicht, weil dort managementbezogene Modale und Mailzustände verändert werden können.
+
+### Sicherheitsgrenze vor echtem Mehrspieler
+
+Der Management-Endpunkt schützt bereits Progressionswahrheit serverseitig: Kalender, Meta und zentrale Ergebnis-/Historienpfade dürfen dort nicht verändert werden. Die Mitgliedschaft wird ebenfalls geprüft.
+
+Noch nicht vollständig serverseitig erzwungen ist jedoch eine feingranulare Besitzprüfung, die für jeden generischen Delta-Pfad garantiert, dass Trainer A ausschließlich den fachlich zulässigen Bereich seines eigenen Vereins verändert. Vor offenem echtem Mehrspielerbetrieb muss diese Grenze durch pfadbezogene Ownership-Regeln oder schrittweise Domain-Commands geschlossen werden. Diese offene Sicherheitsgrenze ist keine zweite Datenwahrheit und wird in KF_0.31.1 bewusst nicht durch einen kurzfristigen parallelen Datenpfad umgangen.
+
 ### Mobile Vorbereitung
 
 Dirty/Saving/Failed/Ready sind nicht an den Desktop-Button gekoppelt. Eine spaetere eigene Smartphone-Oberflaeche kann dieselbe Welt, API und Save Queue verwenden; es entsteht keine separate mobile Datenwahrheit.
