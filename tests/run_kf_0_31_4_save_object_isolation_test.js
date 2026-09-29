@@ -81,6 +81,7 @@ class DeterministicManifestRaceStore {
   async exists(key){ return this.base.exists(key); }
   async delete(key){ return this.base.delete(key); }
   async deletePrefix(prefix){ return this.base.deletePrefix(prefix); }
+  async getRecoveryCapabilities(){ return this.base.getRecoveryCapabilities(); }
   async write(key, body, options={}) {
     if (this.enabled && key !== this.manifestKey) this.stagedWrites.push(key);
     const raced =
