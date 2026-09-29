@@ -112,7 +112,7 @@ Der Office-Weiter-/Spiel-starten-Button ist bei Dirty/Save/Checkpoint deaktivier
 Spezialtest: `tests/run_kf_0_31_1_save_queue_progress_test.js`
 npm: `npm run test:0311`
 
-Der aktuelle Core-Regression-Runner enthaelt nun sowohl KF_0.31.0 als auch KF_0.31.1. Der Spezialtest prueft Delta-Persistenz/Reload, Revisionskette A→B, konkurrierende Saves, Mehrspieler-Stale-Revisions, Progressionspfad-Schutz, Slot→Folgedelta, lange Delta-Kette sowie statische Client-Invarianten gegen den urspruenglichen False-ACK-Race.
+Der aktuelle Core-Regression-Runner enthaelt nun sowohl KF_0.31.0 als auch KF_0.31.1. Der Spezialtest prueft Delta-Persistenz/Reload, Revisionskette A→B, konkurrierende Saves, Mehrspieler-Stale-Revisions, Progressionspfad-Schutz, Slot→Folgedelta, Delta-Ketten mit Cold-Load-Messpunkten bei 50/100/250/500 Deltas sowie statische Client-Invarianten gegen den urspruenglichen False-ACK-Race.
 
 ### Letzte UX-/Persistenzabsicherung in KF_0.31.1
 
