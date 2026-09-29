@@ -34,6 +34,23 @@ function mergeFinanceEvents(current, delta) {
   return Array.from(byIdentity.values());
 }
 
+function assertManagementDeltaScope(worldDelta) {
+  const blockedHistoryRoots = new Set([
+    'matches','seasonResults','seasonStandings','playerSeasons',
+    'playerMarketValues','previousSeasonRecentContext'
+  ]);
+  const blocked = (worldDelta && Array.isArray(worldDelta.ops) ? worldDelta.ops : []).find(op => {
+    const path = Array.isArray(op && op.path) ? op.path.map(String) : [];
+    if (path[0] !== 'gameState') return true;
+    if (path[1] === 'calendar' || path[1] === 'meta') return true;
+    if (path[1] === 'history' && blockedHistoryRoots.has(path[2])) return true;
+    return false;
+  });
+  if (blocked) {
+    throw new DomainRuleError('Management delta may not mutate progression-owned game-state paths');
+  }
+}
+
 class WorldRuntimeManager {
   constructor({ worldPersistence, metadataRepository, idleMs = 15 * 60 * 1000, now = () => Date.now() }) {
     if (!worldPersistence || !metadataRepository) throw new Error('WorldRuntimeManager requires worldPersistence and metadataRepository');
@@ -216,6 +233,39 @@ class WorldRuntimeManager {
       runtime.revision = Number(manifest.revision);
       this._touch(runtime);
       return { revision: runtime.revision, currentSeason: runtime.currentSeason, committedAt: manifest.committedAt, membership: clone(membership) };
+    });
+  }
+
+  async saveManagementDelta({ worldId, userId, worldDelta, expectedRevision }) {
+    return this._enqueue(worldId, async () => {
+      const runtime = await this._load(worldId);
+      if (Number(expectedRevision) !== Number(runtime.revision)) {
+        throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: runtime.revision });
+      }
+      const membership = membershipForUser(runtime.worldRecord, userId);
+      if (!membership) throw new DomainRuleError('User is not a member of this world');
+      assertManagementDeltaScope(worldDelta);
+
+      const applied = applyWorldDelta(runtime.worldRecord, worldDelta, { captureUndo: true });
+      let manifest;
+      try {
+        manifest = await this.worldPersistence.commitWorldDelta({
+          worldId,
+          worldDelta,
+          expectedRevision: runtime.revision
+        });
+      } catch (error) {
+        if (applied.undoDelta) applyWorldDelta(runtime.worldRecord, applied.undoDelta);
+        throw error;
+      }
+      runtime.worldRecord = applied.worldRecord;
+      runtime.revision = Number(manifest.revision);
+      this._touch(runtime);
+      return {
+        revision: runtime.revision,
+        currentSeason: runtime.currentSeason,
+        committedAt: manifest.committedAt
+      };
     });
   }
 

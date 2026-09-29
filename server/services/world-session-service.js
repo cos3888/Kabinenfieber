@@ -29,12 +29,45 @@ class WorldSessionService {
 
   async _syncLobbyProjection(record) {
     const clubs = record && record.gameState && record.gameState.clubs;
-    await this.metadata.setWorldLobbyProjection({
+    return this.metadata.setWorldLobbyProjection({
       worldId: record.id,
       currentSeason: Number(record.gameState.meta && record.gameState.meta.seasonNumber || 1),
       maxPlayers: clubs && Array.isArray(clubs.order) ? clubs.order.length : 0,
       clubNamesById: this._clubNamesById(record)
     });
+  }
+
+  async _repairLobbyProjectionIfLegacy(meta, userId) {
+    if (!meta || !meta.worldId || !meta.membership) return meta;
+    const membership = meta.membership;
+    const legacyParticipation = !membership.projectionUpdatedAt || !membership.trainerId || !membership.role;
+    const clubNames = meta.clubNamesById || {};
+    const legacyWorld = !meta.projectionUpdatedAt || !Object.keys(clubNames).length || meta.currentSeason == null || meta.maxPlayers == null;
+    if (!legacyParticipation && !legacyWorld) return meta;
+
+    const record = await this.worlds.loadWorldRecord(meta.worldId);
+    if (!record) return meta;
+    ensureWorldMembershipRoles(record);
+    const authoritativeMembership = membershipForUser(record, userId);
+    if (!authoritativeMembership) return meta;
+
+    let projectedMembership = authoritativeMembership;
+    try {
+      if (legacyWorld) await this._syncLobbyProjection(record);
+      projectedMembership = await this._syncParticipationProjection(meta.worldId, authoritativeMembership);
+    } catch (error) {
+      projectedMembership = clone(authoritativeMembership);
+    }
+
+    const clubs = record.gameState && record.gameState.clubs;
+    return {
+      ...meta,
+      currentSeason:Number(record.gameState && record.gameState.meta && record.gameState.meta.seasonNumber || meta.currentSeason || 1),
+      maxPlayers:clubs && Array.isArray(clubs.order) ? clubs.order.length : Number(meta.maxPlayers || 0),
+      clubNamesById:this._clubNamesById(record),
+      isMember:true,
+      membership:clone(projectedMembership)
+    };
   }
 
   async _syncParticipationProjection(worldId, membership) {
@@ -124,27 +157,28 @@ class WorldSessionService {
     for (const meta of rows) {
       const manifest = await this.worlds.getManifest(meta.worldId);
       if (!manifest) continue;
-      const membership = meta.membership || null;
+      const effectiveMeta = await this._repairLobbyProjectionIfLegacy(meta, userId);
+      const membership = effectiveMeta.membership || null;
       const clubName = membership && membership.clubId
-        ? ((meta.clubNamesById || {})[membership.clubId] || membership.clubId)
+        ? ((effectiveMeta.clubNamesById || {})[membership.clubId] || membership.clubId)
         : null;
       worlds.push({
-        worldId: meta.worldId,
-        slotId: meta.slotId,
-        worldName: meta.worldName || `Welt ${meta.slotId}`,
-        description: meta.description || '',
-        visibility: meta.visibility || 'PRIVATE',
-        joinPolicy: meta.joinPolicy || 'INVITE_ONLY',
-        createdAt: meta.createdAt,
-        createdByUserId: meta.createdByUserId,
+        worldId: effectiveMeta.worldId,
+        slotId: effectiveMeta.slotId,
+        worldName: effectiveMeta.worldName || `Welt ${effectiveMeta.slotId}`,
+        description: effectiveMeta.description || '',
+        visibility: effectiveMeta.visibility || 'PRIVATE',
+        joinPolicy: effectiveMeta.joinPolicy || 'INVITE_ONLY',
+        createdAt: effectiveMeta.createdAt,
+        createdByUserId: effectiveMeta.createdByUserId,
         revision: Number(manifest.revision),
-        currentSeason: Number(meta.currentSeason || manifest.currentSeason || 1),
-        participantCount: Number(meta.participantCount || 0),
-        maxPlayers: Number(meta.maxPlayers || 0),
+        currentSeason: Number(effectiveMeta.currentSeason || manifest.currentSeason || 1),
+        participantCount: Number(effectiveMeta.participantCount || 0),
+        maxPlayers: Number(effectiveMeta.maxPlayers || 0),
         isMember: Boolean(membership),
         membership: membership ? clone(membership) : null,
         clubName,
-        applicationStatus: meta.applicationStatus || null,
+        applicationStatus: effectiveMeta.applicationStatus || null,
         isAdmin: Boolean(membership && membership.role === ROLE_WORLD_ADMIN)
       });
     }
@@ -344,7 +378,15 @@ class WorldSessionService {
   }
 
   async openWorld({ userId, worldId }) {
-    return this.runtime.openWorld({ userId, worldId });
+    const opened = await this.runtime.openWorld({ userId, worldId });
+    const record = opened && opened.worldRecord;
+    if (record) {
+      ensureWorldMembershipRoles(record);
+      const membership = membershipForUser(record, userId);
+      await this._syncLobbyProjection(record).catch(() => {});
+      if (membership) await this._syncParticipationProjection(worldId, membership).catch(() => {});
+    }
+    return opened;
   }
 
   async loadMatchDetail({ userId, worldId, matchId }) {
@@ -391,6 +433,16 @@ class WorldSessionService {
       }
       throw error;
     }
+  }
+
+  async saveManagementDelta({ userId, worldId, worldDelta, expectedRevision }) {
+    const result = await this.runtime.saveManagementDelta({
+      userId,
+      worldId,
+      worldDelta,
+      expectedRevision
+    });
+    return result;
   }
 
   async saveSlot({ userId, worldId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches, financeEvents, progressLeaseId = null }) {

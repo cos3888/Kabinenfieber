@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.31.0
+# Wiederherstellung Kabinenfieber - KF_0.31.2
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.31.0`
+Version: `KF_0.31.2`
 
 Build-Label:
 
-`KF_0.31.0 - Authoritative Persistence & Progression Foundation`
+`KF_0.31.2 - Lobby State & UI Save Integrity`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.31.0.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.31.2.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -35,6 +35,145 @@ Aktuelle ZIP nach Export soll `KF_0.31.0.zip` heissen.
 - Bestehende Systeme vor neuen Features sauber abschliessen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
+
+## KF_0.31.2 – Lobby State & UI Save Integrity
+
+Arbeitsbranch: `fix/kf-0.31.2-lobby-ui-save-integrity`
+
+Build-Label: `KF_0.31.2 - Lobby State & UI Save Integrity`
+
+Remote-/API-Vertrag bleibt `0.30.0`. Persistierte Game-/World-Schemas sowie das Delta-Schema bleiben unverändert.
+
+### Lobby-Reparatur
+
+`WorldRecord.memberships` bleibt die einzige fachliche Vereinszuordnung. Der Metadata-/Firestore-Participation-Index ist nur eine schnelle Projektion.
+
+`WorldSessionService._repairLobbyProjectionIfLegacy(meta, userId)` erkennt alte unvollständige Projektionen und rekonstruiert sie aus dem autoritativen WorldRecord. `openWorld(...)` synchronisiert Lobby- und Participation-Projektion zusätzlich bei jedem erfolgreichen Weltöffnen, wodurch auch timestamped stale Projektionen eventual repariert werden.
+
+Keine neue persistierte Wahrheit entsteht.
+
+### UI-only Sortierung
+
+Früher lag die Sortierung der Aufstellungstabelle fälschlich unter `world.squads[clubId].lineupMaskState.sort`. Dadurch konnte eine reine Tabelleninteraktion den GameState verändern und später einen Save auslösen.
+
+Neu:
+- `AppState.ui.lineupSort`
+- `AppState.ui.lineupSortDir`
+
+`ensureLineupMaskState` erzeugt keine Sortierdaten mehr. Bestehende alte `sort`-Felder in gespeicherten Welten werden ignoriert, aber nicht beim Laden mutierend entfernt.
+
+### Match-Sicherheit
+
+Die Simulation selbst wurde nicht geändert. Der neue Test lädt den realen Browser-Bundle-Testharness, setzt einen menschlich kontrollierten Verein und beweist:
+- `buildSimulatedLineup` übernimmt die Spieler aus `lineupMaskState.playerPlacementById`;
+- die menschliche `squad.tactics` wird verwendet;
+- Tabellen-Sortieren verändert den serialisierten Weltzustand nicht.
+
+### Tests
+
+- `npm run test:0312`
+- `npm test` enthält KF_0.31.2 im Core-Runner.
+- CI-Workflow auf Branch `fix/kf-0.31.2-lobby-ui-save-integrity`.
+
+## KF_0.31.1 – Save Queue & Progress UX
+
+Ausgangsbasis:
+- Repository: `cos3888/Kabinenfieber`
+- produktiver Ausgang: `main` / `1399ce44db0f06382c062cfc0b49d80a329e9a1a`
+- Arbeitsbranch: `fix/kf-0.31.1-save-queue-progress-ux`
+- persistierte Game-/World-Schemas bleiben `kf-core-0.27.2` / `kf-world-record-0.27.2`
+- Delta-Schema bleibt `kf-world-delta-0.31.0`
+- Remote-API-Vertragsversion bleibt `0.30.0`; Service-/App-Version ist `0.31.1`
+
+### Behobener Race
+
+KF_0.31.0 berechnete den Slot-Delta vor dem Eintritt in `KF029Remote.saveChain`. Nach dem Request wurde der inzwischen weiter veraenderbare Live-`record.gameState` erneut geklont und als `committedGameState` gesetzt. Dadurch konnte A→B serverseitig gespeichert sein, waehrend ein lokales B→C faelschlich ebenfalls als bestaetigt galt.
+
+KF_0.31.1 berechnet Deltas erst im seriellen Queue-Job und bestaetigt nur das exakt gesendete Delta. Neuere Live-Aenderungen bleiben dirty und werden als Folgedelta gespeichert.
+
+### Client Save Coordinator
+
+Wichtige technische Felder in `KF029Remote`: `managementDirty`, `managementSaving`, `managementQueued`, `managementFailed`, `managementChangeSequence`, `managementConfirmedSequence`, `managementLastAttemptDelta` und `committedGameState`.
+
+Kernfunktionen: `kf031BuildWorldDelta`, `kf031ApplyCommittedWorldDelta`, `kf031MarkManagementDirty`, `kf031QueueManagementSave`, `kf031FlushManagementSave` und `kf031RebaseManagementConflict`.
+
+Regeln:
+- `KF029Remote.saveChain` serialisiert Management-, Slot- und Snapshot-Saves.
+- Managementdelta wird erst berechnet, wenn der Job wirklich an der Reihe ist.
+- ACK wendet nur das gesendete Delta auf `committedGameState` an; der Live-Zustand wird nie pauschal als bestaetigt geklont.
+- Verbleibender Diff erzeugt automatisch einen Folgesave.
+- Fehler behalten den Stand dirty.
+- Das vorherige Attempt-Delta bleibt bei unbekanntem ACK erhalten und hilft beim 409-Recovery.
+- Debounce fuer gebuendelte Aenderungen: 2800 ms.
+
+Coalesced sind insbesondere Aufstellung, Formation, Taktik und passende Planungs-/Mailaenderungen. Endgueltige Vertrags-, Transfer-, Sponsor-, Transferlisten-, Scoutingauftrag- und `kit-designer-apply`-Aktionen gehen sofort in die Queue. Reine UI-Filter/Tabwechsel und Trikotentwuerfe werden nicht als fachliche Saves behandelt.
+
+Beim Verlassen von `lineup`, `contracts`, `squad-planning`, `finance` oder `sponsoring` wird ein Dirty-State geflusht, die Navigation selbst bleibt benutzbar.
+
+### Serverpfad
+
+Neuer Endpunkt: `PUT /api/v1/worlds/:worldId/management-delta`.
+
+Kette: `server/index.js -> WorldSessionService.saveManagementDelta -> WorldRuntimeManager.saveManagementDelta -> WorldPersistenceService.commitWorldDelta`.
+
+Eigenschaften:
+- Membership erforderlich.
+- strikte `expectedRevision`.
+- serielle Runtime-Mutation ueber `_enqueue(worldId, ...)`.
+- Persistenz schreibt nur ein gzip-WorldDelta und haengt es an `manifest.worldDeltaPaths`.
+- kein Matchsegment, kein Financesegment, kein Progress-Lease.
+- Persistenzfehler rollen die Runtime mit Undo-Delta zurueck.
+
+Management-Scope-Guard: `gameState.calendar`, `gameState.meta` sowie progressionsbezogene History-Wurzeln `matches`, `seasonResults`, `seasonStandings`, `playerSeasons`, `playerMarketValues` und `previousSeasonRecentContext` sind am Management-Endpunkt verboten. `history.transferNegotiations` bleibt als managementbezogene Historie erlaubt.
+
+### Slot / Checkpoint
+
+`kf029SaveProgressCheckpoint` berechnet World-, Match- und Finance-Deltas innerhalb seines Queue-Jobs. Nach ACK wird exakt dieses WorldDelta auf die technische ACK-Basis angewendet.
+
+Management-Saves, die waehrend eines Slot-Checkpoints entstehen, warten dahinter. Solange `checkpointPending` oder `checkpointFailed` gilt, sendet ein Management-Job nicht. Nach erfolgreichem Slot-ACK wird ein verbleibender Dirty-State erneut angestossen. Dadurch kann ein fehlgeschlagener Spieltag nicht ueber den Management-Endpunkt halb committed werden.
+
+Der seltene Vollsnapshot-Pfad bleibt fuer Saisonwechsel/Recovery. Der zu sendende WorldRecord wird innerhalb der Queue tief geklont und damit eingefroren. Ein ACK bestaetigt genau diesen Snapshot; neuere Live-Aenderungen bleiben als Diff erhalten.
+
+### Ready / Revision
+
+`kf031RequestReadyAndMaybeAdvance` fuehrt vor `/ready` immer `await kf031FlushManagementSave('ready')` aus. Erst danach wird die aktuelle Welt-Revision gesendet. Eine neue Managementaenderung verwirft einen lokal wartenden Ready-/Poll-Zustand, da dieser an die alte Revision gebunden waere.
+
+### 409-Rebase
+
+Bei 409 wird die Serverwelt geladen. Lokaler Diff gegen die alte ACK-Basis bleibt erhalten. Ist ein lokaler Pfad serverseitig unveraendert oder entspricht er einem zuvor gesendeten, nur wegen verlorenem ACK unbekannten Attempt, kann rebasiert werden. Wurde derselbe Pfad anderweitig veraendert, bleibt der Stand fehlerhaft/dirty; es gibt kein stilles Last-Write-Wins.
+
+### UI
+
+Der Office-Weiter-/Spiel-starten-Button ist bei Dirty/Save/Checkpoint deaktiviert und entsaettigt. `.is-save-pending::after` zeigt nur einen indeterminierten Sweep. Bei Fehler existiert `kf-retry-management-save`. Menues bleiben ansonsten bedienbar.
+
+### Tests
+
+Spezialtest: `tests/run_kf_0_31_1_save_queue_progress_test.js`
+npm: `npm run test:0311`
+
+Der aktuelle Core-Regression-Runner enthaelt nun sowohl KF_0.31.0 als auch KF_0.31.1. Der Spezialtest prueft Delta-Persistenz/Reload, Revisionskette A→B, konkurrierende Saves, Mehrspieler-Stale-Revisions, Progressionspfad-Schutz, Slot→Folgedelta, Delta-Ketten mit Cold-Load-Messpunkten bei 50/100/250/500 Deltas sowie statische Client-Invarianten gegen den urspruenglichen False-ACK-Race.
+
+### Letzte UX-/Persistenzabsicherung in KF_0.31.1
+
+Mail-Lesestatus ist fachlicher Weltzustand. `open-mail-center` und `select-mail` können über `markMailRead(...)` mutieren und werden deshalb zusammen mit `toggle-mail-read`, `delete-mail` und `delete-all-mail` dirty-getrackt. Ein Modal-Close flusht vorhandene Managementänderungen ebenfalls sofort.
+
+`KF031_MANAGEMENT_VIEWS` umfasst aktuell `office`, `squad`, `lineup`, `contracts`, `squad-planning`, `finance` und `sponsoring`, damit ein Wechsel aus diesen Bereichen einen ausstehenden Dirty-State unverzüglich in die Save Queue gibt, ohne die Navigation zu blockieren.
+
+Im Ready-Pfad wird nach einem lokalen `office-advance`, der keinen Kalenderslot verändert hat, erneut ein WorldDelta gegen die bestätigte Basis geprüft. Existieren dabei Managementänderungen (z. B. lokal veränderter Mailzustand), werden sie wieder dirty markiert und anschließend normal gespeichert.
+
+### Sicherheitsgrenze für den nächsten Mehrspieler-Schritt
+
+`saveManagementDelta` prüft Membership, Revision und den Progressions-Scope. Damit kann der Management-Endpunkt Kalender/Meta sowie zentrale Match-/Saisonwahrheit nicht als normale Managementänderung überschreiben.
+
+Der Endpunkt akzeptiert aber weiterhin generische `gameState`-Deltas und besitzt noch keine vollständige serverseitige Pfad-Ownership-Prüfung pro kontrolliertem Verein. Vor echtem offenem Mehrspielerbetrieb muss deshalb sichergestellt werden, dass ein Trainer nicht per manipuliertem Request fremde Vereinsbereiche verändert. Bevorzugt: klare Ownership-Regeln für zulässige Pfade oder schrittweise fachliche Domain-Commands; keine zweite Schattenwelt und kein paralleler Mobile-/Desktop-Datenpfad.
+
+### Datenwahrheit / Mobile
+
+Keine neue fachliche Wahrheit: Spieler/Vertraege bleiben `world.players.byId`, Aufstellung/Taktik `world.squads`, Kalender `world.calendar`, historische Matches `world.history.matches`, Regeln/Texte `StaticData`. Save-Queue-Zustand und ACK-Basis sind nur Synchronisationsmetadaten.
+
+Desktop-UI konsumiert den Coordinator-Zustand. Eine spaetere mobile UI muss denselben Welt-/API-/Save-Vertrag verwenden und darf keine mobile Schattenwelt einfuehren.
+
+Naechster geplanter Block nach Abschluss: `KF_0.32.0 – Multiplayer Round Control` mit mehreren echten Nutzern, konfigurierbaren Rundenzeiten sowie praktischem Ready-/Countdown-Test.
 
 
 ## KF_0.31.0 – Authoritative Persistence & Progression Foundation

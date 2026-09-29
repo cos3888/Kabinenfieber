@@ -11,7 +11,7 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const SERVICE_VERSION = '0.31.0';
+const SERVICE_VERSION = '0.31.2';
 const API_VERSION = '0.30.0';
 
 let persistenceVerificationState = {
@@ -434,6 +434,21 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       await sendJson(req, res, 200, { ok:true, match });
+      return;
+    }
+
+    const managementWorldId = worldIdFromPath(pathname, '/management-delta');
+    if (req.method === 'PUT' && managementWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.saveManagementDelta({
+        userId: auth.user.userId,
+        worldId: managementWorldId,
+        worldDelta: body.worldDelta,
+        expectedRevision: body.expectedRevision
+      });
+      await sendJson(req, res, 200, { ok:true, ...result });
       return;
     }
 

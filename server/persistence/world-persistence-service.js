@@ -259,6 +259,38 @@ class WorldPersistenceService {
     return next;
   }
 
+  async commitWorldDelta({ worldId = null, worldDelta, expectedRevision }) {
+    const resolvedWorldId = safeKey(worldId || (worldDelta && worldDelta.worldId), 'worldId');
+    const envelope = await this._readManifestEnvelope(resolvedWorldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    const current = envelope.manifest;
+    if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
+      throw new PersistenceConflictError('World revision mismatch', { worldId: resolvedWorldId, expectedRevision, actualRevision: current.revision });
+    }
+
+    validateWorldDelta(worldDelta, resolvedWorldId);
+    const revision = Number(current.revision) + 1;
+    const deltaPath = `${this.revisionPrefix(resolvedWorldId, revision)}/world-delta.json.gz`;
+
+    try {
+      await this.store.write(deltaPath, await encodeJsonGzip(worldDelta), { contentType: 'application/gzip' });
+      const next = {
+        ...current,
+        revision,
+        committedAt: new Date().toISOString(),
+        worldDeltaPaths: [...(Array.isArray(current.worldDeltaPaths) ? current.worldDeltaPaths : []), deltaPath]
+      };
+      await this.store.write(this.manifestKey(resolvedWorldId), encodeJson(next), {
+        ifGenerationMatch: envelope.generation,
+        contentType: 'application/json'
+      });
+      return next;
+    } catch (error) {
+      await this.store.delete(deltaPath).catch(() => {});
+      throw error;
+    }
+  }
+
   async commitSlot({ worldId = null, worldRecord = null, worldDelta = null, season, slotKey, matches = [], financeEvents = [], expectedRevision }) {
     const resolvedWorldId = safeKey(worldId || (worldRecord && worldRecord.id) || (worldDelta && worldDelta.worldId), 'worldId');
     slotKey = safeKey(slotKey, 'slotKey');

@@ -6424,3 +6424,48 @@ button,.filter-chip,.lineup-subtab,.ghost-btn,.primary-btn,.secondary-btn,.small
 .club-tile.is-occupied{opacity:.52}.club-tile.is-occupied .club-select-btn{cursor:not-allowed}
 .kf-club-occupied{display:block;margin-top:4px;font-size:11px;color:var(--muted);text-align:center}
 @media(max-width:900px){.kf-lobby-screen{padding:10px}.kf-lobby-shell{width:100%;padding:14px}.kf-lobby-header{align-items:flex-start;flex-direction:column}.kf-lobby-head-actions{justify-content:flex-start}}
+
+
+/* BEGIN KF_0.31.1 SAVE QUEUE & PROGRESS UX */
+.office-advance-btn{position:relative;overflow:hidden}
+.office-advance-btn.is-save-pending,.office-advance-btn.is-save-failed{filter:saturate(.18);opacity:.72;cursor:not-allowed}
+.office-advance-btn.is-save-pending::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  width:42%;
+  transform:translateX(-130%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);
+  animation:kf031-save-sweep 1.15s ease-in-out infinite;
+  pointer-events:none
+}
+.office-advance-btn.is-save-failed::after{display:none}
+.office-save-status{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-height:23px;
+  margin-top:7px;
+  font-size:11px;
+  line-height:1.25;
+  text-align:center;
+  color:var(--muted)
+}
+.office-save-status.is-pending::before{
+  content:"";
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:currentColor;
+  opacity:.7;
+  animation:kf031-save-pulse .9s ease-in-out infinite alternate
+}
+.office-save-status.is-failed{color:#ffd0d0;flex-wrap:wrap}
+.office-save-status .ghost-btn{padding:4px 7px;font-size:10px}
+@keyframes kf031-save-sweep{0%{transform:translateX(-130%)}100%{transform:translateX(340%)}}
+@keyframes kf031-save-pulse{from{opacity:.25;transform:scale(.82)}to{opacity:.9;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){
+  .office-advance-btn.is-save-pending::after,.office-save-status.is-pending::before{animation:none}
+}
+/* END KF_0.31.1 SAVE QUEUE & PROGRESS UX */

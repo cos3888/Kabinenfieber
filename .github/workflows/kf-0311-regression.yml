@@ -1,0 +1,25 @@
+name: KF 0.31.2 Regression
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches:
+      - fix/kf-0.31.2-lobby-ui-save-integrity
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: KF 0.31.2 lobby and UI integrity regression
+        run: npm run test:0312
+      - name: KF 0.31.1 save queue regression
+        run: npm run test:0311
+      - name: Current core regression suite
+        run: npm test
