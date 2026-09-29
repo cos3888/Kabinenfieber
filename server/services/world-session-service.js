@@ -389,6 +389,12 @@ class WorldSessionService {
     return opened;
   }
 
+  async inspectWorldIntegrity({ userId, worldId }) {
+    const participation = await this.metadata.getParticipation({ worldId, userId });
+    if (!participation) throw new DomainRuleError('User is not a member of this world');
+    return this.worlds.inspectWorldIntegrity(worldId);
+  }
+
   async loadMatchDetail({ userId, worldId, matchId }) {
     return this.runtime.loadMatchDetail({ userId, worldId, matchId });
   }
