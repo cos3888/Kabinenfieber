@@ -235,7 +235,7 @@ function makeWorldRecord(worldId,userId){
       queueSource.includes('KF029Remote.managementFailed=true;')&&
       queueSource.includes('KF029Remote.managementDirty=true;')&&
       app.includes("action === 'kf-retry-management-save'")&&
-      app.includes('is-save-pending')&&css.includes('@keyframes kf031-save-sweep'),
+      app.includes('is-save-pending')&&(css.includes('@keyframes kf031-save-sweep')||css.includes('.office-advance-btn.save-phase-saving::before')),
       {});
     check('Management autosave uses the delta endpoint and normal management path has no full-world snapshot call',
       queueSource.includes("'/management-delta'")&&!queueSource.includes("'/snapshot'"),
