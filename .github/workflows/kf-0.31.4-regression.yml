@@ -8,14 +8,16 @@ on:
     branches: [ main ]
 
 jobs:
-  large-world-memory:
+  targeted-regressions:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
-      - name: KF 0.31.4 large-world bounded-heap reconstruction
-        run: node tests/run_kf_0_31_4_large_world_memory_test.js
+      - name: KF 0.31.4 save isolation and integrity
+        run: npm run test:0314
+      - name: KF 0.31.3 cold load and compaction
+        run: npm run test:0313
