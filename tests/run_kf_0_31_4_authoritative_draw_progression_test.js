@@ -33,7 +33,7 @@ function loadBrowserHarness(){
   function runFile(file){vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context,{filename:file});}
   runFile('src/static-data.js'); runFile('src/db1-db2-data.js');
   let appCode=fs.readFileSync(path.join(root,'src/app.bundle.js'),'utf8');
-  const injection="\n  window.KF0314DrawTest={AppState:AppState,startNewCareer:startNewCareer,advanceCareerRound:advanceCareerRound,nationalCupSlotForRound:nationalCupSlotForRound,slotIndexForKey:slotIndexForKey,markCupDrawPresented:markCupDrawPresented,cupDrawPresentedForClub:cupDrawPresentedForClub,queueCupDrawPresentations:queueCupDrawPresentations,presentNextQueuedCupDraw:presentNextQueuedCupDraw,cupDrawById:cupDrawById};\n";
+  const injection="\n  window.KF0314DrawTest={AppState:AppState,startNewCareer:startNewCareer,advanceCareerRound:advanceCareerRound,nationalCupSlotForRound:nationalCupSlotForRound,slotIndexForKey:slotIndexForKey,ensureDueFieberCupDraws:ensureDueFieberCupDraws,markCupDrawPresented:markCupDrawPresented,cupDrawPresentedForClub:cupDrawPresentedForClub,queueCupDrawPresentations:queueCupDrawPresentations,presentNextQueuedCupDraw:presentNextQueuedCupDraw,cupDrawById:cupDrawById};\n";
   appCode=appCode.replace(/\n  function boot\(\)\{/,injection+'\n  function boot(){');
   vm.runInContext(appCode,context,{filename:'src/app.bundle.js'});
   if(document._domReady)document._domReady();
@@ -103,6 +103,46 @@ function makeServerWorld(worldId,userId){
   check('After presentation the same draw no longer blocks the actual next slot',
     !!third&&third.type!=='cup-draw'&&w.calendar.currentSlotKey===dueSlot.key,
     {type:third&&third.type,currentSlotKey:w.calendar.currentSlotKey,dueSlotKey:dueSlot.key});
+
+  // Season 2 Fiebercup: provide the previous-season table truth and played qualification finals,
+  // then use the normal due-draw path to create the authoritative 32-club group draw.
+  w.meta.seasonNumber=2;
+  w.history.seasonStandings=w.history.seasonStandings||{};
+  w.history.seasonStandings['1']=w.history.seasonStandings['1']||{};
+  const countries=[];
+  w.clubs.order.forEach(id=>{const club=w.clubs.byId[id];if(club&&club.countryName&&countries.indexOf(club.countryName)===-1)countries.push(club.countryName);});
+  let fieberSetupOk=countries.length===8;
+  let fieberActiveClubId=null;
+  countries.forEach((countryName,countryIndex)=>{
+    const top=w.clubs.order.map(id=>w.clubs.byId[id]).filter(club=>club&&club.countryName===countryName&&Number(club.leagueLevel||0)===1);
+    if(top.length<7){fieberSetupOk=false;return;}
+    const leagueKey=top[0].leagueKey;
+    w.history.seasonStandings['1'][leagueKey]=top.slice(0,7).map((club,index)=>({clubId:club.id,position:index+1}));
+    if(!fieberActiveClubId)fieberActiveClubId=top[0].id;
+    w.history.matches.push({
+      id:'kf0314-fieber-qfinal-'+countryIndex,season:2,competition:'fiebercup',stage:'qualification',
+      roundType:'qualification_final',countryName,pairIndex:0,homeClubId:top[3].id,awayClubId:top[4].id,
+      homeGoals:1,awayGoals:0
+    });
+  });
+  const fieberGroupSlot=w.calendar.slots.find(slot=>slot&&slot.label==='Fieber-Cup LP1')||null;
+  check('Fiebercup test setup has eight countries, previous-season standings and group slot',
+    fieberSetupOk&&!!fieberActiveClubId&&!!fieberGroupSlot,
+    {countries:countries.length,activeClubId:fieberActiveClubId,groupSlot:fieberGroupSlot&&fieberGroupSlot.key});
+  const fieberFirst=T.ensureDueFieberCupDraws(w,fieberGroupSlot,{activeClubId:fieberActiveClubId});
+  const fieberDraw=fieberFirst.visibleDraw||(fieberFirst.visibleDraws||[])[0]||(fieberFirst.draws||[])[0]||null;
+  const fieberGroupFixtures=(w.calendar.fixtures||[]).filter(row=>row&&row.competition==='fiebercup'&&row.stage==='group');
+  const fieberFixtureIds=fieberGroupFixtures.map(row=>row.id).sort();
+  check('Fiebercup group draw is created through the normal due-draw path with 32 authoritative participants',
+    !!fieberDraw&&fieberDraw.competition==='fiebercup'&&fieberDraw.roundLabel==='Gruppenauslosung'&&
+    (fieberDraw.potClubIds||[]).length===32&&fieberGroupFixtures.length>0,
+    {drawId:fieberDraw&&fieberDraw.id,participants:fieberDraw&&(fieberDraw.potClubIds||[]).length,fixtures:fieberGroupFixtures.length});
+  const fieberSecond=T.ensureDueFieberCupDraws(w,fieberGroupSlot,{activeClubId:fieberActiveClubId});
+  const fieberSecondDraw=fieberSecond.visibleDraw||(fieberSecond.visibleDraws||[])[0]||(fieberSecond.draws||[])[0]||null;
+  const fieberFixtureIdsAgain=(w.calendar.fixtures||[]).filter(row=>row&&row.competition==='fiebercup'&&row.stage==='group').map(row=>row.id).sort();
+  check('Repeated Fiebercup due check reuses the stored draw and does not duplicate group fixtures',
+    !!fieberSecondDraw&&fieberSecondDraw.id===fieberDraw.id&&JSON.stringify(fieberFixtureIdsAgain)===JSON.stringify(fieberFixtureIds),
+    {firstDraw:fieberDraw&&fieberDraw.id,secondDraw:fieberSecondDraw&&fieberSecondDraw.id,fixtures:fieberFixtureIdsAgain.length});
 
   const store=w.calendar.nationalCupDraws;
   const queueClone=JSON.parse(JSON.stringify(firstDraw));
@@ -206,7 +246,7 @@ function makeServerWorld(worldId,userId){
       !!managementError&&/progression-owned/i.test(String(managementError.message||'')),
       {error:managementError&&managementError.message});
 
-    report.metrics={drawCountAfterFirst,drawCountAfterSecond,cupFixtureCount:fixtureIdsAfterFirst.length,serverRevision:saved.revision};
+    report.metrics={drawCountAfterFirst,drawCountAfterSecond,cupFixtureCount:fixtureIdsAfterFirst.length,fieberGroupFixtureCount:fieberFixtureIds.length,serverRevision:saved.revision};
   }finally{
     await fsp.rm(temp,{recursive:true,force:true});
   }
