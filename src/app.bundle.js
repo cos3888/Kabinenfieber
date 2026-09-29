@@ -25260,6 +25260,9 @@ async function kf029RecoverCommittedProgress(record, slotKey, deltaMatches, delt
     var matchIds = {};
     var financeStates = {};
     (data.matches || []).forEach(function(row){ if(row && row.id) matchIds[String(row.id)] = 1; });
+    (((serverRecord||{}).gameState||{}).history && (((serverRecord||{}).gameState||{}).history.matches || []) || []).forEach(function(row){
+      if(row && row.id) matchIds[String(row.id)] = 1;
+    });
     (data.financeEvents || []).forEach(function(row){
       var key = kf0301FinanceCommitKey(row);
       if (key) financeStates[key] = kf0301FinanceCommitSignature(row);
