@@ -24637,6 +24637,7 @@ function kf031QueueManagementSave(reason){
     }
     var expectedRevision=Number(KF029Remote.revision);
     var sentSequence=Number(KF029Remote.managementChangeSequence);
+    var priorAttemptDelta=KF029Remote.managementLastAttemptDelta;
     KF029Remote.managementSaving=true;
     KF029Remote.managementFailed=false;
     KF029Remote.managementError='';
@@ -24659,7 +24660,7 @@ function kf031QueueManagementSave(reason){
       if (error && error.status===409) {
         var localDelta=kf031BuildWorldDelta(record);
         var rebased=localDelta && kf031DeltaHasOps(localDelta)
-          ? await kf031RebaseManagementConflict(record,localDelta,worldDelta)
+          ? await kf031RebaseManagementConflict(record,localDelta,priorAttemptDelta || worldDelta)
           : false;
         if (rebased) {
           KF029Remote.managementDirty=kf031HasPendingManagementChanges();
