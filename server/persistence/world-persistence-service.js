@@ -97,7 +97,7 @@ class WorldPersistenceService {
     if (existing) throw new PersistenceConflictError('World is already initialized', { worldId: worldId });
     const revision = 1, commitId = this.createCommitId();
     const worldPath = `${this.commitPrefix(worldId, revision, commitId)}/world.json.gz`;
-    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { ifGenerationMatch: 0, contentType: 'application/gzip' });
     const manifest = {
       schemaVersion: MANIFEST_SCHEMA,
       storageSchema: STORAGE_SCHEMA,
@@ -343,9 +343,9 @@ class WorldPersistenceService {
       const matchBody = await encodeJsonGzip({ season, kind: 'runtime-snapshot', matches });
       const financeBody = await encodeJsonGzip({ season, kind: 'runtime-snapshot', events: financeEvents });
       await Promise.all([
-        this.store.write(worldPath, worldBody, { contentType: 'application/gzip' }),
-        this.store.write(matchPath, matchBody, { contentType: 'application/gzip' }),
-        this.store.write(financePath, financeBody, { contentType: 'application/gzip' })
+        this.store.write(worldPath, worldBody, { ifGenerationMatch: 0, contentType: 'application/gzip' }),
+        this.store.write(matchPath, matchBody, { ifGenerationMatch: 0, contentType: 'application/gzip' }),
+        this.store.write(financePath, financeBody, { ifGenerationMatch: 0, contentType: 'application/gzip' })
       ]);
       const next = {
         ...current,
@@ -400,7 +400,7 @@ class WorldPersistenceService {
     const revision = Number(current.revision) + 1;
     const commitId = this.createCommitId();
     const worldPath = `${this.commitPrefix(worldId, revision, commitId)}/world.json.gz`;
-    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { ifGenerationMatch: 0, contentType: 'application/gzip' });
     const next = { ...current, revision, committedAt: new Date().toISOString(), worldRecordPath: worldPath, worldDeltaPaths: [] };
     try {
       await this.store.write(this.manifestKey(worldId), encodeJson(next), {
@@ -440,7 +440,7 @@ class WorldPersistenceService {
     }
 
     const compactedPath = `${this.revisionPrefix(resolvedWorldId, Number(current.revision))}/world-compacted-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.json.gz`;
-    await this.store.write(compactedPath, await encodeJsonGzip(authoritative), { contentType: 'application/gzip' });
+    await this.store.write(compactedPath, await encodeJsonGzip(authoritative), { ifGenerationMatch: 0, contentType: 'application/gzip' });
     const next = {
       ...current,
       worldRecordPath: compactedPath,
@@ -480,7 +480,7 @@ class WorldPersistenceService {
     const deltaPath = `${this.commitPrefix(resolvedWorldId, revision, commitId)}/world-delta.json.gz`;
 
     try {
-      await this.store.write(deltaPath, await encodeJsonGzip(worldDelta), { contentType: 'application/gzip' });
+      await this.store.write(deltaPath, await encodeJsonGzip(worldDelta), { ifGenerationMatch: 0, contentType: 'application/gzip' });
       const next = {
         ...current,
         revision,
@@ -534,9 +534,9 @@ class WorldPersistenceService {
       const matchBody = await encodeJsonGzip({ season: Number(season), slotKey, matches });
       const financeBody = await encodeJsonGzip({ season: Number(season), slotKey, events: financeEvents });
       await Promise.all([
-        this.store.write(worldDelta ? deltaPath : worldPath, worldBody, { contentType: 'application/gzip' }),
-        this.store.write(matchPath, matchBody, { contentType: 'application/gzip' }),
-        this.store.write(financePath, financeBody, { contentType: 'application/gzip' })
+        this.store.write(worldDelta ? deltaPath : worldPath, worldBody, { ifGenerationMatch: 0, contentType: 'application/gzip' }),
+        this.store.write(matchPath, matchBody, { ifGenerationMatch: 0, contentType: 'application/gzip' }),
+        this.store.write(financePath, financeBody, { ifGenerationMatch: 0, contentType: 'application/gzip' })
       ]);
       const next = {
         ...current,
@@ -583,7 +583,7 @@ class WorldPersistenceService {
     const revision = Number(current.revision) + 1;
     const commitId = this.createCommitId();
     const worldPath = `${this.commitPrefix(worldId, revision, commitId)}/world.json.gz`;
-    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+    await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { ifGenerationMatch: 0, contentType: 'application/gzip' });
     const next = {
       ...current,
       revision,
