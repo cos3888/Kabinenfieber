@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.31.1
+# Kabinenfieber - Stand KF_0.31.2
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.31.1`
+App-Version: `KF_0.31.2`
 
 Persistierte Schemas:
 
@@ -17,6 +17,46 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.31.2 – Lobby State & UI Save Integrity
+
+KF_0.31.2 ist ein kleiner Nachfix auf KF_0.31.1 nach dem ersten Praxistest. Matchbalancing, Ergebnisentstehung und die eigentliche Fußballsimulation werden nicht verändert.
+
+### Weltenliste / Vereinsstatus
+
+Die fachliche Wahrheit der Vereinszuordnung bleibt ausschließlich `WorldRecord.memberships`. Die Lobby liest für Geschwindigkeit weiterhin einen abgeleiteten Metadata-/Firestore-Index.
+
+Alte oder unvollständige Lobbyprojektionen werden jetzt gezielt repariert:
+- bei Legacy-Projektionen ohne vollständige Projektionsmetadaten lädt `listWorlds` einmalig den autoritativen WorldRecord;
+- `clubId`, Trainerrolle und Vereinsname werden daraus neu projiziert;
+- beim Öffnen einer Welt wird die Projektion ebenfalls gegen die autoritative Membership synchronisiert.
+
+Damit kann ein älterer Spielstand nicht mehr korrekt mit Verein laden, während die Weltenliste gleichzeitig fälschlich „Verein wählen“ anzeigt.
+
+### Aufstellungssortierung
+
+Die Sortierung der Aufstellungstabelle ist reine UI-Präferenz und keine Fußballwahrheit. Sie liegt deshalb nun ausschließlich in `AppState.ui.lineupSort` und `AppState.ui.lineupSortDir`.
+
+`world.squads[clubId].lineupMaskState` enthält nur fachliche Aufstellungsdaten wie Formation und Spielerplatzierungen. Reines Sortieren erzeugt dadurch weder WorldDelta noch Autosave.
+
+### Simulation
+
+Die Matchsimulation bleibt unverändert. Ein zusätzlicher Regressionstest prüft jetzt ausdrücklich, dass bei einem menschlich gesteuerten Verein:
+- die im `lineupMaskState.playerPlacementById` gewählte Startelf in `buildSimulatedLineup` landet;
+- die aktuelle `world.squads[clubId].tactics` verwendet wird und nicht die KI-Trainer-Taktik.
+
+### Datenquellen
+
+- Vereinszuordnung: `WorldRecord.memberships` – einzige fachliche Wahrheit
+- Aufstellung/Taktik: `world.squads`
+- Sortierung/Filter: ausschließlich `AppState.ui`
+- Lobby-Metadaten: abgeleitete, reparierbare Projektion; keine zweite Wahrheit
+
+### Tests
+
+Spezialtest: `tests/run_kf_0_31_2_lobby_ui_integrity_test.js`
+
+Geprüft werden Legacy-Lobbyreparatur, Reparatur beim Weltöffnen, UI-only-Aufstellungssortierung, unveränderter GameState beim Sortieren, Übernahme der menschlichen Startelf/Taktik in den Matchkontext sowie das Fortbestehen der Save-/Progress-Anzeige aus KF_0.31.1.
 
 ## KF_0.31.1 – Save Queue & Progress UX
 
