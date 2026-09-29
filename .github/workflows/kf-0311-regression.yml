@@ -1,0 +1,24 @@
+name: KF 0.31.1 Regression
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches:
+      - fix/kf-0.31.1-save-queue-progress-ux
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: KF 0.31.1 save queue regression
+        run: npm run test:0311
+      - name: Current core regression suite
+        run: npm test
