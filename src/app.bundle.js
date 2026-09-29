@@ -24920,6 +24920,7 @@ function kf029RestoreCurrentDetails(world, matches, financeEvents){
 function kf029InstallLoadedWorld(data){
   var record = data.worldRecord;
   if (!record || !record.id || !record.gameState) throw new Error('Serverwelt ist unvollstaendig.');
+  kf031ResetManagementSaveState();
   resetState();
   registerWorldRecord(record);
   setWorldRecord(record);
@@ -25112,6 +25113,7 @@ async function kf029CreateRemoteWorld(){
   }
   kf029MarkCommittedDetails(kf029CurrentMatches(), kf029CurrentFinanceEvents());
   KF029Remote.committedGameState = kf031CloneJson(record.gameState);
+  kf031ResetManagementSaveState();
   await kf029RefreshWorldList();
   KF029Remote.message = 'Neue Welt ist auf dem Server gespeichert.';
   renderApp();
@@ -25171,6 +25173,7 @@ function kf029ConfirmWorldCreate(){
   KF029Remote.committedMatchIds={};
   KF029Remote.committedFinanceIds={};
   KF029Remote.committedGameState=null;
+  kf031ResetManagementSaveState();
   KF029Remote.progression=null;
   KF029Remote.progressLeaseId=null;
   kf031ClearProgressTimer();
@@ -25435,6 +25438,7 @@ function kf029DiscardLoadedWorldToList(){
   KF029Remote.committedMatchIds={};
   KF029Remote.committedFinanceIds={};
   KF029Remote.committedGameState=null;
+  kf031ResetManagementSaveState();
   KF029Remote.error='';
   KF029Remote.message='';
   returnToStart();
