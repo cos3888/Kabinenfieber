@@ -150,7 +150,7 @@ async function assertTwoWayRace({ name, raceStore, service, worldId, runA, runB,
       const a=factory(), b=factory();
       const race=await assertTwoWayRace({
         name:'parallel management saves',
-        raceStore, service:init, worldId,
+        raceStore:racingStore, service:init, worldId,
         runA:()=>a.commitWorldDelta({ worldId, expectedRevision:1, worldDelta:delta(worldId,'save-a') }),
         runB:()=>b.commitWorldDelta({ worldId, expectedRevision:1, worldDelta:delta(worldId,'save-b') }),
         verifyWinner:async({manifest,winnerIndex})=>{
@@ -187,7 +187,7 @@ async function assertTwoWayRace({ name, raceStore, service, worldId, runA, runB,
       const a=factory(), b=factory();
       await assertTwoWayRace({
         name:'parallel slot saves',
-        raceStore, service:init, worldId, expectedStagedMinimum:6,
+        raceStore:racingStore, service:init, worldId, expectedStagedMinimum:6,
         runA:()=>a.commitSlot({
           worldId, worldDelta:delta(worldId,'slot-a'), season:1, slotKey:'slot-1',
           matches:[match('match-a')], financeEvents:[financeEvent('finance-a')], expectedRevision:1
@@ -224,7 +224,7 @@ async function assertTwoWayRace({ name, raceStore, service, worldId, runA, runB,
       const a=factory(), b=factory();
       await assertTwoWayRace({
         name:'parallel full snapshot saves',
-        raceStore, service:init, worldId,
+        raceStore:racingStore, service:init, worldId,
         runA:()=>a.commitWorldRecord({ worldRecord:makeWorldRecord(worldId,'full-a'), expectedRevision:1 }),
         runB:()=>b.commitWorldRecord({ worldRecord:makeWorldRecord(worldId,'full-b'), expectedRevision:1 }),
         verifyWinner:async({manifest,winnerIndex})=>{
@@ -244,7 +244,7 @@ async function assertTwoWayRace({ name, raceStore, service, worldId, runA, runB,
       const a=factory(), b=factory();
       await assertTwoWayRace({
         name:'parallel runtime snapshot saves',
-        raceStore, service:init, worldId, expectedStagedMinimum:6,
+        raceStore:racingStore, service:init, worldId, expectedStagedMinimum:6,
         runA:()=>a.commitRuntimeSnapshot({
           worldRecord:makeWorldRecord(worldId,'runtime-a'), season:1,
           matches:[match('runtime-match-a')], financeEvents:[financeEvent('runtime-fin-a')], expectedRevision:1
@@ -273,7 +273,7 @@ async function assertTwoWayRace({ name, raceStore, service, worldId, runA, runB,
       const a=factory(), b=factory();
       await assertTwoWayRace({
         name:'parallel season transitions',
-        raceStore, service:init, worldId,
+        raceStore:racingStore, service:init, worldId,
         runA:()=>a.commitSeasonTransition({ worldRecord:makeWorldRecord(worldId,'season-a',2), newSeason:2, expectedRevision:1 }),
         runB:()=>b.commitSeasonTransition({ worldRecord:makeWorldRecord(worldId,'season-b',2), newSeason:2, expectedRevision:1 }),
         verifyWinner:async({manifest,winnerIndex})=>{
