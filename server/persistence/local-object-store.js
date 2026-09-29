@@ -100,6 +100,16 @@ class LocalObjectStore {
     const target = this._path(prefix);
     await fs.rm(target, { recursive: true, force: true });
   }
+
+  async getRecoveryCapabilities() {
+    return {
+      driver: 'local',
+      objectVersioningEnabled: false,
+      softDeleteEnabled: false,
+      softDeleteRetentionSeconds: 0,
+      softDeleteEffectiveTime: null
+    };
+  }
 }
 
 module.exports = { LocalObjectStore };
