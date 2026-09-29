@@ -219,6 +219,38 @@ class WorldRuntimeManager {
     });
   }
 
+  async saveManagementDelta({ worldId, userId, worldDelta, expectedRevision }) {
+    return this._enqueue(worldId, async () => {
+      const runtime = await this._load(worldId);
+      if (Number(expectedRevision) !== Number(runtime.revision)) {
+        throw new PersistenceConflictError('World revision mismatch', { worldId, expectedRevision, actualRevision: runtime.revision });
+      }
+      const membership = membershipForUser(runtime.worldRecord, userId);
+      if (!membership) throw new DomainRuleError('User is not a member of this world');
+
+      const applied = applyWorldDelta(runtime.worldRecord, worldDelta, { captureUndo: true });
+      let manifest;
+      try {
+        manifest = await this.worldPersistence.commitWorldDelta({
+          worldId,
+          worldDelta,
+          expectedRevision: runtime.revision
+        });
+      } catch (error) {
+        if (applied.undoDelta) applyWorldDelta(runtime.worldRecord, applied.undoDelta);
+        throw error;
+      }
+      runtime.worldRecord = applied.worldRecord;
+      runtime.revision = Number(manifest.revision);
+      this._touch(runtime);
+      return {
+        revision: runtime.revision,
+        currentSeason: runtime.currentSeason,
+        committedAt: manifest.committedAt
+      };
+    });
+  }
+
   async saveSlot({ worldId, userId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches = [], financeEvents = [] }) {
     return this._enqueue(worldId, async () => {
       const runtime = await this._load(worldId);
