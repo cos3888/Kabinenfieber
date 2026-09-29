@@ -308,6 +308,13 @@ async function assertTwoWayRace({ name, raceStore, service, worldId, runA, runB,
         integrity.missingMatchIndexReferences.length===0,
         {integrity});
       check('integrity: diagnosis is read-only',JSON.stringify(before)===JSON.stringify(after),{});
+      check('integrity: recovery capability check is read-only and explicit',
+        integrity.recoveryCapabilities &&
+        integrity.recoveryCapabilities.status==='ok' &&
+        integrity.recoveryCapabilities.driver==='local' &&
+        integrity.recoveryCapabilities.objectVersioningEnabled===false &&
+        integrity.recoveryCapabilities.softDeleteEnabled===false,
+        {recoveryCapabilities:integrity.recoveryCapabilities});
     }
 
     // 7) Missing base snapshot.
