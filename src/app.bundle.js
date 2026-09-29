@@ -32,6 +32,8 @@
       squadSort: 'usage',
       squadSortDir: 'asc',
       lineupTab: 'lineup',
+      lineupSort: 'usage',
+      lineupSortDir: 'asc',
       kitDesignerKind: 'home',
       simulationAbort: false,
       simulationRunning: false,
@@ -12560,7 +12562,7 @@ function ensureLineupMaskState(club, squad, world){
       outfieldFieldIds = Object.keys(placement).filter(function(playerId){ return placement[playerId] && placement[playerId].location === 'field' && placement[playerId].slot !== 'goal_basic_z'; });
     }
   }
-  squad.lineupMaskState = { formationKey:formationKey, playerPlacementById:placement, sort:{ key:'usage', dir:'asc' } };
+  squad.lineupMaskState = { formationKey:formationKey, playerPlacementById:placement };
   syncSquadFromLineupMaskState(club, squad, world);
   return squad.lineupMaskState;
 }
@@ -13543,9 +13545,8 @@ function renderLineupView(){
     var player = playerId ? world.players.byId[playerId] : null;
     return '<div class="lineup-bench-slot" data-drop-type="bench" data-bench-index="' + idx + '">' + (player ? renderLineupPlayerCard(player, formationKey, slotId) : '<div class="lineup-slot-label">Bank</div>') + '</div>';
   }).join('');
-  var lineupSort = (squad.lineupMaskState && squad.lineupMaskState.sort) || { key:'usage', dir:'asc' };
-  var sortKey = lineupSort.key || 'usage';
-  var sortDir = lineupSort.dir || 'asc';
+  var sortKey = AppState.ui.lineupSort || 'usage';
+  var sortDir = AppState.ui.lineupSortDir || 'asc';
   var orderedIds = (squad.playerIds || []).slice().sort(function(aId, bId){
     var a = world.players.byId[aId] || {};
     var b = world.players.byId[bId] || {};
@@ -20812,7 +20813,7 @@ function handleAction(action, actionEl){
   if (action === 'kit-designer-sponsor-x') { var clubSponsorX = activeKitDesignerDraftClub(); if (!clubSponsorX) return; setKitEditorPositionValue(clubSponsorX, AppState.ui.kitDesignerKind === 'away' ? 'away' : 'home', 'sponsor', 'x', actionEl.value); renderApp(); return; }
   if (action === 'kit-designer-sponsor-y') { var clubSponsorY = activeKitDesignerDraftClub(); if (!clubSponsorY) return; setKitEditorPositionValue(clubSponsorY, AppState.ui.kitDesignerKind === 'away' ? 'away' : 'home', 'sponsor', 'y', actionEl.value); renderApp(); return; }
   if (action === 'kit-designer-sponsor-size') { var clubSponsorSize = activeKitDesignerDraftClub(); if (!clubSponsorSize) return; var sponsorSizeKind = AppState.ui.kitDesignerKind === 'away' ? 'away' : 'home'; markKitSponsorSizeManual(clubSponsorSize, sponsorSizeKind, true); setKitEditorPositionValue(clubSponsorSize, sponsorSizeKind, 'sponsor', 'size', actionEl.value); renderApp(); return; }
-  if (action === 'goto-lineup') { var clubLine = activeClub(); var squadLine = activeSquad(); if (clubLine && squadLine) { ensureLineupMaskState(clubLine, squadLine, AppState.world); ensureSquadTactics(squadLine); squadLine.lineupMaskState.sort = { key:'usage', dir:'asc' }; } AppState.ui.lineupTab = 'lineup'; goToView('lineup'); return; }
+  if (action === 'goto-lineup') { var clubLine = activeClub(); var squadLine = activeSquad(); if (clubLine && squadLine) { ensureLineupMaskState(clubLine, squadLine, AppState.world); ensureSquadTactics(squadLine); } AppState.ui.lineupTab = 'lineup'; AppState.ui.lineupSort='usage'; AppState.ui.lineupSortDir='asc'; goToView('lineup'); return; }
   if (action === 'lineup-tab') { var requestedLineupTab = actionEl.getAttribute('data-tab') || 'lineup'; AppState.ui.lineupTab = (requestedLineupTab === 'tactics' || requestedLineupTab === 'assistant') ? requestedLineupTab : 'lineup'; renderApp(); return; }
   if (action === 'lineup-tactic-set') { var squadTactic = activeSquad(), tacticClub = activeClub(); if (!squadTactic || !tacticClub) return; var kind = actionEl.getAttribute('data-kind') || ''; if (!LINEUP_TACTIC_DEFS[kind]) return; var value = actionEl.value != null && actionEl.value !== '' ? actionEl.value : (actionEl.getAttribute('data-value') || '0'); var tacticResult=executeWorldCommand(AppState.worldRecord,{type:'SET_TACTIC',actorTrainerId:(AppState.session||{}).activeTrainerId,clubId:tacticClub.id,kind:kind,value:value}); renderApp(); return; }
   if (action === 'lineup-assistant-set') { var squadAssistant = activeSquad(); if (!squadAssistant) return; var assistantKind = actionEl.getAttribute('data-kind') || ''; var assistantValue = actionEl.value || actionEl.getAttribute('data-value') || ''; if (!LINEUP_ASSISTANT_OPTIONS[assistantKind] || !LINEUP_ASSISTANT_OPTIONS[assistantKind].some(function(entry){ return entry.value === assistantValue; })) return; ensureSquadAssistantSettings(squadAssistant); squadAssistant.assistantSettings[assistantKind] = assistantValue; renderApp(); return; }
@@ -21004,7 +21005,7 @@ function handleAction(action, actionEl){
   if (action === 'open-own-club-profile') { openOwnClubProfile(); return; }
   if (action === 'squad-filter') { setSquadFilter(actionEl.getAttribute('data-filter') || 'all'); renderApp(); return; }
   if (action === 'squad-sort') { var key = actionEl.getAttribute('data-sort') || 'usage'; if ((AppState.ui.squadSort || 'usage') === key) { setSquadSortDir((AppState.ui.squadSortDir || 'asc') === 'asc' ? 'desc' : 'asc'); } else { setSquadSort(key); setSquadSortDir(key === 'usage' || key === 'name' || key === 'nation' || key === 'main' || key === 'secondary' ? 'asc' : 'desc'); } renderApp(); return; }
-  if (action === 'lineup-sort') { var clubSort = activeClub(); var squadSort = activeSquad(); if (clubSort && squadSort) { ensureLineupMaskState(clubSort, squadSort, AppState.world); var current = (squadSort.lineupMaskState && squadSort.lineupMaskState.sort) || { key:'usage', dir:'asc' }; var keyL = actionEl.getAttribute('data-sort') || 'usage'; var nextDir = (current.key === keyL ? ((current.dir || 'asc') === 'asc' ? 'desc' : 'asc') : (keyL === 'usage' || keyL === 'name' || keyL === 'nation' || keyL === 'main' || keyL === 'secondary' ? 'asc' : 'desc')); squadSort.lineupMaskState.sort = { key:keyL, dir:nextDir }; renderApp(); } return; }
+  if (action === 'lineup-sort') { var keyL = actionEl.getAttribute('data-sort') || 'usage'; var currentKeyL=AppState.ui.lineupSort || 'usage'; var currentDirL=AppState.ui.lineupSortDir || 'asc'; AppState.ui.lineupSort=keyL; AppState.ui.lineupSortDir=(currentKeyL === keyL ? (currentDirL === 'asc' ? 'desc' : 'asc') : (keyL === 'usage' || keyL === 'name' || keyL === 'nation' || keyL === 'main' || keyL === 'secondary' ? 'asc' : 'desc')); renderApp(); return; }
   if (action === 'statistics-tab') {
     var nextTab = actionEl.getAttribute('data-tab') || 'league';
     setStatisticsTab(nextTab);
