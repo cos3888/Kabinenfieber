@@ -1,11 +1,14 @@
 'use strict';
 
+const crypto = require('crypto');
 const { encodeJsonGzip, decodeJsonGzip, encodeJson, decodeJson } = require('./json-codec');
 const { PersistenceConflictError, PersistenceNotFoundError } = require('./errors');
 const { validateWorldDelta, applyWorldDelta } = require('../domain/world-delta');
 
 const MANIFEST_SCHEMA = 'kf-persistence-manifest-1';
 const STORAGE_SCHEMA = 'kf-storage-0.31.0';
+const DEFAULT_READ_CONCURRENCY = 8;
+const DEFAULT_DELTA_COMPACTION_THRESHOLD = 64;
 
 function safeKey(value, name) {
   const text = String(value == null ? '' : value);
@@ -14,14 +17,56 @@ function safeKey(value, name) {
 }
 
 class WorldPersistenceService {
-  constructor({ objectStore }) {
+  constructor({ objectStore, readConcurrency = DEFAULT_READ_CONCURRENCY, deltaCompactionThreshold = DEFAULT_DELTA_COMPACTION_THRESHOLD }) {
     if (!objectStore) throw new Error('WorldPersistenceService requires objectStore');
     this.store = objectStore;
+    this.readConcurrency = Math.max(1, Math.floor(Number(readConcurrency) || DEFAULT_READ_CONCURRENCY));
+    this.deltaCompactionThreshold = Math.max(1, Math.floor(Number(deltaCompactionThreshold) || DEFAULT_DELTA_COMPACTION_THRESHOLD));
   }
 
   manifestKey(worldId) { return `worlds/${safeKey(worldId, 'worldId')}/manifest.json`; }
   revisionPrefix(worldId, revision) { return `worlds/${safeKey(worldId, 'worldId')}/revisions/${String(revision).padStart(8, '0')}`; }
   seasonPrefix(worldId, season) { return `worlds/${safeKey(worldId, 'worldId')}/current-season/${Number(season)}`; }
+
+  async _readBody(key) {
+    if (this.store && typeof this.store.readBody === 'function') return this.store.readBody(key);
+    return (await this.store.read(key)).body;
+  }
+
+  async _mapWithConcurrency(items, mapper, concurrency = this.readConcurrency) {
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) return [];
+    const results = new Array(list.length);
+    let cursor = 0;
+    const workerCount = Math.min(Math.max(1, Math.floor(Number(concurrency) || 1)), list.length);
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= list.length) return;
+        results[index] = await mapper(list[index], index);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
+  async _loadJsonGzipObjects(paths) {
+    return this._mapWithConcurrency(paths, async path => decodeJsonGzip(await this._readBody(path)));
+  }
+
+  async _deleteObjectsBestEffort(paths) {
+    const unique = Array.from(new Set((paths || []).filter(Boolean)));
+    await this._mapWithConcurrency(unique, async path => {
+      try { await this.store.delete(path); } catch (_) {}
+      return true;
+    });
+  }
+
+  shouldCompactManifest(manifest) {
+    const deltaPaths = Array.isArray(manifest && manifest.worldDeltaPaths) ? manifest.worldDeltaPaths.filter(Boolean) : [];
+    return deltaPaths.length >= this.deltaCompactionThreshold;
+  }
 
   async _readManifestEnvelope(worldId) {
     const key = this.manifestKey(worldId);
@@ -70,13 +115,10 @@ class WorldPersistenceService {
 
   async loadWorldRecordFromManifest(manifest) {
     if (!manifest) throw new PersistenceNotFoundError('World manifest not found');
-    const object = await this.store.read(manifest.worldRecordPath);
-    const worldRecord = await decodeJsonGzip(object.body);
+    const worldRecord = await decodeJsonGzip(await this._readBody(manifest.worldRecordPath));
     const deltaPaths = Array.isArray(manifest.worldDeltaPaths) ? manifest.worldDeltaPaths.filter(Boolean) : [];
-    for (const path of deltaPaths) {
-      const delta = await decodeJsonGzip((await this.store.read(path)).body);
-      applyWorldDelta(worldRecord, delta);
-    }
+    const deltas = await this._loadJsonGzipObjects(deltaPaths);
+    for (const delta of deltas) applyWorldDelta(worldRecord, delta);
     return worldRecord;
   }
 
@@ -91,7 +133,7 @@ class WorldPersistenceService {
     if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     const path = manifest.matchSegments[String(slotKey)];
     if (!path) return null;
-    return decodeJsonGzip((await this.store.read(path)).body);
+    return decodeJsonGzip(await this._readBody(path));
   }
 
   async loadFinanceSegment(worldId, slotKey) {
@@ -99,16 +141,12 @@ class WorldPersistenceService {
     if (!manifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
     const path = manifest.financeSegments[String(slotKey)];
     if (!path) return null;
-    return decodeJsonGzip((await this.store.read(path)).body);
+    return decodeJsonGzip(await this._readBody(path));
   }
 
 
   async _loadSegments(paths) {
-    const rows = [];
-    for (const path of paths) {
-      rows.push(await decodeJsonGzip((await this.store.read(path)).body));
-    }
-    return rows;
+    return this._loadJsonGzipObjects(paths);
   }
 
   async loadCurrentSeasonDetailsFromManifest(manifest, { includeMatches = true, includeFinance = true } = {}) {
@@ -132,7 +170,7 @@ class WorldPersistenceService {
       ? [indexedPath]
       : Array.from(new Set(Object.values(manifest.matchSegments || {}).filter(Boolean)));
     for (const path of paths) {
-      const segment = await decodeJsonGzip((await this.store.read(path)).body);
+      const segment = await decodeJsonGzip(await this._readBody(path));
       const match = (Array.isArray(segment && segment.matches) ? segment.matches : [])
         .find(row => row && String(row.id) === String(matchId));
       if (match) return match;
@@ -182,9 +220,14 @@ class WorldPersistenceService {
     const staged = [worldPath, matchPath, financePath];
 
     try {
-      await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
-      await this.store.write(matchPath, await encodeJsonGzip({ season, kind: 'runtime-snapshot', matches }), { contentType: 'application/gzip' });
-      await this.store.write(financePath, await encodeJsonGzip({ season, kind: 'runtime-snapshot', events: financeEvents }), { contentType: 'application/gzip' });
+      const worldBody = await encodeJsonGzip(worldRecord);
+      const matchBody = await encodeJsonGzip({ season, kind: 'runtime-snapshot', matches });
+      const financeBody = await encodeJsonGzip({ season, kind: 'runtime-snapshot', events: financeEvents });
+      await Promise.all([
+        this.store.write(worldPath, worldBody, { contentType: 'application/gzip' }),
+        this.store.write(matchPath, matchBody, { contentType: 'application/gzip' }),
+        this.store.write(financePath, financeBody, { contentType: 'application/gzip' })
+      ]);
       const next = {
         ...current,
         revision,
@@ -209,16 +252,14 @@ class WorldPersistenceService {
         ...Object.values(current.financeSegments || {}),
         ...(Array.isArray(current.worldDeltaPaths) ? current.worldDeltaPaths : [])
       ].filter(Boolean);
-      for (const oldPath of previousPaths) {
-        if (oldPath !== matchPath && oldPath !== financePath) await this.store.delete(oldPath).catch(() => {});
-      }
+      await this._deleteObjectsBestEffort(previousPaths.filter(oldPath => oldPath !== matchPath && oldPath !== financePath));
       const previousSeason = Number(current.currentSeason);
       if (Number.isFinite(previousSeason) && previousSeason !== season) {
         await this.store.deletePrefix(this.seasonPrefix(worldId, previousSeason)).catch(() => {});
       }
       return next;
     } catch (error) {
-      for (const path of staged) await this.store.delete(path).catch(() => {});
+      await this._deleteObjectsBestEffort(staged);
       throw error;
     }
   }
@@ -257,6 +298,51 @@ class WorldPersistenceService {
       await this.store.delete(path).catch(() => {});
     }
     return next;
+  }
+
+  async compactWorld({ worldId = null, expectedRevision, worldRecord = null, force = false } = {}) {
+    const resolvedWorldId = safeKey(worldId || (worldRecord && worldRecord.id), 'worldId');
+    const envelope = await this._readManifestEnvelope(resolvedWorldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    const current = envelope.manifest;
+    if (expectedRevision !== undefined && Number(expectedRevision) !== Number(current.revision)) {
+      throw new PersistenceConflictError('World revision mismatch', { worldId: resolvedWorldId, expectedRevision, actualRevision: current.revision });
+    }
+
+    const deltaPaths = Array.isArray(current.worldDeltaPaths) ? current.worldDeltaPaths.filter(Boolean) : [];
+    if (!deltaPaths.length || (!force && !this.shouldCompactManifest(current))) {
+      return { manifest: current, compacted: false, deltaCount: deltaPaths.length };
+    }
+
+    const authoritative = worldRecord || await this.loadWorldRecordFromManifest(current);
+    if (!authoritative || String(authoritative.id || '') !== resolvedWorldId) {
+      throw new Error('Compaction WorldRecord does not match worldId');
+    }
+
+    const compactedPath = `${this.revisionPrefix(resolvedWorldId, Number(current.revision))}/world-compacted-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.json.gz`;
+    await this.store.write(compactedPath, await encodeJsonGzip(authoritative), { contentType: 'application/gzip' });
+    const next = {
+      ...current,
+      worldRecordPath: compactedPath,
+      worldDeltaPaths: []
+    };
+
+    try {
+      await this.store.write(this.manifestKey(resolvedWorldId), encodeJson(next), {
+        ifGenerationMatch: envelope.generation,
+        contentType: 'application/json'
+      });
+    } catch (error) {
+      await this.store.delete(compactedPath).catch(() => {});
+      throw error;
+    }
+
+    await this._deleteObjectsBestEffort([
+      current.worldRecordPath,
+      ...deltaPaths
+    ].filter(path => path && path !== compactedPath));
+
+    return { manifest: next, compacted: true, deltaCount: deltaPaths.length };
   }
 
   async commitWorldDelta({ worldId = null, worldDelta, expectedRevision }) {
@@ -314,16 +400,22 @@ class WorldPersistenceService {
     const staged = [worldPath, deltaPath, matchPath, financePath].filter(Boolean);
 
     try {
+      let worldBody;
       if (worldDelta) {
         validateWorldDelta(worldDelta, resolvedWorldId);
-        await this.store.write(deltaPath, await encodeJsonGzip(worldDelta), { contentType: 'application/gzip' });
+        worldBody = await encodeJsonGzip(worldDelta);
       } else if (worldRecord) {
-        await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
+        worldBody = await encodeJsonGzip(worldRecord);
       } else {
         throw new Error('Slot commit requires worldDelta or worldRecord');
       }
-      await this.store.write(matchPath, await encodeJsonGzip({ season: Number(season), slotKey, matches }), { contentType: 'application/gzip' });
-      await this.store.write(financePath, await encodeJsonGzip({ season: Number(season), slotKey, events: financeEvents }), { contentType: 'application/gzip' });
+      const matchBody = await encodeJsonGzip({ season: Number(season), slotKey, matches });
+      const financeBody = await encodeJsonGzip({ season: Number(season), slotKey, events: financeEvents });
+      await Promise.all([
+        this.store.write(worldDelta ? deltaPath : worldPath, worldBody, { contentType: 'application/gzip' }),
+        this.store.write(matchPath, matchBody, { contentType: 'application/gzip' }),
+        this.store.write(financePath, financeBody, { contentType: 'application/gzip' })
+      ]);
       const next = {
         ...current,
         revision,
@@ -348,13 +440,11 @@ class WorldPersistenceService {
         await this.store.delete(current.worldRecordPath).catch(() => {});
       }
       if (worldRecord) {
-        for (const path of (Array.isArray(current.worldDeltaPaths) ? current.worldDeltaPaths : [])) {
-          await this.store.delete(path).catch(() => {});
-        }
+        await this._deleteObjectsBestEffort(Array.isArray(current.worldDeltaPaths) ? current.worldDeltaPaths : []);
       }
       return next;
     } catch (error) {
-      for (const path of staged) await this.store.delete(path).catch(() => {});
+      await this._deleteObjectsBestEffort(staged);
       throw error;
     }
   }
@@ -405,4 +495,4 @@ class WorldPersistenceService {
   }
 }
 
-module.exports = { WorldPersistenceService, MANIFEST_SCHEMA, STORAGE_SCHEMA };
+module.exports = { WorldPersistenceService, MANIFEST_SCHEMA, STORAGE_SCHEMA, DEFAULT_READ_CONCURRENCY, DEFAULT_DELTA_COMPACTION_THRESHOLD };
