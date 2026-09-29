@@ -27,6 +27,13 @@ class WorldPersistenceService {
   manifestKey(worldId) { return `worlds/${safeKey(worldId, 'worldId')}/manifest.json`; }
   revisionPrefix(worldId, revision) { return `worlds/${safeKey(worldId, 'worldId')}/revisions/${String(revision).padStart(8, '0')}`; }
   seasonPrefix(worldId, season) { return `worlds/${safeKey(worldId, 'worldId')}/current-season/${Number(season)}`; }
+  createCommitId() { return crypto.randomUUID().replace(/-/g, ''); }
+  commitPrefix(worldId, revision, commitId) {
+    return `${this.revisionPrefix(worldId, revision)}/commits/${safeKey(commitId, 'commitId')}`;
+  }
+  seasonCommitPrefix(worldId, season, revision, commitId) {
+    return `${this.seasonPrefix(worldId, season)}/revisions/${String(revision).padStart(8, '0')}/commits/${safeKey(commitId, 'commitId')}`;
+  }
 
   async _readBody(key) {
     if (this.store && typeof this.store.readBody === 'function') return this.store.readBody(key);
@@ -88,8 +95,8 @@ class WorldPersistenceService {
     const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
     const existing = await this._readManifestEnvelope(worldId);
     if (existing) throw new PersistenceConflictError('World is already initialized', { worldId: worldId });
-    const revision = 1, prefix = this.revisionPrefix(worldId, revision);
-    const worldPath = `${prefix}/world.json.gz`;
+    const revision = 1, commitId = this.createCommitId();
+    const worldPath = `${this.commitPrefix(worldId, revision, commitId)}/world.json.gz`;
     await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
     const manifest = {
       schemaVersion: MANIFEST_SCHEMA,
@@ -212,8 +219,9 @@ class WorldPersistenceService {
     if (!Number.isFinite(season) || season < 1) throw new Error('Invalid current season');
 
     const revision = Number(current.revision) + 1;
-    const revisionPrefix = this.revisionPrefix(worldId, revision);
-    const detailPrefix = `${this.seasonPrefix(worldId, season)}/revisions/${String(revision).padStart(8, '0')}/runtime`;
+    const commitId = this.createCommitId();
+    const revisionPrefix = this.commitPrefix(worldId, revision, commitId);
+    const detailPrefix = `${this.seasonCommitPrefix(worldId, season, revision, commitId)}/runtime`;
     const worldPath = `${revisionPrefix}/world.json.gz`;
     const matchPath = `${detailPrefix}/matches.json.gz`;
     const financePath = `${detailPrefix}/finances.json.gz`;
@@ -279,7 +287,8 @@ class WorldPersistenceService {
       throw new PersistenceConflictError('World revision mismatch', { worldId: worldId, expectedRevision, actualRevision: current.revision });
     }
     const revision = Number(current.revision) + 1;
-    const worldPath = `${this.revisionPrefix(worldId, revision)}/world.json.gz`;
+    const commitId = this.createCommitId();
+    const worldPath = `${this.commitPrefix(worldId, revision, commitId)}/world.json.gz`;
     await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
     const next = { ...current, revision, committedAt: new Date().toISOString(), worldRecordPath: worldPath, worldDeltaPaths: [] };
     try {
@@ -356,7 +365,8 @@ class WorldPersistenceService {
 
     validateWorldDelta(worldDelta, resolvedWorldId);
     const revision = Number(current.revision) + 1;
-    const deltaPath = `${this.revisionPrefix(resolvedWorldId, revision)}/world-delta.json.gz`;
+    const commitId = this.createCommitId();
+    const deltaPath = `${this.commitPrefix(resolvedWorldId, revision, commitId)}/world-delta.json.gz`;
 
     try {
       await this.store.write(deltaPath, await encodeJsonGzip(worldDelta), { contentType: 'application/gzip' });
@@ -391,8 +401,9 @@ class WorldPersistenceService {
     }
 
     const revision = Number(current.revision) + 1;
-    const revisionPrefix = this.revisionPrefix(resolvedWorldId, revision);
-    const segmentPrefix = `${this.seasonPrefix(resolvedWorldId, season)}/revisions/${String(revision).padStart(8, '0')}`;
+    const commitId = this.createCommitId();
+    const revisionPrefix = this.commitPrefix(resolvedWorldId, revision, commitId);
+    const segmentPrefix = this.seasonCommitPrefix(resolvedWorldId, season, revision, commitId);
     const worldPath = worldRecord ? `${revisionPrefix}/world.json.gz` : null;
     const deltaPath = worldDelta ? `${revisionPrefix}/world-delta.json.gz` : null;
     const matchPath = `${segmentPrefix}/matches/${slotKey}.json.gz`;
@@ -459,8 +470,8 @@ class WorldPersistenceService {
     }
     const previousSeason = Number(current.currentSeason);
     const revision = Number(current.revision) + 1;
-    const prefix = this.revisionPrefix(worldId, revision);
-    const worldPath = `${prefix}/world.json.gz`;
+    const commitId = this.createCommitId();
+    const worldPath = `${this.commitPrefix(worldId, revision, commitId)}/world.json.gz`;
     await this.store.write(worldPath, await encodeJsonGzip(worldRecord), { contentType: 'application/gzip' });
     const next = {
       ...current,
