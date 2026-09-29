@@ -24557,6 +24557,8 @@ function kf031MarkManagementDirty(reason, immediate){
   KF029Remote.managementDirty=true;
   KF029Remote.managementFailed=false;
   KF029Remote.managementError='';
+  KF029Remote.progression=null;
+  kf031ClearProgressTimer();
   kf031ScheduleManagementSave(reason || 'management', !!immediate);
   kf031RefreshSaveUi();
 }
@@ -24609,6 +24611,8 @@ async function kf031RebaseManagementConflict(record, localDelta, attemptedDelta)
     KF029Remote.managementFailed=false;
     KF029Remote.managementError='';
     KF029Remote.managementDirty=kf031HasPendingManagementChanges();
+    KF029Remote.progression=null;
+    kf031ClearProgressTimer();
     invalidateRuntimeDerivedIndex(rebasedGameState);
     return true;
   } catch (error) {
@@ -24658,10 +24662,8 @@ function kf031QueueManagementSave(reason){
     } catch (error) {
       KF029Remote.managementSaving=false;
       if (error && error.status===409) {
-        var localDelta=kf031BuildWorldDelta(record);
-        var rebased=localDelta && kf031DeltaHasOps(localDelta)
-          ? await kf031RebaseManagementConflict(record,localDelta,priorAttemptDelta || worldDelta)
-          : false;
+        var localDelta=kf031BuildWorldDelta(record) || {schemaVersion:'kf-world-delta-0.31.0',worldId:String(record.id),ops:[]};
+        var rebased=await kf031RebaseManagementConflict(record,localDelta,priorAttemptDelta || worldDelta);
         if (rebased) {
           KF029Remote.managementDirty=kf031HasPendingManagementChanges();
           KF029Remote.managementLastAttemptDelta=null;
