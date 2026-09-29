@@ -307,7 +307,7 @@ async function appendDeltas(worlds,worldId,startRevision,count,startValue=1){
       css.includes('.office-advance-btn.save-phase-waiting::before{width:24%}')&&
       css.includes('.office-advance-btn.save-phase-saving::before{width:58%}')&&
       css.includes('.office-advance-btn.save-phase-confirming::before{width:82%}')&&
-      css.includes('.office-advance-btn.save-phase-confirmed::before{width:100%}')&&
+      css.includes('.office-advance-btn.save-phase-confirmed::before{width:100%;')&&
       app.includes("data-action=\"kf-retry-management-save\""),{});
 
     report.metrics={
