@@ -245,6 +245,31 @@ class WorldPersistenceService {
       }
     }
 
+    let recoveryCapabilities = {
+      status: 'unsupported',
+      driver: 'unknown',
+      objectVersioningEnabled: null,
+      softDeleteEnabled: null,
+      softDeleteRetentionSeconds: null,
+      softDeleteEffectiveTime: null,
+      error: null
+    };
+    if (this.store && typeof this.store.getRecoveryCapabilities === 'function') {
+      try {
+        recoveryCapabilities = {
+          status: 'ok',
+          ...(await this.store.getRecoveryCapabilities()),
+          error: null
+        };
+      } catch (error) {
+        recoveryCapabilities = {
+          ...recoveryCapabilities,
+          status: 'unknown',
+          error: String(error && (error.code || error.message) || 'recovery_capability_check_failed')
+        };
+      }
+    }
+
     const referencedPathCount = uniquePaths.length;
     const existingReferencedPathCount = uniquePaths.filter(objectPath => existsByPath[objectPath]).length;
     const healthy =
@@ -272,7 +297,8 @@ class WorldPersistenceService {
       missingFinanceSegments,
       missingMatchIndexReferences,
       referencedPathCount,
-      existingReferencedPathCount
+      existingReferencedPathCount,
+      recoveryCapabilities
     };
   }
 
