@@ -8,9 +8,14 @@ on:
     branches: [ main ]
 
 jobs:
-  regression:
+  large-world-memory:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Prepare staged KF 0.31.4 memory regression
-        run: echo "Staged regression workflow prepared; memory test will be enabled after fixture commit."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: KF 0.31.4 large-world bounded-heap reconstruction
+        run: node tests/run_kf_0_31_4_large_world_memory_test.js
