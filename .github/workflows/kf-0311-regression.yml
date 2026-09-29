@@ -16,8 +16,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
       - name: KF 0.31.1 save queue regression
         run: npm run test:0311
       - name: Current core regression suite
