@@ -63,8 +63,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.31.3';
-  var KF_BUILD_LABEL = 'KF_0.31.3 - Cold Load, Delta Compaction & Save Progress';
+  var KF_VERSION = '0.31.4';
+  var KF_BUILD_LABEL = 'KF_0.31.4 - Save Object Isolation & Existing World Integrity';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };

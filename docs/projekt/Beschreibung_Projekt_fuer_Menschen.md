@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.31.3
+# Kabinenfieber - Stand KF_0.31.4
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.31.3`
+App-Version: `KF_0.31.4`
 
 Persistierte Schemas:
 
@@ -18,6 +18,111 @@ Persistierte Schemas:
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
 
+
+## KF_0.31.4 – Save Object Isolation & Existing World Integrity
+
+KF_0.31.4 behebt einen reproduzierbar nachgewiesenen Cross-Instance-Race in der Object-Store-Persistenz. Gameplay, Matchsimulation, Balancing, Transfers und Mehrspielerregeln werden nicht veraendert.
+
+### Bestaetigte Ursache
+
+Vor dem Fix konnten zwei unabhaengige Serverinstanzen dasselbe Manifest mit Revision `R` lesen, beide fachlich auf `R+1` speichern und dabei identische deterministische Objektpfade verwenden. Genau ein Save gewann den Manifest-Generation-CAS. Der Verlierer konnte danach beim Cleanup aber denselben Objektpfad loeschen, auf den das Gewinner-Manifest bereits zeigte.
+
+Der Vorher-Regressionstest reproduzierte den Schaden konkret:
+- zwei unabhaengige `WorldPersistenceService`-Instanzen lasen dieselbe Revision;
+- beide Management-Saves schrieben denselben `world-delta.json.gz`-Pfad;
+- genau ein Manifest-CAS gewann;
+- der Verlierer loeschte beim Cleanup das referenzierte Gewinnerobjekt;
+- der folgende Cold Load scheiterte mit `PERSISTENCE_NOT_FOUND`.
+
+Damit ist die Ursache fuer das Muster "Save scheitert und dieselbe Welt ist spaeter nicht mehr ladbar" technisch nachgewiesen.
+
+### Save Object Isolation
+
+Jeder Save-Versuch besitzt nun eine zufaellige technische Commit-ID. Neue staged Objekte liegen unter Pfaden der Form:
+
+`worlds/<worldId>/revisions/<revision>/commits/<commitId>/...`
+
+Current-Season-Match-/Finance-Segmente verwenden dieselbe Commit-ID in ihrem saisonalen Revisionspfad.
+
+Zusaetzlich werden staged Objekte create-only mit `ifGenerationMatch: 0` geschrieben. Dadurch kann auch eine theoretische Commit-ID-Kollision kein bestehendes staged Objekt ueberschreiben.
+
+Wichtig:
+- die Welt-Revision bleibt die einzige fachliche/autoritative Revision;
+- die Commit-ID ist nur technische Objektidentitaet und keine zweite Spielwahrheit;
+- das Manifest bleibt die atomare Commit-Grenze;
+- ein CAS-Verlierer entfernt ausschliesslich seine eigenen staged Objekte;
+- keine stillen Last-Write-Wins;
+- bestehende alte Objektpfade bleiben lesbar und benoetigen keine Migration.
+
+Abgedeckt sind `initializeWorld()`, `commitWorldDelta()`, `commitSlot()`, `commitWorldRecord()`, `commitRuntimeSnapshot()` und `commitSeasonTransition()`. Die revisionsneutrale Compaction aus KF_0.31.3 behaelt ihren bereits eindeutigen Snapshot-Pfad und ihr Manifest-CAS-Modell.
+
+### Read-only Integritaetsdiagnose
+
+Neu ist `WorldPersistenceService.inspectWorldIntegrity(worldId)` sowie der authentifizierte Diagnoseendpunkt:
+
+`GET /api/v1/worlds/<worldId>/integrity`
+
+Er veraendert keine Welt. Geprueft werden insbesondere:
+- Existenz des `worldRecordPath`;
+- vorhandene/fehlende `worldDeltaPaths[]`;
+- fehlende Matchsegmente;
+- fehlende Financesegmente;
+- `matchIndex`-Referenzen auf fehlende Objekte;
+- Rekonstruierbarkeit des WorldRecord;
+- Anzahl der vom Beginn an konsistent vorhandenen Deltas;
+- GCS-Schutzstatus fuer Object Versioning und Soft Delete, sofern die Laufzeit die Bucket-Metadaten lesen darf.
+
+Fehlende Deltas oder Segmente werden weder uebersprungen noch automatisch ersetzt. Es gibt keinen automatischen Rollback und keine erfundene Spielwahrheit.
+
+### Bestehende problematische Welten / Recovery
+
+KF_0.31.4 repariert vorhandene Welten nicht automatisch. Die produktiven Problemwelten bleiben wertvolle Diagnosefaelle und duerfen nicht geloescht oder still auf einen aelteren Stand gesetzt werden.
+
+Die Diagnose kann nach Deployment feststellen, welche vom aktuellen Manifest benoetigten Objekte fehlen und ob der GCS-Bucket grundsaetzlich Object Versioning bzw. Soft Delete aktiviert hat. Ob fuer einen konkreten fehlenden Objektpfad noch exakt die richtige Generation wiederherstellbar ist, muss danach separat und read-only geprueft werden. Erst bei eindeutig belegbarer Wiederherstellbarkeit darf ein Reparaturweg geplant werden.
+
+### Conflict-/Retry-UX
+
+Die vorhandene Save-UX bleibt erhalten:
+- Management-409 versucht weiterhin einen Rebase auf den neuen autoritativen Serverstand;
+- ein nicht aufloesbarer Savefehler behaelt Dirty-State und expliziten Retry;
+- Progression bleibt bis zur Klaerung gesperrt;
+- bei einem Progressionskonflikt wird der neue autoritative Weltstand nachgeladen.
+
+### Datenquellen
+
+Unveraendert zentrale fachliche Wahrheit:
+- Spieler: `world.players.byId`
+- Kader/Aufstellung/Taktik: `world.squads`
+- Kalender/Spielstatus: `world.calendar`
+- historische Matchwahrheit: `world.history.matches` plus bestehende ausgelagerte Matchdetails
+- aktuelle Finance-Wahrheit: bestehender kompakter Finanzzustand plus Current-Season-Finanzsegmente
+- Memberships: `WorldRecord.memberships`
+- Regeln/Texte: `StaticData`
+
+Commit-ID, Basissnapshots, World-Deltas, Match-/Finance-Segmente und Compaction-Snapshots sind ausschliesslich technische Persistenzformen/Zugriffsstrukturen. Es entsteht keine zweite fachliche Datenhaltung.
+
+### Regressionen
+
+Spezialtest:
+`tests/run_kf_0_31_4_save_object_isolation_test.js`
+
+CI-Workflow:
+`.github/workflows/kf-0.31.4-regression.yml`
+
+Geprueft werden unter anderem:
+- parallele Management-, Slot-, Vollsnapshot-, Runtime-Snapshot- und Saisonwechsel-Saves aus unabhaengigen Persistenzinstanzen;
+- genau ein Manifest-CAS-Gewinner;
+- eindeutige und create-only staged Objektpfade;
+- Verlierer-Cleanup zerstoert keine Gewinnerobjekte;
+- Gewinnerwelt bleibt Cold-Load-faehig;
+- Revision steigt genau einmal;
+- Retry nach Konflikt;
+- gesunde Welt sowie fehlender Basissnapshot, World-Delta, Match- und Financesegment;
+- Legacy-KF_0.31.3-Layout ohne Migration;
+- GCS-Recovery-Metadaten;
+- normales Save/Compaction-Zusammenspiel und 12 Spieltage aus der KF_0.31.3-Regression;
+- KF_0.31.0 bis KF_0.31.3;
+- komplette aktuelle Core-Regression.
 
 ## KF_0.31.3 – Cold Load, Delta Compaction & Save Progress
 

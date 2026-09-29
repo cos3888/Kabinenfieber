@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.31.3
+# Wiederherstellung Kabinenfieber - KF_0.31.4
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.31.3`
+Version: `KF_0.31.4`
 
 Build-Label:
 
-`KF_0.31.3 - Cold Load, Delta Compaction & Save Progress`
+`KF_0.31.4 - Save Object Isolation & Existing World Integrity`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.31.3.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.31.4.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -36,6 +36,150 @@ Aktuelle ZIP nach Export soll `KF_0.31.3.zip` heissen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
 
+
+## KF_0.31.4 – Save Object Isolation & Existing World Integrity
+
+Arbeitsbranch: `fix/kf-0.31.4-save-object-isolation-integrity`
+
+Ausgangsbasis:
+- `main` wurde vor Beginn verifiziert und stand exakt auf `b7ece6fd6d75f479d5ef066faec4638f639e77b4`.
+- Ausgangsversion war `KF_0.31.3`.
+- API-/Remote-Vertrag bleibt `0.30.0`.
+- Persistierte Schemas bleiben `kf-core-0.27.2`, `kf-world-record-0.27.2`, `kf-storage-0.31.0` und `kf-world-delta-0.31.0`.
+- Der Fixbranch darf vor dem produktiven Praxistest nicht nach `main` gemergt werden.
+
+### Vorher reproduzierter Cross-Instance-Race
+
+Der Fehler wurde vor der Aenderung mit zwei unabhaengigen `WorldPersistenceService`-Instanzen reproduziert.
+
+Beide Instanzen:
+1. lasen dasselbe Manifest `R`;
+2. planten `R+1`;
+3. schrieben denselben deterministischen Delta-Pfad;
+4. konkurrierten am Manifest-Generation-CAS.
+
+Ergebnis vor Fix:
+- genau ein Manifest-CAS gewann;
+- der CAS-Verlierer fuehrte Cleanup auf dem gemeinsam benutzten staged Pfad aus;
+- dadurch verschwand das Objekt, auf das das Gewinner-Manifest zeigte;
+- ein anschliessender Cold Load scheiterte mit `PERSISTENCE_NOT_FOUND`.
+
+Damit ist das Race als reale Datenkorruptionsursache bestaetigt.
+
+### Save Object Isolation
+
+Neue technische Hilfen in `WorldPersistenceService`:
+- `createCommitId()`
+- `commitPrefix(worldId, revision, commitId)`
+- `seasonCommitPrefix(worldId, season, revision, commitId)`
+
+Jeder Save-Versuch schreibt unter einer eigenen 32-stelligen UUID-basierten Commit-ID. Beispiel:
+
+`worlds/<worldId>/revisions/00000042/commits/<commitId>/world-delta.json.gz`
+
+Alle neuen staged Gzip-Objekte werden ausserdem mit `ifGenerationMatch: 0` angelegt. Sie sind damit create-only.
+
+Betroffene Savepfade:
+- `initializeWorld()`
+- `commitWorldDelta()`
+- `commitSlot()`
+- `commitWorldRecord()`
+- `commitRuntimeSnapshot()`
+- `commitSeasonTransition()`
+
+Eigenschaften:
+- Revision bleibt fachliche Wahrheit.
+- Commit-ID ist nur technische Objektidentitaet.
+- Manifest-Generation-CAS bleibt Commit-Grenze.
+- Verlierer-Cleanup kennt nur die eigenen staged Pfade.
+- Alte KF_0.31.3-Pfade bleiben lesbar.
+- Keine Migration notwendig.
+- Compaction bleibt revisionsneutral und verwendet weiterhin einen eigenen eindeutigen Snapshot-Pfad.
+
+### Read-only Existing-World-Integrity
+
+Neue Methode:
+`WorldPersistenceService.inspectWorldIntegrity(worldId)`
+
+Session-Service:
+`WorldSessionService.inspectWorldIntegrity({ userId, worldId })`
+
+HTTP:
+`GET /api/v1/worlds/:worldId/integrity`
+
+Der aufrufende Benutzer muss Mitglied der Welt sein.
+
+Rueckgabe enthaelt unter anderem:
+- `healthy`
+- `worldRecordExists`
+- `worldRecordReconstructable`
+- `reconstructionError`
+- `worldDeltaCount`
+- `consistentWorldDeltaCount`
+- `firstMissingWorldDeltaIndex`
+- `missingWorldDeltaPaths[]`
+- `missingMatchSegments[]`
+- `missingFinanceSegments[]`
+- `missingMatchIndexReferences[]`
+- `referencedPathCount`
+- `existingReferencedPathCount`
+- `recoveryCapabilities`
+
+Die Diagnose ist read-only. Sie ueberspringt keine Deltas, ignoriert keine fehlenden Segmente, aendert kein Manifest und fuehrt keinen Rollback durch.
+
+### GCS-Recovery-Schutzstatus
+
+`GoogleCloudObjectStore.getRecoveryCapabilities()` liest ausschliesslich Bucket-Metadaten und meldet:
+- `objectVersioningEnabled`
+- `softDeleteEnabled`
+- `softDeleteRetentionSeconds`
+- `softDeleteEffectiveTime`
+
+Fehlt die Berechtigung `storage.buckets.get`, bleibt die Weltdiagnose funktionsfaehig und meldet den Recovery-Status als `unknown`.
+
+Wichtig: Ein aktivierter Schutz beweist noch nicht, dass fuer einen konkreten fehlenden Pfad exakt die richtige Generation eindeutig wiederherstellbar ist. Keine automatische Recovery implementiert.
+
+### Save-/Conflict-UX
+
+Kein neuer Gameplay-/UX-Flow notwendig:
+- Management-409 nutzt weiterhin `kf031RebaseManagementConflict(...)`;
+- erfolgreiche Rebase-Vorgaenge queuen bei Bedarf einen neuen Save;
+- nicht aufgeloeste Savefehler behalten Dirty-State und Retry;
+- `kf031FlushManagementSave()` blockiert Fortschritt bei unbestaetigten Aenderungen;
+- Progressions-409 laedt den autoritativen Stand ueber `kf029LoadWorld(...)` neu;
+- Slot-Saves versuchen weiterhin nur den bereits vorhandenen sicheren `kf029RecoverCommittedProgress(...)`-Pfad.
+
+### Tests
+
+Spezialtest:
+`tests/run_kf_0_31_4_save_object_isolation_test.js`
+
+Workflow:
+`.github/workflows/kf-0.31.4-regression.yml`
+
+Der Spezialtest prueft:
+- Management-/Slot-/Vollsnapshot-/Runtime-/Saison-Races;
+- unterschiedliche Payloads auf derselben Ausgangsrevision;
+- genau einen Manifest-CAS-Gewinner;
+- isolierte staged Pfade;
+- `ifGenerationMatch: 0` auf staged Objekten;
+- Cleanup-Sicherheit;
+- Cold Load des Gewinners;
+- exakt eine Revisionssteigerung;
+- Konflikt-Retry;
+- gesunde und gezielt beschaedigte Integritaetsfaelle;
+- Legacy-KF_0.31.3 ohne Migration;
+- Local- und GCS-Recovery-Metadaten.
+
+`tests/run_current_regression_suite.js` enthaelt KF_0.31.4 nun ebenfalls dauerhaft.
+
+Vor der Versionsfinalisierung waren KF_0.31.4, KF_0.31.3, KF_0.31.2, KF_0.31.1, KF_0.31.0 und die komplette Core-Suite auf dem Fixbranch gruen. Die Versions-/Dokumentationsfinalisierung muss danach erneut durch denselben Workflow bestaetigt werden.
+
+### Bestehende Produktionswelten
+
+Keine vorhandene Produktionswelt wurde im Fixbranch veraendert oder repariert.
+
+Nach einem spaeteren Deployment ist zuerst fuer die konkreten Problemwelten der Integritaetsendpunkt auszuwerten. Erst wenn fehlende Objektpfade und deren exakte Wiederherstellbarkeit geklaert sind, darf ein separater Recovery-Plan erstellt und zur Freigabe vorgelegt werden.
 
 ## KF_0.31.3 – Cold Load, Delta Compaction & Save Progress
 
