@@ -24630,6 +24630,11 @@ function kf031QueueManagementSave(reason){
     if (KF029Remote.createPromise) await KF029Remote.createPromise;
     var record=AppState.worldRecord;
     if (!record || KF029Remote.revision == null) return null;
+    if (KF029Remote.checkpointPending || KF029Remote.checkpointFailed) {
+      KF029Remote.managementDirty=kf031HasPendingManagementChanges();
+      kf031RefreshSaveUi();
+      return {deferred:true};
+    }
     var worldDelta=kf031BuildWorldDelta(record);
     if (!kf031DeltaHasOps(worldDelta)) {
       KF029Remote.managementDirty=false;
@@ -25446,7 +25451,10 @@ function kf029CommitHardCheckpoint(reason){
     KF029Remote.checkpointPending=false;
     KF029Remote.checkpointFailed=false;
     KF029Remote.checkpointReason='';
-    KF029Remote.message='Spielstand gespeichert.';
+    KF029Remote.message=KF029Remote.managementDirty ? 'Fortschritt bestätigt · neue Änderungen werden gespeichert.' : 'Spielstand gespeichert.';
+    if (KF029Remote.managementDirty && !KF029Remote.managementSaving && !KF029Remote.managementQueued) {
+      setTimeout(function(){ void kf031QueueManagementSave('post-checkpoint').catch(function(){}); },0);
+    }
     if(retrying && AppState.ui.modal) closeModal();
     renderApp();renderModal();
     return data;
@@ -25520,8 +25528,7 @@ var KF031_IMMEDIATE_MANAGEMENT_ACTIONS={
   'finance-sponsor-accept-request':1,'finance-sponsor-counter-request':1,'finance-sponsor-create-extension':1,
   'finance-sponsor-decline-request':1,'finance-sponsor-abort-request':1,'finance-sponsor-reserve-request':1,
   'kit-designer-apply':1,'player-profile-listing-add':1,'player-profile-listing-remove':1,
-  'scouting-confirm-task':1,'scouting-end-order':1,'scouting-list-assign-player':1,'scouting-list-remove-player':1,
-  'cup-draw-continue':1
+  'scouting-confirm-task':1,'scouting-end-order':1,'scouting-list-assign-player':1,'scouting-list-remove-player':1
 };
 var KF031_MANAGEMENT_VIEWS={lineup:1,contracts:1,'squad-planning':1,finance:1,sponsoring:1};
 function kf031TrackActionMutation(action,actionEl){
