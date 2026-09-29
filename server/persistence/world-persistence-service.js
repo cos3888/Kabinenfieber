@@ -191,6 +191,91 @@ class WorldPersistenceService {
     return this.loadCurrentSeasonDetailsFromManifest(manifest);
   }
 
+  async inspectWorldIntegrity(worldId) {
+    const resolvedWorldId = safeKey(worldId, 'worldId');
+    const envelope = await this._readManifestEnvelope(resolvedWorldId);
+    if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: resolvedWorldId });
+    const manifest = envelope.manifest;
+
+    const worldDeltaPaths = Array.isArray(manifest.worldDeltaPaths) ? manifest.worldDeltaPaths.filter(Boolean) : [];
+    const matchEntries = Object.entries(manifest.matchSegments || {}).filter(([, value]) => Boolean(value));
+    const financeEntries = Object.entries(manifest.financeSegments || {}).filter(([, value]) => Boolean(value));
+    const matchIndexEntries = Object.entries(manifest.matchIndex || {}).filter(([, value]) => Boolean(value));
+
+    const uniquePaths = Array.from(new Set([
+      manifest.worldRecordPath,
+      ...worldDeltaPaths,
+      ...matchEntries.map(([, value]) => value),
+      ...financeEntries.map(([, value]) => value),
+      ...matchIndexEntries.map(([, value]) => value)
+    ].filter(Boolean)));
+
+    const existencePairs = await this._mapWithConcurrency(uniquePaths, async objectPath => [
+      objectPath,
+      await this.store.exists(objectPath)
+    ]);
+    const existsByPath = Object.fromEntries(existencePairs);
+
+    const worldRecordExists = Boolean(manifest.worldRecordPath && existsByPath[manifest.worldRecordPath]);
+    const missingWorldDeltaPaths = worldDeltaPaths.filter(objectPath => !existsByPath[objectPath]);
+    const missingMatchSegments = matchEntries
+      .filter(([, objectPath]) => !existsByPath[objectPath])
+      .map(([slotKey, objectPath]) => ({ slotKey, path: objectPath }));
+    const missingFinanceSegments = financeEntries
+      .filter(([, objectPath]) => !existsByPath[objectPath])
+      .map(([slotKey, objectPath]) => ({ slotKey, path: objectPath }));
+    const missingMatchIndexReferences = matchIndexEntries
+      .filter(([, objectPath]) => !existsByPath[objectPath])
+      .map(([matchId, objectPath]) => ({ matchId, path: objectPath }));
+
+    let consistentWorldDeltaCount = 0;
+    for (const objectPath of worldDeltaPaths) {
+      if (!existsByPath[objectPath]) break;
+      consistentWorldDeltaCount += 1;
+    }
+
+    let worldRecordReconstructable = worldRecordExists && missingWorldDeltaPaths.length === 0;
+    let reconstructionError = null;
+    if (worldRecordReconstructable) {
+      try {
+        await this.loadWorldRecordFromManifest(manifest);
+      } catch (error) {
+        worldRecordReconstructable = false;
+        reconstructionError = String(error && (error.code || error.message) || 'reconstruction_failed');
+      }
+    }
+
+    const referencedPathCount = uniquePaths.length;
+    const existingReferencedPathCount = uniquePaths.filter(objectPath => existsByPath[objectPath]).length;
+    const healthy =
+      worldRecordReconstructable &&
+      missingMatchSegments.length === 0 &&
+      missingFinanceSegments.length === 0 &&
+      missingMatchIndexReferences.length === 0;
+
+    return {
+      worldId: resolvedWorldId,
+      revision: Number(manifest.revision),
+      manifestGeneration: envelope.generation,
+      healthy,
+      worldRecordPath: manifest.worldRecordPath || null,
+      worldRecordExists,
+      worldRecordReconstructable,
+      reconstructionError,
+      worldDeltaCount: worldDeltaPaths.length,
+      consistentWorldDeltaCount,
+      firstMissingWorldDeltaIndex: missingWorldDeltaPaths.length
+        ? worldDeltaPaths.findIndex(objectPath => !existsByPath[objectPath])
+        : null,
+      missingWorldDeltaPaths,
+      missingMatchSegments,
+      missingFinanceSegments,
+      missingMatchIndexReferences,
+      referencedPathCount,
+      existingReferencedPathCount
+    };
+  }
+
   async loadRuntimeSnapshot(worldId, manifest = null) {
     const committedManifest = manifest || await this.getManifest(worldId);
     if (!committedManifest) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
