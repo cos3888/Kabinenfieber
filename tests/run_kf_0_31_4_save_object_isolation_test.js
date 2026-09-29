@@ -4,6 +4,7 @@ const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
 const { LocalObjectStore } = require('../server/persistence/local-object-store');
+const { GoogleCloudObjectStore } = require('../server/persistence/google-cloud-object-store');
 const { WorldPersistenceService, MANIFEST_SCHEMA, STORAGE_SCHEMA } = require('../server/persistence/world-persistence-service');
 const { WORLD_DELTA_SCHEMA } = require('../server/domain/world-delta');
 const { encodeJsonGzip, encodeJson } = require('../server/persistence/json-codec');
@@ -415,6 +416,38 @@ async function assertTwoWayRace({ name, raceStore, service, worldId, runA, runB,
       check('new save after legacy load uses isolated commit path',
         /\/commits\/[A-Fa-f0-9]{32}\/world-delta\.json\.gz$/.test(saved.worldDeltaPaths[saved.worldDeltaPaths.length-1]),
         {path:saved.worldDeltaPaths[saved.worldDeltaPaths.length-1]});
+    }
+
+    // 12) GCS bucket recovery metadata is interpreted without mutating the bucket.
+    {
+      let metadataReads=0;
+      const fakeStorageClient={
+        bucket(){
+          return {
+            async getMetadata(){
+              metadataReads+=1;
+              return [{
+                versioning:{enabled:true},
+                softDeletePolicy:{retentionDurationSeconds:'604800',effectiveTime:'2026-09-01T00:00:00.000Z'}
+              }];
+            }
+          };
+        }
+      };
+      const gcsStore=new GoogleCloudObjectStore({
+        bucketName:'diagnostic-bucket',
+        projectId:'diagnostic-project',
+        storageClient:fakeStorageClient
+      });
+      const capabilities=await gcsStore.getRecoveryCapabilities();
+      check('integrity: GCS versioning and soft-delete protection are reported from bucket metadata',
+        metadataReads===1 &&
+        capabilities.driver==='gcs' &&
+        capabilities.objectVersioningEnabled===true &&
+        capabilities.softDeleteEnabled===true &&
+        capabilities.softDeleteRetentionSeconds===604800 &&
+        capabilities.softDeleteEffectiveTime==='2026-09-01T00:00:00.000Z',
+        {capabilities,metadataReads});
     }
 
     report.metrics={
