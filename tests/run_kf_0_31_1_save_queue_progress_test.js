@@ -232,6 +232,14 @@ function makeWorldRecord(worldId,userId){
       queueSource.includes('KF029Remote.checkpointPending || KF029Remote.checkpointFailed')&&
       queueSource.includes('return {deferred:true};'),
       {});
+    check('Mail read state is tracked and modal/menu exits flush pending management changes',
+      app.includes("'open-mail-center':1,'select-mail':1,'delete-mail':1,'delete-all-mail':1,'toggle-mail-read':1")&&
+      app.includes("kf031FlushManagementSave('close-modal')")&&
+      app.includes("var KF031_MANAGEMENT_VIEWS={office:1,squad:1,lineup:1,contracts:1,'squad-planning':1,finance:1,sponsoring:1};"),
+      {});
+    check('Ready path detects local management mutations when no calendar slot advanced',
+      readySource.includes("kf031MarkManagementDirty('office-advance-local-management',false)"),
+      {});
 
     report.metrics={
       fullBytes,
