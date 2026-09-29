@@ -61,6 +61,7 @@ class DeterministicManifestRaceStore {
     this.enabled=false;
     this.manifestKey=null;
     this.stagedWrites=[];
+    this.stagedWritePreconditions=[];
     this.resetBarrier();
   }
   resetBarrier() {
@@ -74,6 +75,7 @@ class DeterministicManifestRaceStore {
     this.enabled=true;
     this.manifestKey=manifestKey;
     this.stagedWrites=[];
+    this.stagedWritePreconditions=[];
     this.resetBarrier();
   }
   disarm() { this.enabled=false; }
@@ -84,7 +86,10 @@ class DeterministicManifestRaceStore {
   async deletePrefix(prefix){ return this.base.deletePrefix(prefix); }
   async getRecoveryCapabilities(){ return this.base.getRecoveryCapabilities(); }
   async write(key, body, options={}) {
-    if (this.enabled && key !== this.manifestKey) this.stagedWrites.push(key);
+    if (this.enabled && key !== this.manifestKey) {
+      this.stagedWrites.push(key);
+      this.stagedWritePreconditions.push(options && options.ifGenerationMatch);
+    }
     const raced =
       this.enabled &&
       key === this.manifestKey &&
@@ -130,6 +135,11 @@ async function assertTwoWayRace({ name, raceStore, service, worldId, runA, runB,
     raceStore.stagedWrites.length>=expectedStagedMinimum &&
       new Set(raceStore.stagedWrites).size===raceStore.stagedWrites.length,
     { stagedPaths:raceStore.stagedWrites }
+  );
+  check(`${name}: staged objects are create-only`,
+    raceStore.stagedWritePreconditions.length===raceStore.stagedWrites.length &&
+      raceStore.stagedWritePreconditions.every(value=>String(value)==='0'),
+    { preconditions:raceStore.stagedWritePreconditions }
   );
   const manifest=await service.getManifest(worldId);
   check(`${name}: revision advances exactly once`, Number(manifest.revision)===2, { revision:manifest.revision });
