@@ -63,8 +63,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.31.2';
-  var KF_BUILD_LABEL = 'KF_0.31.2 - Lobby State & UI Save Integrity';
+  var KF_VERSION = '0.31.3';
+  var KF_BUILD_LABEL = 'KF_0.31.3 - Cold Load, Delta Compaction & Save Progress';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -17904,15 +17904,33 @@ function renderOfficeView(){
   var officeAdvanceStartsMatch = nextAdvanceStartsOwnMatch(world, club);
   var requiredMail = officeRequiredActionMail(world);
   var officeSaveState = (KF029Remote.checkpointFailed || KF029Remote.managementFailed) ? 'failed' :
-    ((KF029Remote.checkpointPending || KF029Remote.managementSaving || KF029Remote.managementQueued || KF029Remote.managementDirty || KF029Remote.autosaveTimer) ? 'pending' : 'clean');
-  var officeSaveBlocksAdvance = !requiredMail && officeSaveState !== 'clean';
-  var officeSaveButtonClass = requiredMail ? '' : (officeSaveState === 'failed' ? ' is-save-failed' : (officeSaveState === 'pending' ? ' is-save-pending' : ''));
+    (KF029Remote.checkpointPending ? 'confirming' :
+      ((KF029Remote.managementSaving || KF029Remote.managementQueued) ? 'saving' :
+        ((KF029Remote.managementDirty || KF029Remote.autosaveTimer) ? 'waiting' :
+          (Number(KF029Remote.saveUiConfirmedUntil||0) > Date.now() ? 'confirmed' : 'clean'))));
+  var officeSaveBlocksAdvance = !requiredMail && ['waiting','saving','confirming','failed'].indexOf(officeSaveState)>=0;
+  var officeSaveButtonClass = requiredMail ? '' :
+    (officeSaveState === 'failed' ? ' is-save-failed' :
+      (officeSaveState === 'waiting' ? ' is-save-pending save-phase-waiting' :
+        (officeSaveState === 'saving' ? ' is-save-pending save-phase-saving' :
+          (officeSaveState === 'confirming' ? ' is-save-pending save-phase-confirming' :
+            (officeSaveState === 'confirmed' ? ' is-save-confirmed save-phase-confirmed' : '')))));
   var officeSaveButtonAttrs = officeSaveBlocksAdvance ? ' disabled aria-disabled="true" aria-busy="true" title="Weiter ist möglich, sobald der aktuelle Stand serverseitig bestätigt ist."' : '';
+  var officeSavePhaseLabel = officeSaveState === 'waiting' ? 'Änderung erkannt · wartet' :
+    (officeSaveState === 'saving' ? 'Wird gespeichert …' :
+      (officeSaveState === 'confirming' ? 'Server bestätigt …' :
+        (officeSaveState === 'confirmed' ? 'Gespeichert' : '')));
   var officeSaveStatusHtml = '';
   if (officeSaveState === 'failed') {
     officeSaveStatusHtml = '<div class="office-save-status is-failed" role="status"><span>Speichern fehlgeschlagen · Änderungen bleiben vorgemerkt.</span><button class="ghost-btn" type="button" data-action="kf-retry-management-save">Erneut versuchen</button></div>';
-  } else if (officeSaveState === 'pending') {
-    officeSaveStatusHtml = '<div class="office-save-status is-pending" role="status">' + (KF029Remote.checkpointPending ? 'Fortschritt wird bestätigt …' : 'Änderungen werden gespeichert …') + '</div>';
+  } else if (officeSaveState === 'waiting') {
+    officeSaveStatusHtml = '<div class="office-save-status is-pending" role="status">Änderung erkannt · wartet auf Speichervorgang …</div>';
+  } else if (officeSaveState === 'saving') {
+    officeSaveStatusHtml = '<div class="office-save-status is-pending" role="status">Änderungen werden gespeichert …</div>';
+  } else if (officeSaveState === 'confirming') {
+    officeSaveStatusHtml = '<div class="office-save-status is-pending" role="status">Fortschritt wird serverseitig bestätigt …</div>';
+  } else if (officeSaveState === 'confirmed') {
+    officeSaveStatusHtml = '<div class="office-save-status is-confirmed" role="status">Speichern abgeschlossen.</div>';
   }
   var officeShowTableTab = officeHasStandingsTabForContext(officeNextCtxForTabs);
   var officeActiveInfoTab = AppState.ui.officeInfoTab || 'next-match';
@@ -17944,7 +17962,7 @@ function renderOfficeView(){
     '        <section class="office-side-card office-mail-card">' +
     '          <div class="office-mail-header"><h3>Mail-Center</h3><button class="ghost-btn office-mail-open-btn" type="button" data-action="open-mail-center">Öffnen</button></div>' +
     '          <div class="office-mail-list">' + (mailPreview || '<div class="empty-state office-empty">Keine Nachrichten.</div>') + '</div>' +
-    '          <button class="primary-btn office-advance-btn' + (requiredMail ? ' is-mail-required' : (officeAdvanceStartsMatch ? ' is-start-match' : '')) + officeSaveButtonClass + '" type="button" data-action="office-advance"' + officeSaveButtonAttrs + '>' + (requiredMail ? 'Mail' : (officeAdvanceStartsMatch ? 'Spiel starten' : 'Weiter')) + '</button>' +
+    '          <button class="primary-btn office-advance-btn' + (requiredMail ? ' is-mail-required' : (officeAdvanceStartsMatch ? ' is-start-match' : '')) + officeSaveButtonClass + '" type="button" data-action="office-advance"' + officeSaveButtonAttrs + '><span class="office-advance-label">' + (requiredMail ? 'Mail' : (officeAdvanceStartsMatch ? 'Spiel starten' : 'Weiter')) + '</span>' + (officeSavePhaseLabel ? '<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>' : '') + '</button>' +
     officeSaveStatusHtml +
     '        </section>' +
     '      </aside>' +
@@ -24418,7 +24436,8 @@ var KF029Remote = {
   managementChangeSequence: 0,
   managementConfirmedSequence: 0,
   managementLastAttemptDelta: null,
-  managementLastAttemptRevision: null
+  managementLastAttemptRevision: null,
+  saveUiConfirmedUntil: 0
 };
 try { KF029Remote.token = window.localStorage.getItem(KF029_AUTH_STORAGE_KEY) || null; } catch (error) {}
 
@@ -24524,6 +24543,13 @@ function kf031ManagementBlocksProgress(){
 function kf031RefreshSaveUi(){
   if (AppState && AppState.ui && AppState.ui.currentView === 'office') renderApp();
 }
+function kf031MarkSaveConfirmed(){
+  KF029Remote.saveUiConfirmedUntil=Date.now()+900;
+  kf031RefreshSaveUi();
+  setTimeout(function(){
+    if (Number(KF029Remote.saveUiConfirmedUntil||0) <= Date.now()) kf031RefreshSaveUi();
+  },950);
+}
 function kf031ClearManagementTimer(){
   if (KF029Remote.autosaveTimer) {
     clearTimeout(KF029Remote.autosaveTimer);
@@ -24542,6 +24568,7 @@ function kf031ResetManagementSaveState(){
   KF029Remote.managementConfirmedSequence=0;
   KF029Remote.managementLastAttemptDelta=null;
   KF029Remote.managementLastAttemptRevision=null;
+  KF029Remote.saveUiConfirmedUntil=0;
 }
 function kf031ScheduleManagementSave(reason, immediate){
   if (!KF029Remote.user || !AppState.worldRecord || !KF029Remote.committedGameState) return;
@@ -24706,6 +24733,7 @@ function kf031QueueManagementSave(reason){
     kf031ApplyCommittedWorldDelta(worldDelta);
     KF029Remote.managementLastAttemptDelta=null;
     KF029Remote.managementLastAttemptRevision=null;
+    kf031MarkSaveConfirmed();
     var remaining=kf031BuildWorldDelta(record);
     KF029Remote.managementDirty=kf031DeltaHasOps(remaining);
     if (KF029Remote.managementDirty && !KF029Remote.managementQueued) {
@@ -25342,6 +25370,7 @@ function kf029SaveProgressCheckpoint(reason){
         KF029Remote.managementConfirmedSequence=Math.max(KF029Remote.managementConfirmedSequence,sentSequence);
         var recoveredRemaining=kf031BuildWorldDelta(record);
         KF029Remote.managementDirty=kf031DeltaHasOps(recoveredRemaining);
+        kf031MarkSaveConfirmed();
         if (KF029Remote.managementDirty && !KF029Remote.managementQueued) {
           setTimeout(function(){ void kf031QueueManagementSave('post-checkpoint').catch(function(){}); },0);
         }
@@ -25361,6 +25390,7 @@ function kf029SaveProgressCheckpoint(reason){
     KF029Remote.managementDirty=kf031DeltaHasOps(remaining);
     KF029Remote.managementFailed=false;
     KF029Remote.managementError='';
+    kf031MarkSaveConfirmed();
     if (KF029Remote.managementDirty && !KF029Remote.managementQueued) {
       setTimeout(function(){ void kf031QueueManagementSave('post-checkpoint').catch(function(){}); },0);
     }

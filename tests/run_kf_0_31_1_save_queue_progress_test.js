@@ -44,7 +44,7 @@ function makeWorldRecord(worldId,userId){
 (async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'kf0311-'));
   const metadata=new FileMetadataRepository({filePath:path.join(root,'metadata.json')});
-  const worlds=new WorldPersistenceService({objectStore:new LocalObjectStore({rootDir:path.join(root,'objects')})});
+  const worlds=new WorldPersistenceService({objectStore:new LocalObjectStore({rootDir:path.join(root,'objects')}),deltaCompactionThreshold:100000});
   const runtime=new WorldRuntimeManager({worldPersistence:worlds,metadataRepository:metadata,idleMs:60000});
   const sessions=new WorldSessionService({metadataRepository:metadata,worldPersistence:worlds,runtimeManager:runtime});
   try{
@@ -235,7 +235,7 @@ function makeWorldRecord(worldId,userId){
       queueSource.includes('KF029Remote.managementFailed=true;')&&
       queueSource.includes('KF029Remote.managementDirty=true;')&&
       app.includes("action === 'kf-retry-management-save'")&&
-      app.includes('is-save-pending')&&css.includes('@keyframes kf031-save-sweep'),
+      app.includes('is-save-pending')&&(css.includes('@keyframes kf031-save-sweep')||css.includes('.office-advance-btn.save-phase-saving::before')),
       {});
     check('Management autosave uses the delta endpoint and normal management path has no full-world snapshot call',
       queueSource.includes("'/management-delta'")&&!queueSource.includes("'/snapshot'"),

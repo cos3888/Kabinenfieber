@@ -1,14 +1,14 @@
-# Wiederherstellung Kabinenfieber - KF_0.31.2
+# Wiederherstellung Kabinenfieber - KF_0.31.3
 
 Dieses Dokument soll einen neuen Chat/Agenten in die Lage versetzen, den aktuellen Entwicklungsstand ohne vorherigen Gespraechsverlauf fortzusetzen.
 
 ## 1. Aktueller technischer Stand
 
-Version: `KF_0.31.2`
+Version: `KF_0.31.3`
 
 Build-Label:
 
-`KF_0.31.2 - Lobby State & UI Save Integrity`
+`KF_0.31.3 - Cold Load, Delta Compaction & Save Progress`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.31.2.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.31.3.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
@@ -35,6 +35,167 @@ Aktuelle ZIP nach Export soll `KF_0.31.2.zip` heissen.
 - Bestehende Systeme vor neuen Features sauber abschliessen.
 - Aktuelle Wahrheit und historische Wahrheit getrennt halten.
 - Keine parallelen persistierten Wahrheiten ohne fachliche Begruendung.
+
+
+## KF_0.31.3 – Cold Load, Delta Compaction & Save Progress
+
+Arbeitsbranch: `fix/kf-0.31.3-cold-load-compaction-save-ux`
+
+Ausgangsbasis:
+- `main` war vor Beginn exakt `f2c5914d2993ecf4921334d8609a4c6948ab1a49`.
+- KF_0.31.2 war zu diesem Zeitpunkt produktiv auf GitHub Pages und Google Cloud Backend.
+- Service-/App-Version wird `0.31.3`.
+- Remote-/API-Vertrag bleibt `0.30.0`.
+- Persistierte Schemas bleiben `kf-core-0.27.2`, `kf-world-record-0.27.2`, `kf-storage-0.31.0` und `kf-world-delta-0.31.0`.
+- Noch nicht nach `main` mergen, bevor der Praxistest freigegeben wurde.
+
+### Bestaetigte Ursache
+
+`WorldPersistenceService.loadWorldRecordFromManifest()` lud die Objekte aus `manifest.worldDeltaPaths` bis KF_0.31.2 strikt seriell. Management-Saves und Delta-Slot-Saves konnten die Kette unbegrenzt verlaengern.
+
+Eine Cold Runtime musste deshalb vor einem neuen Save erst:
+1. Manifest lesen,
+2. Basissnapshot laden,
+3. jedes Delta einzeln nacheinander aus dem Object Store laden,
+4. jedes Delta anwenden,
+5. erst danach den neuen Save committen.
+
+Unter echter GCS-Latenz konnte sich die Objektlatenz stark aufsummieren. Das erklaert sowohl nicht ladbare grosse Spielstaende als auch den beobachteten Save-Fehler bei laenger fortgeschrittener Welt technisch plausibel. Die alte KF_0.31.1-Messung mit ca. 68 kB WorldRecord, LocalObjectStore und ohne Netzwerklatenz war dafuer kein realistischer Gegenbeweis.
+
+### WorldPersistenceService
+
+Neue Standardwerte:
+- `DEFAULT_READ_CONCURRENCY = 8`
+- `DEFAULT_DELTA_COMPACTION_THRESHOLD = 64`
+
+Wichtige Hilfen:
+- `_readBody(key)`: verwendet nach Moeglichkeit einen Body-only-Store-Read.
+- `_mapWithConcurrency(...)`: begrenzter Worker-Pool; Ergebnispositionen bleiben stabil.
+- `_loadJsonGzipObjects(paths)`: paralleler Fetch/Decode mit stabiler Pfadreihenfolge.
+- `_deleteObjectsBestEffort(paths)`: paralleler Cleanup nach erfolgreicher Commitgrenze.
+- `shouldCompactManifest(manifest)`.
+
+`loadWorldRecordFromManifest()`:
+- laedt Basissnapshot per Body-only-Read;
+- laedt Deltaobjekte mit begrenzter Parallelitaet;
+- wendet sie danach weiterhin streng in `worldDeltaPaths`-Reihenfolge an.
+
+`_loadSegments()` verwendet denselben begrenzt parallelen Lesepfad. Damit werden insbesondere die fuer Cold Runtime weiterhin benoetigten Finance-Segmente nicht mehr strikt seriell geladen.
+
+`commitRuntimeSnapshot()` und `commitSlot()` schreiben voneinander unabhaengige staged Objekte parallel. Die Manifest-Generation bleibt die atomare Commitgrenze.
+
+### Object Stores
+
+`GoogleCloudObjectStore.readBody(key)` verwendet nur `file.download()`. Fuer unveraenderliche, bereits per Manifest referenzierte Snapshot-/Delta-/Segmentobjekte entfällt dadurch der zusaetzliche `file.getMetadata()`-Roundtrip.
+
+`LocalObjectStore.readBody(key)` liest direkt die Datei und berechnet keine Generation, wenn sie nicht gebraucht wird.
+
+Manifestreads verwenden weiterhin `read()`, weil die Generation fuer Compare-and-Swap benoetigt wird.
+
+### Delta-Compaction
+
+Methode: `WorldPersistenceService.compactWorld(...)`.
+
+Ablauf:
+1. aktuelles Manifest inklusive Generation laden;
+2. `expectedRevision` gegen die autoritative Welt-Revision pruefen;
+3. aktuellen WorldRecord aus Basissnapshot + bestaetigten Deltas rekonstruieren oder den bereits in der per-Welt-Queue autoritativen Runtime-WorldRecord verwenden;
+4. neuen gzip-Basissnapshot unter einem neuen technischen Objektpfad schreiben;
+5. neues Manifest mit derselben Welt-Revision, neuem `worldRecordPath` und leerem `worldDeltaPaths` erzeugen;
+6. Manifest mit `ifGenerationMatch` atomar umschalten;
+7. erst nach erfolgreichem Manifestwechsel alten Basissnapshot und alte Deltas best-effort loeschen.
+
+Eigenschaften:
+- Compaction verbraucht **keine** Welt-Revision.
+- `committedAt` der fachlichen Revision wird nicht durch technische Wartung neu definiert.
+- kein Last-Write-Wins: veraendert ein anderer Prozess das Manifest vorher, scheitert der Generation-CAS.
+- bei CAS-Fehler wird der vorbereitete neue Snapshot geloescht.
+- bei Fehler vor Manifestwechsel bleibt der alte Spielstand voll gueltig.
+- alte referenzierte Objekte werden niemals vor erfolgreichem Manifestwechsel geloescht.
+
+### Runtime-Integration
+
+`WorldRuntimeManager._compactRuntimeIfNeeded(runtime)` wird ausschliesslich innerhalb der bestehenden `_enqueue(worldId, ...)`-Operationen aufgerufen:
+- nach erfolgreichem Cold Load,
+- nach erfolgreichem Management-Delta-Save,
+- nach erfolgreichem Delta-Slot-Save.
+
+Innerhalb eines Serverprozesses bleiben Weltmutationen dadurch seriell. Zwischen mehreren Prozessen/Instanzen schuetzt die Manifest-Generation.
+
+Compaction ist technische Wartung. Ein Compaction-Fehler wird daher nicht als Fehler eines bereits erfolgreichen fachlichen Saves an den Client zurueckgegeben. Der bestehende Manifest-/Delta-Stand bleibt in diesem Fall verwendbar und kann spaeter erneut verdichtet werden.
+
+### Bestehende KF_0.31.2-Welten
+
+Keine Migration notwendig.
+
+Ein vorhandenes Manifest mit `worldRecordPath + worldDeltaPaths[]` bleibt direkt lesbar. Erreicht die Kette beim Cold Load die aktuelle Schwelle, kann dieselbe Welt nach erfolgreicher Rekonstruktion automatisch verdichtet werden.
+
+Es gibt keine neue fachliche Datenhaltung:
+- Spieler: `world.players.byId`
+- Kader/Aufstellung/Taktik: `world.squads`
+- Kalender: `world.calendar`
+- historische Matchwahrheit: `world.history.matches` plus ausgelagerte Matchdetails
+- Membership: `WorldRecord.memberships`
+- Regeln/Texte: `StaticData`
+
+Basissnapshot, Deltaobjekte und Compaction-Snapshot sind technische Speicherrepraesentationen derselben Wahrheit.
+
+### Save-UX
+
+Der Office-Weiter-/Spiel-starten-Button besitzt ab KF_0.31.3 eine phasenbasierte Anzeige im Button selbst.
+
+Phasen aus echten Coordinator-Zustaenden:
+- `waiting`: Dirty/Autosave wartet;
+- `saving`: Managementsave laeuft bzw. ist gequeued;
+- `confirming`: Slot-/Checkpoint-Bestaetigung laeuft;
+- `confirmed`: nach echtem ACK kurz sichtbar.
+
+Im Button stehen entsprechend:
+- `Änderung erkannt · wartet`
+- `Wird gespeichert …`
+- `Server bestätigt …`
+- `Gespeichert`
+
+Die Fuellstaende 24/58/82/100 Prozent sind **diskrete Phasenmarken**, keine Zeit- oder Fortschrittsprognose und werden dem Spieler nicht numerisch angezeigt.
+
+Bei `failed`:
+- keine Erfolgsfuellung;
+- Fortschritt bleibt gesperrt;
+- `kf-retry-management-save` bleibt sichtbar;
+- Dirty-State bleibt erhalten.
+
+### KF_0.31.3 Regression
+
+Spezialtest:
+`tests/run_kf_0_31_3_cold_load_compaction_test.js`
+
+CI-Workflow:
+`.github/workflows/kf-0313-regression.yml`
+
+Repräsentativer erfolgreicher CI-Lauf:
+- WorldRecord: 2.629.287 Byte
+- Delta-Kette: 96
+- komprimierte Delta-Gesamtgroesse: 14.363 Byte
+- simulierte Object-Store-Latenz: 12 ms pro Body-Read
+- maximale parallele Reads: 8
+- Cold Load: 208 ms
+- serielle reine Delta-Latenzuntergrenze bei 96 × 12 ms: 1.152 ms
+- Compaction: 245 ms
+- Cold Runtime -> Management-Save: 148 ms
+- Cold Runtime -> Slot-Save: 144 ms
+
+Zusaetzliche Sicherheitsfaelle:
+- Compaction rekonstruiert exakt denselben autoritativen WorldRecord.
+- Revision bleibt durch Compaction unveraendert.
+- injizierter Fehler beim Manifestwechsel laesst alten Stand und alte Objekte intakt.
+- konkurrierender Save waehrend Compaction gewinnt ueber Manifest-CAS; stale Compaction wird mit `PERSISTENCE_CONFLICT` abgewiesen.
+- 12 Spieltage mit wiederholtem Runtime-Unload/Cold Load und automatischer Compaction bleiben korrekt.
+- vorhandene KF_0.31.2-Struktur ist ohne Migration ladbar.
+- Save-/Retry-/Phasen-UX wird statisch regressionsgeprueft.
+- KF_0.31.0, KF_0.31.1, KF_0.31.2 und komplette aktuelle Core-Suite waren vor Dokumentationsfinalisierung gruen.
+
+Wichtig fuer spaetere Arbeit: die KF_0.31.1-Regression deaktiviert Compaction nur in ihrem eigenen 500-Delta-Legacy-Test ueber eine sehr hohe Testschwelle. Dadurch prueft sie weiterhin den damaligen Delta-Mechanismus, ohne die neue KF_0.31.3-Wartungslogik versehentlich als Fehler zu werten.
+
 
 ## KF_0.31.2 – Lobby State & UI Save Integrity
 

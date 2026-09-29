@@ -42,7 +42,8 @@ const core=[
   'tests/run_kf_0_30_1_delta_correctness_performance_test.js',
   'tests/run_kf_0_31_0_authoritative_persistence_progression_test.js',
   'tests/run_kf_0_31_1_save_queue_progress_test.js',
-  'tests/run_kf_0_31_2_lobby_ui_integrity_test.js'
+  'tests/run_kf_0_31_2_lobby_ui_integrity_test.js',
+  'tests/run_kf_0_31_3_cold_load_compaction_test.js'
 ];
 const extended=[
   'tests/run_current_ui_ownership_pipeline_test.js',

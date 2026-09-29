@@ -25,6 +25,19 @@ class GoogleCloudObjectStore {
     }
   }
 
+  async readBody(key) {
+    const file = this.bucket.file(key);
+    try {
+      const [body] = await file.download();
+      return body;
+    } catch (error) {
+      if (error && (error.code === 404 || error.code === '404')) {
+        throw new PersistenceNotFoundError(`Object not found: ${key}`, { key });
+      }
+      throw error;
+    }
+  }
+
   async exists(key) {
     const [exists] = await this.bucket.file(key).exists();
     return exists;

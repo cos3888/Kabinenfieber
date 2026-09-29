@@ -6426,20 +6426,53 @@ button,.filter-chip,.lineup-subtab,.ghost-btn,.primary-btn,.secondary-btn,.small
 @media(max-width:900px){.kf-lobby-screen{padding:10px}.kf-lobby-shell{width:100%;padding:14px}.kf-lobby-header{align-items:flex-start;flex-direction:column}.kf-lobby-head-actions{justify-content:flex-start}}
 
 
-/* BEGIN KF_0.31.1 SAVE QUEUE & PROGRESS UX */
-.office-advance-btn{position:relative;overflow:hidden}
-.office-advance-btn.is-save-pending,.office-advance-btn.is-save-failed{filter:saturate(.18);opacity:.72;cursor:not-allowed}
+/* BEGIN KF_0.31.3 SAVE QUEUE & PHASE PROGRESS UX */
+.office-advance-btn{
+  position:relative;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  gap:1px;
+  isolation:isolate
+}
+.office-advance-btn .office-advance-label,
+.office-advance-btn .office-save-phase-label{position:relative;z-index:2}
+.office-advance-btn .office-save-phase-label{
+  display:block;
+  font-size:10px;
+  line-height:1.1;
+  font-weight:700;
+  letter-spacing:.02em;
+  opacity:.92
+}
+.office-advance-btn.is-save-pending,.office-advance-btn.is-save-failed{filter:saturate(.22);opacity:.78;cursor:not-allowed}
+.office-advance-btn.is-save-pending::before,
+.office-advance-btn.is-save-confirmed::before{
+  content:"";
+  position:absolute;
+  z-index:1;
+  inset:0 auto 0 0;
+  width:0;
+  background:rgba(255,255,255,.18);
+  transition:width .22s ease;
+  pointer-events:none
+}
+.office-advance-btn.save-phase-waiting::before{width:24%}
+.office-advance-btn.save-phase-saving::before{width:58%}
+.office-advance-btn.save-phase-confirming::before{width:82%}
+.office-advance-btn.save-phase-confirmed::before{width:100%;background:rgba(255,255,255,.12)}
 .office-advance-btn.is-save-pending::after{
   content:"";
   position:absolute;
-  inset:0;
-  width:42%;
-  transform:translateX(-130%);
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);
-  animation:kf031-save-sweep 1.15s ease-in-out infinite;
+  z-index:1;
+  left:0;
+  bottom:0;
+  height:3px;
+  width:100%;
+  background:rgba(255,255,255,.12);
   pointer-events:none
 }
-.office-advance-btn.is-save-failed::after{display:none}
+.office-advance-btn.is-save-failed::before,.office-advance-btn.is-save-failed::after{display:none}
 .office-save-status{
   display:flex;
   align-items:center;
@@ -6461,11 +6494,12 @@ button,.filter-chip,.lineup-subtab,.ghost-btn,.primary-btn,.secondary-btn,.small
   opacity:.7;
   animation:kf031-save-pulse .9s ease-in-out infinite alternate
 }
+.office-save-status.is-confirmed{color:#d7f3df}
 .office-save-status.is-failed{color:#ffd0d0;flex-wrap:wrap}
 .office-save-status .ghost-btn{padding:4px 7px;font-size:10px}
-@keyframes kf031-save-sweep{0%{transform:translateX(-130%)}100%{transform:translateX(340%)}}
 @keyframes kf031-save-pulse{from{opacity:.25;transform:scale(.82)}to{opacity:.9;transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){
-  .office-advance-btn.is-save-pending::after,.office-save-status.is-pending::before{animation:none}
+  .office-save-status.is-pending::before{animation:none}
+  .office-advance-btn.is-save-pending::before,.office-advance-btn.is-save-confirmed::before{transition:none}
 }
-/* END KF_0.31.1 SAVE QUEUE & PROGRESS UX */
+/* END KF_0.31.3 SAVE QUEUE & PHASE PROGRESS UX */

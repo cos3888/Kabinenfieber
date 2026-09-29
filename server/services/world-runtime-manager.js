@@ -78,6 +78,24 @@ class WorldRuntimeManager {
     });
   }
 
+  async _compactRuntimeIfNeeded(runtime) {
+    if (!runtime || !this.worldPersistence.shouldCompactManifest) return null;
+    const manifest = await this.worldPersistence.getManifest(runtime.worldId);
+    if (!manifest ||
+        Number(manifest.revision) !== Number(runtime.revision) ||
+        !this.worldPersistence.shouldCompactManifest(manifest)) return null;
+    try {
+      return await this.worldPersistence.compactWorld({
+        worldId:runtime.worldId,
+        expectedRevision:runtime.revision,
+        worldRecord:runtime.worldRecord
+      });
+    } catch (error) {
+      if (error && error.code === 'PERSISTENCE_CONFLICT') return null;
+      return null;
+    }
+  }
+
   async _load(worldId) {
     const key = String(worldId);
     const manifest = await this.worldPersistence.getManifest(key);
@@ -100,6 +118,7 @@ class WorldRuntimeManager {
       lastAccessAt: this.now()
     };
     this.runtimes.set(key, runtime);
+    await this._compactRuntimeIfNeeded(runtime);
     return runtime;
   }
 
@@ -261,6 +280,7 @@ class WorldRuntimeManager {
       runtime.worldRecord = applied.worldRecord;
       runtime.revision = Number(manifest.revision);
       this._touch(runtime);
+      await this._compactRuntimeIfNeeded(runtime);
       return {
         revision: runtime.revision,
         currentSeason: runtime.currentSeason,
@@ -310,6 +330,7 @@ class WorldRuntimeManager {
       runtime.matches = mergeMatchesById(runtime.matches, matches);
       runtime.financeEvents = mergeFinanceEvents(runtime.financeEvents, financeEvents);
       this._touch(runtime);
+      await this._compactRuntimeIfNeeded(runtime);
       return { revision: runtime.revision, currentSeason: runtime.currentSeason, committedAt: manifest.committedAt };
     });
   }

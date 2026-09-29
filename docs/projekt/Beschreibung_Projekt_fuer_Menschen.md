@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.31.2
+# Kabinenfieber - Stand KF_0.31.3
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.31.2`
+App-Version: `KF_0.31.3`
 
 Persistierte Schemas:
 
@@ -16,6 +16,101 @@ Persistierte Schemas:
 - WorldRecord: `kf-world-record-0.27.2`
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
+
+
+
+## KF_0.31.3 – Cold Load, Delta Compaction & Save Progress
+
+KF_0.31.3 behebt die im Praxistest von KF_0.31.2 sichtbar gewordenen Persistenzprobleme bei grossen, laenger laufenden Spielstaenden. Die Fussballsimulation, das Balancing, Transfers und die Mehrspielerregeln werden dabei nicht veraendert.
+
+### Ursache und Cold Load
+
+Der aktuelle Weltstand bleibt fachlich ein einziger autoritativer `WorldRecord`. Seit KF_0.31.0 kann er technisch als Basissnapshot plus `worldDeltaPaths[]` gespeichert sein.
+
+Vor KF_0.31.3 wurden alle Deltaobjekte beim Cold Load strikt nacheinander aus dem Object Store geladen. Bei einer laengeren Kette summierte sich deshalb insbesondere in Google Cloud Storage die Netzwerklatenz. Ein Save nach entladener Runtime musste diese komplette Kette zuerst rekonstruieren und konnte dadurch ebenfalls in den langsamen Fehlerpfad geraten.
+
+Neu:
+- Snapshot-/Delta-/Segmentinhalte koennen ueber einen Body-only-Lesepfad geladen werden; fuer unveraenderliche referenzierte GCS-Objekte ist kein zusaetzlicher Metadata-Request pro Objekt noetig.
+- unabhaengige Deltaobjekte werden mit begrenzter Parallelitaet geladen; Standardwert ist 8 gleichzeitige Reads.
+- die geladenen Deltas bleiben im Manifest-Array an ihrer urspruenglichen Position und werden danach weiterhin strikt in fachlich korrekter Reihenfolge auf den Basissnapshot angewendet.
+- Current-Season-Finance-Segmente werden ebenfalls begrenzt parallel gelesen.
+- bei Slot-/Runtime-Snapshots werden voneinander unabhaengige staged Objekte parallel geschrieben; die atomare Manifestgrenze bleibt unveraendert.
+
+### Automatische Delta-Compaction
+
+Die Standardschwelle liegt bei 64 `worldDeltaPaths`.
+
+Ist die Schwelle erreicht, wird der bereits autoritativ rekonstruierte WorldRecord als neuer technischer Basissnapshot geschrieben. Danach wird das Manifest per Generation-CAS atomar auf den neuen Snapshot umgestellt und `worldDeltaPaths` geleert.
+
+Wichtig:
+- Compaction verbraucht keine Welt-Revision und veraendert keine Spielwahrheit.
+- sie erzeugt keine zweite fachliche Datenquelle.
+- ein konkurrierender Save kann nicht still ueberschrieben werden: veraendert sich das Manifest, scheitert die Compaction am Generation-CAS.
+- bei einem Fehler vor dem Manifestwechsel bleibt das alte Manifest gueltig.
+- der neu vorbereitete Snapshot wird bei fehlgeschlagenem Manifestwechsel wieder entfernt.
+- alter Basissnapshot und alte Deltas werden erst nach erfolgreichem Manifestwechsel geloescht.
+- ein technischer Compaction-Fehler darf einen bereits erfolgreichen fachlichen Save nicht nachtraeglich als Speicherfehler darstellen.
+
+Bestehende KF_0.31.2-Welten benoetigen keine Migration. Ihre vorhandenen Basissnapshot-/Delta-Manifeste werden normal geladen und koennen beim Erreichen der Schwelle automatisch verdichtet werden.
+
+### Save nach Cold Runtime
+
+`WorldRuntimeManager` rekonstruiert eine entladene Welt weiterhin aus dem aktuellen Manifest. Danach laufen Management- und Slot-Saves in derselben per-Welt-Queue und mit derselben monotonen Revision wie zuvor.
+
+Die neue Regression prueft ausdruecklich:
+- Cold Runtime mit langer Delta-Kette -> Management-Save;
+- Cold Runtime mit langer Delta-Kette -> Slot-Save;
+- einen Spieltag-9-aehnlichen Slot-Pfad;
+- korrekte Revision nach Save und revisionsneutrale Compaction;
+- konkurrierenden/stalen Save waehrend einer Compaction.
+
+### Weiter-/Save-Anzeige
+
+Der Weiter-/Spiel-starten-Button zeigt jetzt im Button selbst einen phasenbasierten Fortschritt. Es werden keine zeitbasierten Prozentwerte erfunden.
+
+Die sichtbaren Phasen sind:
+- Änderung erkannt / wartet;
+- wird gespeichert;
+- Server bestätigt;
+- gespeichert.
+
+Die Fuellung stellt nur diese diskreten technischen Phasen dar. Bei einem Fehler gibt es keine Erfolgsfuellung; der Stand bleibt gesperrt und `Erneut versuchen` bleibt sichtbar. Der ergaenzende Statustext unter dem Button bleibt erhalten.
+
+### Datenquellen
+
+Unveraendert zentrale fachliche Wahrheit:
+- Spieler: `world.players.byId`
+- Kader/Aufstellung/Taktik: `world.squads`
+- Kalender/Spielstatus: `world.calendar`
+- historische Matchwahrheit: `world.history.matches` plus bestehende ausgelagerte Matchdetails
+- Memberships: `WorldRecord.memberships`
+- Regeln/Texte: `StaticData`
+
+Basissnapshots, World-Deltas und Compaction-Snapshots sind nur technische Persistenzformen derselben Weltwahrheit.
+
+### Gemessene KF_0.31.3-Regression
+
+Der CI-Test verwendet einen repräsentativen WorldRecord von 2.629.287 Byte, 96 World-Deltas und 12 ms kuenstliche Latenz pro Body-Read.
+
+Gemessen im erfolgreichen CI-Lauf:
+- komprimierte Groesse der 96 Test-Deltas zusammen: 14.363 Byte
+- maximale parallele Object-Reads: 8
+- Cold Load: 208 ms
+- theoretische reine serielle Latenzuntergrenze fuer 96 Delta-Reads: 1.152 ms
+- Compaction: 245 ms
+- Cold Runtime -> Management-Save: 148 ms
+- Cold Runtime -> Slot-Save: 144 ms
+
+Ausserdem erfolgreich getestet:
+- identischer autoritativer Zustand vor/nach Compaction;
+- keine Revisionsaenderung durch Compaction;
+- fehlgeschlagene Compaction laesst alten Stand intakt;
+- konkurrierender Save gewinnt sauber gegen stale Compaction;
+- 12 aufeinanderfolgende Spieltage mit wiederholten Cold Runtimes/Compactions;
+- KF_0.31.0-, KF_0.31.1- und KF_0.31.2-Regression;
+- komplette aktuelle Core-Regression-Suite.
+
+Spezialtest: `tests/run_kf_0_31_3_cold_load_compaction_test.js`.
 
 
 ## KF_0.31.2 – Lobby State & UI Save Integrity
