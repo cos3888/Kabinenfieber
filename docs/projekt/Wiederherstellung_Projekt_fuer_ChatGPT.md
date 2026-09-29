@@ -8,7 +8,7 @@ Version: `KF_0.31.2`
 
 Build-Label:
 
-`KF_0.31.1 - Save Queue & Progress UX`
+`KF_0.31.2 - Lobby State & UI Save Integrity`
 
 Persistierte Schemas:
 
@@ -23,7 +23,7 @@ Produktions-HTML:
 
 `index.html`
 
-Aktuelle ZIP nach Export soll `KF_0.31.1.zip` heissen.
+Aktuelle ZIP nach Export soll `KF_0.31.2.zip` heissen.
 
 ## 2. Projektgrundsaetze
 
