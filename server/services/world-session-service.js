@@ -393,6 +393,16 @@ class WorldSessionService {
     }
   }
 
+  async saveManagementDelta({ userId, worldId, worldDelta, expectedRevision }) {
+    const result = await this.runtime.saveManagementDelta({
+      userId,
+      worldId,
+      worldDelta,
+      expectedRevision
+    });
+    return result;
+  }
+
   async saveSlot({ userId, worldId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches, financeEvents, progressLeaseId = null }) {
     const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
     if (activeUserIds.length > 1 && !progressLeaseId) throw new DomainRuleError('Multiplayer slot progress requires a progress lease');
