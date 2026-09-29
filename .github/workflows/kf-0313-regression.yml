@@ -1,0 +1,29 @@
+name: KF 0.31.3 Regression
+
+on:
+  push:
+    branches:
+      - fix/kf-0.31.3-cold-load-compaction-save-ux
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: KF 0.31.3 cold-load and compaction regression
+        run: npm run test:0313
+      - name: KF 0.31.0 authoritative persistence regression
+        run: npm run test:0310
+      - name: KF 0.31.1 save queue regression
+        run: npm run test:0311
+      - name: KF 0.31.2 lobby/UI integrity regression
+        run: npm run test:0312
+      - name: Current core regression suite
+        run: npm test
