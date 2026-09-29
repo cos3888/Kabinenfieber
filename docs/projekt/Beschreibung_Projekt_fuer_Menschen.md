@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.31.0
+# Kabinenfieber - Stand KF_0.31.1
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.31.0`
+App-Version: `KF_0.31.1`
 
 Persistierte Schemas:
 
@@ -17,6 +17,51 @@ Persistierte Schemas:
 
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
+
+## KF_0.31.1 – Save Queue & Progress UX
+
+KF_0.31.1 schliesst den Persistenzblock aus KF_0.31.0 fuer normale Managementarbeit ab. Aufstellung, Taktik und andere Entscheidungen duerfen weiter bearbeitet werden, waehrend ein vorheriger Speicherpunkt im Hintergrund laeuft. Zeitfortschritt ist dagegen erst moeglich, wenn der neueste relevante Stand vom Server bestaetigt wurde.
+
+### Speichermodell
+
+Der lebende `gameState` bleibt die aktuelle Spielwahrheit. `KF029Remote.committedGameState` ist nur die technische ACK-Basis des zuletzt nachweislich serverbestaetigten Zustands und keine zweite fachliche Wahrheit.
+
+Ein erfolgreicher Request bestaetigt nur das Delta, das dieser Request tatsaechlich gesendet hat. Aendert der Spieler den Live-Zustand waehrend des Requests weiter, bleiben diese neueren Aenderungen dirty und werden danach als Folgedelta gespeichert.
+
+Schnelle Aufstellungs-/Taktikaenderungen werden gebuendelt. Nach kurzer Inaktivitaet oder beim Verlassen eines Managementmenues wird geflusht. Endgueltige Vertrags-, Transfer-, Sponsor- und Trikot-Apply-Entscheidungen gehen sofort in dieselbe serielle Save Queue.
+
+Normale Managementaenderungen verwenden `PUT /api/v1/worlds/:worldId/management-delta`. Dieser Endpunkt schreibt nur ein WorldDelta und dieselbe Welt-Revision. Kalender-, Saison- und Matchhistorien-Pfade sind dort serverseitig gesperrt. Slot-/Spieltagfortschritt bleibt deshalb ausschliesslich beim bestehenden `/slot`-Commit mit Match-/Finance-Details und im Mehrspieler mit Progress-Lease.
+
+### Ready / Weiter
+
+Vor einem Ready-Request wird die Management-Queue vollstaendig geflusht. Eine alte Serverrevision kann nicht bereit gemeldet werden, waehrend lokal noch eine neue Aufstellung oder Entscheidung wartet.
+
+Bei Dirty-, Save- oder Checkpoint-Zustand bleiben Menues bedienbar, aber der normale Weiter-/Spiel-starten-Button ist deaktiviert und entsaettigt. Die Bewegung auf dem Button ist bewusst nur ein indeterminierter Aktivitaetsindikator und kein erfundener Prozentwert. Bei einem Speicherfehler bleibt Fortschritt gesperrt und ein Retry ist moeglich.
+
+### Checkpoint-Rennen
+
+Aendert der Spieler im neuen Slot bereits etwas, waehrend der vorherige Slot-Checkpoint noch laeuft, wartet dieser Management-Save hinter dem Slot-Commit. Nach erfolgreicher Slotbestaetigung wird nur ein verbleibender Unterschied nachgespeichert.
+
+Scheitert der Slot-Checkpoint, darf die wartende Management-Queue den unbestaetigten Kalenderstand nicht halb persistieren. Sie wird bis zum Checkpoint-Retry zurueckgestellt; der Server blockiert Progressionspfade am Management-Endpunkt zusaetzlich.
+
+### Mehrspieler / Konflikte
+
+Alle Saves verwenden dieselbe monotone Welt-Revision. Gleichzeitige Saves mit derselben Ausgangsrevision koennen nicht beide gewinnen. Bei 409 wird der aktuelle Serverstand geladen. Disjunkte lokale Pfade koennen auf die neue Revision rebasiert werden; wurde derselbe Pfad anderweitig veraendert, gibt es kein stilles Last-Write-Wins.
+
+### Zentrale Datenquellen
+
+- Spieler/Vertraege: `world.players.byId`
+- Kader/Aufstellung/Taktik: `world.squads`
+- Transfers/Verhandlungen: `world.transferMarket` / `world.negotiations`
+- Kalender: `world.calendar`
+- historische Matchwahrheit: `world.history.matches` plus ausgelagerte Vollmatchdetails
+- Regeln/Texte: `StaticData`
+
+Save-Queue-Flags, Revision und `committedGameState` sind technische Synchronisationszustaende und keine konkurrierende Gameplay-Datenhaltung.
+
+### Mobile Vorbereitung
+
+Dirty/Saving/Failed/Ready sind nicht an den Desktop-Button gekoppelt. Eine spaetere eigene Smartphone-Oberflaeche kann dieselbe Welt, API und Save Queue verwenden; es entsteht keine separate mobile Datenwahrheit.
 
 
 ## KF_0.31.0 – Authoritative Persistence & Progression Foundation
