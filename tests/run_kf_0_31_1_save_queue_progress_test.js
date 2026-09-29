@@ -132,6 +132,17 @@ function makeWorldRecord(worldId,userId){
     check('Management delta in a multiplayer world does not require a progression lease',
       Number(mpASaved.revision)===Number(mpBase.revision)+1,{before:mpBase.revision,after:mpASaved.revision});
 
+    let progressionPathError=null;
+    try{
+      await sessions.saveManagementDelta({
+        userId:'uA',worldId:mpWorld,expectedRevision:mpASaved.revision,
+        worldDelta:delta(mpWorld,[{path:['gameState','calendar','currentSlotKey'],value:'illegal-management-slot'}])
+      });
+    }catch(error){progressionPathError=error;}
+    check('Management endpoint rejects progression-owned calendar/history paths',
+      !!progressionPathError&&/progression-owned/i.test(String(progressionPathError.message||'')),
+      {error:progressionPathError&&progressionPathError.message});
+
     let staleReadyError=null;
     try{await sessions.markReady({userId:'uA',worldId:mpWorld,expectedRevision:mpBase.revision});}catch(error){staleReadyError=error;}
     check('Ready rejects a revision that predates a confirmed management save',
@@ -216,6 +227,10 @@ function makeWorldRecord(worldId,userId){
       {});
     check('Management autosave uses the delta endpoint and normal management path has no full-world snapshot call',
       queueSource.includes("'/management-delta'")&&!queueSource.includes("'/snapshot'"),
+      {});
+    check('Queued management save defers while a slot checkpoint is pending or failed',
+      queueSource.includes('KF029Remote.checkpointPending || KF029Remote.checkpointFailed')&&
+      queueSource.includes('return {deferred:true};'),
       {});
 
     report.metrics={
