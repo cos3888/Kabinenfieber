@@ -37,6 +37,17 @@ class LocalObjectStore {
     }
   }
 
+  async readBody(key) {
+    try {
+      return await fs.readFile(this._path(key));
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        throw new PersistenceNotFoundError(`Object not found: ${key}`, { key });
+      }
+      throw error;
+    }
+  }
+
   async exists(key) {
     try {
       await fs.access(this._path(key));
