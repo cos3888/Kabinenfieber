@@ -3226,6 +3226,7 @@ function handleLineupDrop(playerId, targetType, targetValue){
     move(playerId, 'reserve', null);
   }
   syncSquadFromLineupMaskState(club, squad, world);
+  if (typeof kf031MarkManagementDirty === 'function') kf031MarkManagementDirty('lineup-drag',false);
   renderApp();
 }
 
@@ -25468,22 +25469,55 @@ function kf029ExitWorldToList(forceDiscard){
     kf029ShowCheckpointFailure(KF029Remote.checkpointReason||'checkpoint',new Error('Der letzte Fortschritt ist noch nicht bestätigt.'));
     return Promise.resolve(null);
   }
+  if (forceDiscard) return kf029DiscardLoadedWorldToList();
+  if (kf031ManagementBlocksProgress() || kf031HasPendingManagementChanges()) {
+    KF029Remote.message='Letzte Managementänderungen werden vor dem Verlassen gespeichert ...';
+    renderApp();
+    return kf031FlushManagementSave('exit').then(function(){
+      return kf029DiscardLoadedWorldToList();
+    }).catch(function(error){
+      KF029Remote.error='Welt bleibt geöffnet: Die letzten Änderungen konnten nicht sicher gespeichert werden.';
+      KF029Remote.message='';
+      renderApp();
+      return null;
+    });
+  }
   return kf029DiscardLoadedWorldToList();
 }
 function kf029RetryCheckpoint(){
   var reason=KF029Remote.checkpointReason||'checkpoint';
   return kf029CommitHardCheckpoint(reason);
 }
-var KF029_AUTOSAVE_ACTIONS={
-  'lineup-assistant-apply-lineup-proposal':1,'lineup-formation-change':1,'lineup-formation-select':1,
-  'lineup-goalkeeper-autofix':1,'lineup-goalkeeper-self-change':1,'lineup-tactic-set':1,
-  'club-transfer-submit-offer':1,'club-transfer-submit-anyway':1,'club-transfer-insist-offer':1,'club-transfer-cancel-negotiation':1,
-  'player-contract-apply-offer':1,'player-contract-submit-anyway':1,'player-contract-insist-offer':1,'start-player-contract-after-club-agreement':1,
-  'squad-planning-offer':1,'squad-planning-adjust-negotiation':1,'squad-planning-cancel-negotiation':1,
-  'finance-sponsor-accept-request':1,'finance-sponsor-counter-request':1,'finance-sponsor-create-extension':1,
-  'finance-sponsor-decline-request':1,'finance-sponsor-reserve-request':1,'kit-designer-apply':1,
-  'player-profile-scout-toggle':1,'cup-draw-continue':1,'delete-mail':1,'delete-all-mail':1,'toggle-mail-read':1
+var KF031_COALESCED_MANAGEMENT_ACTIONS={
+  'lineup-assistant-set':1,'lineup-assistant-apply-preferred':1,'lineup-assistant-apply-lineup-proposal':1,
+  'lineup-formation-change':1,'lineup-formation-select':1,'lineup-goalkeeper-self-change':1,'lineup-tactic-set':1,
+  'player-profile-scout-toggle':1,'player-profile-scout-add':1,'player-profile-scout-remove':1,
+  'player-profile-shadow-toggle':1,'player-profile-shadow-toggle-direct':1,'shadow-formation-change':1,'shadow-remove-player':1,
+  'delete-mail':1,'delete-all-mail':1,'toggle-mail-read':1
 };
+var KF031_IMMEDIATE_MANAGEMENT_ACTIONS={
+  'club-transfer-submit-offer':1,'club-transfer-submit-anyway':1,'club-transfer-insist-offer':1,'club-transfer-cancel-negotiation':1,
+  'player-contract-apply-offer':1,'player-contract-submit-anyway':1,'player-contract-insist-offer':1,'player-contract-cancel-negotiation':1,
+  'squad-planning-adjust-negotiation':1,'squad-planning-cancel-negotiation':1,
+  'finance-sponsor-accept-request':1,'finance-sponsor-counter-request':1,'finance-sponsor-create-extension':1,
+  'finance-sponsor-decline-request':1,'finance-sponsor-abort-request':1,'finance-sponsor-reserve-request':1,
+  'kit-designer-apply':1,'player-profile-listing-add':1,'player-profile-listing-remove':1,
+  'scouting-confirm-task':1,'scouting-end-order':1,'scouting-list-assign-player':1,'scouting-list-remove-player':1,
+  'cup-draw-continue':1
+};
+var KF031_MANAGEMENT_VIEWS={lineup:1,contracts:1,'squad-planning':1,finance:1,sponsoring:1};
+function kf031TrackActionMutation(action,actionEl){
+  if (action==='lineup-goalkeeper-autofix') {
+    var mode=actionEl && actionEl.getAttribute ? actionEl.getAttribute('data-mode') : '';
+    if (mode!=='advance' && mode!=='sim-until') kf031MarkManagementDirty(action,false);
+    return;
+  }
+  if (KF031_IMMEDIATE_MANAGEMENT_ACTIONS[action]) {
+    kf031MarkManagementDirty(action,true);
+    return;
+  }
+  if (KF031_COALESCED_MANAGEMENT_ACTIONS[action]) kf031MarkManagementDirty(action,false);
+}
 async function kf029Logout(){
   if(KF029Remote.checkpointPending || KF029Remote.checkpointFailed){
     KF029Remote.error=KF029Remote.checkpointPending
@@ -25493,22 +25527,31 @@ async function kf029Logout(){
     else renderApp();
     return;
   }
-  KF029Remote.busy = true; KF029Remote.error = ''; renderApp();
+  KF029Remote.busy=true;
+  KF029Remote.error='';
+  renderApp();
   try {
-    await kf029Request('/api/v1/auth/logout', { method:'POST' });
+    if (AppState.worldRecord && (kf031ManagementBlocksProgress() || kf031HasPendingManagementChanges())) {
+      KF029Remote.message='Letzte Änderungen werden vor dem Abmelden gespeichert ...';
+      renderApp();
+      await kf031FlushManagementSave('logout');
+    }
+    await kf029Request('/api/v1/auth/logout',{method:'POST'});
     kf029SetToken(null);
     kf029SetUser(null);
-    KF029Remote.worlds = [];
-    KF029Remote.revision = null;
-    KF029Remote.membership = null;
-    KF029Remote.showWorldList = false;
+    KF029Remote.worlds=[];
+    KF029Remote.revision=null;
+    KF029Remote.membership=null;
+    KF029Remote.showWorldList=false;
+    kf031ResetManagementSaveState();
     resetState();
-    renderApp(); renderModal();
+    renderApp();
+    renderModal();
   } catch (error) {
-    KF029Remote.error = 'Abmelden gestoppt, weil der aktuelle Stand nicht sicher gespeichert werden konnte.';
+    KF029Remote.error='Abmelden gestoppt, weil der aktuelle Stand nicht sicher gespeichert werden konnte.';
     renderApp();
   } finally {
-    KF029Remote.busy = false;
+    KF029Remote.busy=false;
   }
 }
 function kf030WorldActionLabel(world){
