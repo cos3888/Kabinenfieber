@@ -177,6 +177,9 @@ function makeServerWorld(worldId,userId){
   const readyStart=appCode.indexOf('async function kf031RequestReadyAndMaybeAdvance(');
   const readyEnd=appCode.indexOf('async function kf031EnsureMatchDetail(',readyStart);
   const readySource=appCode.slice(readyStart,readyEnd);
+  const claimedStart=appCode.indexOf('async function kf032AdvanceClaimedRound(');
+  const claimedEnd=appCode.indexOf('function kf032ScheduleProgressPoll(',claimedStart);
+  const claimedSource=appCode.slice(claimedStart,claimedEnd);
   const markStart=appCode.indexOf('function markCupDrawPresented(');
   const markEnd=appCode.indexOf('function cupDrawPresentationQueue(',markStart);
   const markSource=appCode.slice(markStart,markEnd);
@@ -185,10 +188,11 @@ function makeServerWorld(worldId,userId){
     advanceSource.indexOf('ensureDueFieberCupDraws')<advanceSource.indexOf('if (dueVisibleDraws.length)')&&advanceSource.includes('cupDraws: dueVisibleDraws'),
     {});
   check('Same-slot progression delta is checkpointed before any queued draw is presented',
-    readySource.includes('kf031DeltaTouchesProgression(postAdvanceDelta)')&&
-    readySource.indexOf("await kf029CommitHardCheckpoint('calendar-slot')")>=0&&
-    readySource.indexOf("await kf029CommitHardCheckpoint('calendar-slot')")<readySource.indexOf('presentNextQueuedCupDraw()')&&
-    readySource.includes('deferCupDrawPresentation=true'),
+    claimedSource.includes('kf031DeltaTouchesProgression(postAdvanceDelta)')&&
+    claimedSource.indexOf("await kf029CommitHardCheckpoint('calendar-slot')")>=0&&
+    claimedSource.indexOf("await kf029CommitHardCheckpoint('calendar-slot')")<claimedSource.indexOf('presentNextQueuedCupDraw()')&&
+    claimedSource.includes('deferCupDrawPresentation=true')&&
+    readySource.includes('kf032AdvanceClaimedRound(state,actionEl)'),
     {});
   check('Presentation status no longer writes presentedClubIds into authoritative calendar state',
     !markSource.includes('presentedClubIds.push')&&!markSource.includes('draw.presentedClubIds ='),
@@ -234,8 +238,20 @@ function makeServerWorld(worldId,userId){
       Number(saved.revision)===Number(manifest.revision)+1&&
       reloaded.worldRecord.gameState.calendar.currentSlotKey==='end-8'&&
       JSON.stringify(reloadedDraw)===JSON.stringify(draw)&&JSON.stringify(reloadedFixture)===JSON.stringify(fixture)&&
-      progression.status==='WAITING'&&Number(progression.revision)===Number(saved.revision),
-      {revision:saved.revision,currentSlotKey:reloaded.worldRecord.gameState.calendar.currentSlotKey,progression});
+      progression.status==='OPEN'&&Number(progression.roundGeneration)===2&&Number(progression.revision)===Number(saved.revision),
+      {
+        revision:saved.revision,
+        manifestRevision:manifest.revision,
+        revisionAdvanced:Number(saved.revision)===Number(manifest.revision)+1,
+        currentSlotKey:reloaded.worldRecord.gameState.calendar.currentSlotKey,
+        drawEqual:JSON.stringify(reloadedDraw)===JSON.stringify(draw),
+        fixtureEqual:JSON.stringify(reloadedFixture)===JSON.stringify(fixture),
+        reloadedDraw,
+        expectedDraw:draw,
+        reloadedFixture,
+        expectedFixture:fixture,
+        progression
+      });
 
     let managementError=null;
     try{

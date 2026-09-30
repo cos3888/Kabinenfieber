@@ -60,7 +60,9 @@
     "test:0313": "node tests/run_kf_0_31_3_cold_load_compaction_test.js",
     "test:0314": "node tests/run_kf_0_31_4_save_object_isolation_test.js",
     "test:0314-draw": "node tests/run_kf_0_31_4_authoritative_draw_progression_test.js",
-    "test:0314-memory": "node tests/run_kf_0_31_4_large_world_memory_test.js"
+    "test:0314-memory": "node tests/run_kf_0_31_4_large_world_memory_test.js",
+    "test:0320": "node tests/run_kf_0_32_0_round_scope_management_test.js",
+    "test:0320-browser": "node tests/run_kf_0_32_0_browser_round_coordination_test.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.2.0",

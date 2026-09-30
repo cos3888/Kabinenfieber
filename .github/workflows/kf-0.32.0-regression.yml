@@ -1,0 +1,25 @@
+name: KF 0.32.0 Regression
+
+on:
+  push:
+    branches:
+      - feature/kf-0.32.0-multiplayer-round-progression
+  pull_request:
+
+jobs:
+  round-scope-management:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --no-audit --no-fund
+      - name: KF 0.32.0 round scope management regression
+        run: npm run test:0320
+      - name: KF 0.32.0 browser round coordination regression
+        run: npm run test:0320-browser
+      - name: KF 0.31.4 save object isolation regression
+        run: npm run test:0314
+      - name: Current core regression suite
+        run: npm run test:current

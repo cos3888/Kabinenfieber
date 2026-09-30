@@ -189,7 +189,7 @@ class WorldRuntimeManager {
     return next;
   }
 
-  async saveSnapshot({ worldId, userId, worldRecord, expectedRevision, matches = [], financeEvents = [] , allowMultiplayerProgress = false }) {
+  async saveSnapshot({ worldId, userId, worldRecord, expectedRevision, matches = [], financeEvents = [], allowMultiplayerProgress = false, progressionRunId = null, roundGeneration = null, progressionLeaseId = null }) {
     return this._enqueue(worldId, async () => {
       const runtime = await this._load(worldId);
       if (Number(expectedRevision) !== Number(runtime.revision)) {
@@ -208,7 +208,10 @@ class WorldRuntimeManager {
         season,
         matches,
         financeEvents,
-        expectedRevision: runtime.revision
+        expectedRevision: runtime.revision,
+        progressionRunId,
+        roundGeneration,
+        progressionLeaseId
       });
       runtime.worldRecord = nextRecord;
       runtime.revision = Number(manifest.revision);
@@ -289,7 +292,7 @@ class WorldRuntimeManager {
     });
   }
 
-  async saveSlot({ worldId, userId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches = [], financeEvents = [] }) {
+  async saveSlot({ worldId, userId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches = [], financeEvents = [], progressionRunId = null, roundGeneration = null, progressionLeaseId = null }) {
     return this._enqueue(worldId, async () => {
       const runtime = await this._load(worldId);
       if (Number(expectedRevision) !== Number(runtime.revision)) {
@@ -318,7 +321,10 @@ class WorldRuntimeManager {
           slotKey,
           matches,
           financeEvents,
-          expectedRevision: runtime.revision
+          expectedRevision: runtime.revision,
+          progressionRunId,
+          roundGeneration,
+          progressionLeaseId
         });
       } catch (error) {
         if (undoDelta) applyWorldDelta(runtime.worldRecord, undoDelta);
