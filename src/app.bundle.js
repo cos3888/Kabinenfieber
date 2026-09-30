@@ -17932,6 +17932,9 @@ function renderOfficeView(){
   var officeRoundStatusHtml = officeRoundState
     ? '<div class="office-save-status is-pending" role="status">'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>'
     : '';
+  var officeQuickSimHintHtml = (KF029Remote && KF029Remote.user && officeAdvanceStartsMatch && !officeRoundReadOnly)
+    ? '<div class="office-save-status" role="note">Schnellberechnung: Der Co-Trainer übernimmt dein gesamtes Spiel. Ein späterer Live-Einstieg ist für dieses Match nicht möglich.</div>'
+    : '';
   if (officeSaveState === 'failed') {
     officeSaveStatusHtml = '<div class="office-save-status is-failed" role="status"><span>Speichern fehlgeschlagen · Änderungen bleiben vorgemerkt.</span><button class="ghost-btn" type="button" data-action="kf-retry-management-save">Erneut versuchen</button></div>';
   } else if (officeSaveState === 'waiting') {
@@ -17973,7 +17976,8 @@ function renderOfficeView(){
     '        <section class="office-side-card office-mail-card">' +
     '          <div class="office-mail-header"><h3>Mail-Center</h3><button class="ghost-btn office-mail-open-btn" type="button" data-action="open-mail-center">Öffnen</button></div>' +
     '          <div class="office-mail-list">' + (mailPreview || '<div class="empty-state office-empty">Keine Nachrichten.</div>') + '</div>' +
-    '          <button class="primary-btn office-advance-btn' + (requiredMail ? ' is-mail-required' : (officeAdvanceStartsMatch ? ' is-start-match' : '')) + officeSaveButtonClass + '" type="button" data-action="office-advance"' + officeSaveButtonAttrs + '><span class="office-advance-label">' + (officeRoundReadOnly ? ((officeRoundState&&officeRoundState.status==='OPEN')?'Bereit ✓':'Spieltag läuft') : (requiredMail ? 'Mail' : (officeAdvanceStartsMatch ? 'Spiel starten' : 'Weiter'))) + '</span>' + (officeSavePhaseLabel ? '<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>' : '') + '</button>' +
+    '          <button class="primary-btn office-advance-btn' + (requiredMail ? ' is-mail-required' : (officeAdvanceStartsMatch ? ' is-start-match' : '')) + officeSaveButtonClass + '" type="button" data-action="office-advance"' + officeSaveButtonAttrs + '><span class="office-advance-label">' + (officeRoundReadOnly ? ((officeRoundState&&officeRoundState.status==='OPEN')?'Bereit ✓':'Spieltag läuft') : (requiredMail ? 'Mail' : (officeAdvanceStartsMatch && KF029Remote && KF029Remote.user ? 'Schnellberechnen' : (officeAdvanceStartsMatch ? 'Spiel starten' : 'Weiter')))) + '</span>' + (officeSavePhaseLabel ? '<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>' : '') + '</button>' +
+    officeQuickSimHintHtml +
     officeRoundStatusHtml +
     officeSaveStatusHtml +
     '        </section>' +
@@ -25118,7 +25122,7 @@ function kf031ProgressMessage(state){
     suffix=' · '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
   }
   if (state.status==='LOCKING') return 'Runde wird gesperrt ...';
-  if (state.status==='MATCHDAY') return 'Spieltag läuft ...';
+  if (state.status==='MATCHDAY') return state.matchdayPlan && state.matchdayPlan.hasLiveFixtures ? 'Live-Spieltag läuft ...' : 'Spieltag wird schnellberechnet ...';
   if (state.status==='FINALIZING') return 'Spieltag wird abgeschlossen ...';
   var meReady=kf032CurrentUserReady(state);
   if (state.timeModel==='FIXED_SCHEDULE') {
@@ -25255,7 +25259,8 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
       body:{
         clientVersion:KF029_REMOTE_CONTRACT_VERSION,
         expectedRevision:expectedRevision,
-        roundGeneration:KF029Remote.roundGeneration
+        roundGeneration:KF029Remote.roundGeneration,
+        matchIntent:'QUICK'
       }
     });
     var state=data&&data.progression||null;
