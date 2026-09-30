@@ -25381,7 +25381,7 @@ function kf029OpenWorldCreateModal(){
       '<option value="PUBLIC:APPLICATION">Bewerbungswelt · Beitritt nach Freigabe</option>' +
       '<option value="PUBLIC:OPEN">Offene Welt · freie Vereine direkt wählbar</option>' +
       '</select></label>' +
-      '<div class="kf-auth-hint">Öffentliche Suche, Bewerbungen und Direktbeitritt folgen im Multiplayer-Block. Die Einstellung wird bereits verbindlich gespeichert.</div>' +
+      '<div class="kf-auth-hint">Für einen Mehrspielertest wähle „Offene Welt“. Ein zweites Benutzerkonto findet die Welt unter „Alle Welten“, kann auf „Beitreten“ klicken und anschließend einen freien Verein wählen. Private Welten bleiben ohne Einladung geschlossen.</div>' +
       '<div id="kf-world-create-error" class="kf-world-create-error"></div>' +
       '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-create-world-confirm">Spielwelt erstellen</button></div>' +
       '</div>'

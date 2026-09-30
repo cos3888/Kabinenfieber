@@ -39,6 +39,11 @@ check('Current multiplayer match action is explicit Schnellberechnung with irrev
   app.includes("'Schnellberechnen'")&&
   app.includes('Der Co-Trainer übernimmt dein gesamtes Spiel. Ein späterer Live-Einstieg ist für dieses Match nicht möglich.'));
 
+check('Lobby explains the existing manual two-account multiplayer test path',
+  app.includes('Für einen Mehrspielertest wähle „Offene Welt“.')&&
+  app.includes("data-action="kf-join-world"")&&
+  app.includes('function kf030JoinWorld(worldId)'));
+
 check('Server merges round management overlays into the authoritative progression commit',
   server.includes('_mergeManagementOverlayDelta')&&
   server.includes('progressWorldDelta = this._mergeManagementOverlayDelta(worldId, rows, worldDelta)'));
