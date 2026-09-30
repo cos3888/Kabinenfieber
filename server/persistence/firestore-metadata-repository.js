@@ -476,6 +476,30 @@ class FirestoreMetadataRepository {
       }
       state.status = ROUND_STATUS_MATCHDAY;
       state.matchdayPlan = matchdayPlan || null;
+      if (state.matchdayPlan && !Array.isArray(state.matchdayPlan.completedLiveFixtureIds)) {
+        state.matchdayPlan.completedLiveFixtureIds = [];
+      }
+      tx.set(ref, state);
+      return state;
+    });
+  }
+
+  async markLiveFixtureCompleted({ worldId, roundGeneration, progressionRunId, fixtureId }) {
+    const ref = this._progression(worldId);
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) throw new DomainRuleError('Progression state not found');
+      const state = doc.data();
+      if (state.status !== ROUND_STATUS_MATCHDAY) throw new DomainRuleError('Matchday is not active');
+      if (Number(state.roundGeneration) !== Number(roundGeneration) ||
+          String(state.progressionRunId || '') !== String(progressionRunId || '')) {
+        throw new DomainRuleError('Progression generation mismatch');
+      }
+      const plan = state.matchdayPlan || {};
+      const fixturePlan = (plan.fixturePlans || []).find(row => row && String(row.fixtureId) === String(fixtureId));
+      if (!fixturePlan || fixturePlan.mode !== 'LIVE') throw new DomainRuleError('Live fixture is not part of this matchday');
+      plan.completedLiveFixtureIds = Array.from(new Set([...(plan.completedLiveFixtureIds || []).map(String), String(fixtureId)]));
+      state.matchdayPlan = plan;
       tx.set(ref, state);
       return state;
     });
