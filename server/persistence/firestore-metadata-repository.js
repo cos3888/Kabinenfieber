@@ -54,7 +54,10 @@ class FirestoreMetadataRepository {
     return doc.exists ? doc.data() : null;
   }
 
-  async setWorldLobbyProjection({ worldId, currentSeason = 1, maxPlayers = 0, clubNamesById = {} }) {
+  async setWorldLobbyProjection({
+    worldId, currentSeason = 1, maxPlayers = 0, clubNamesById = {},
+    roundTimeModel = TIME_MODEL_COUNTDOWN, roundDurationSeconds = 120, nextRoundAt = null
+  }) {
     const ref = this._world(worldId);
     const doc = await ref.get();
     if (!doc.exists) throw new PersistenceNotFoundError('World not found', { worldId });
@@ -62,6 +65,9 @@ class FirestoreMetadataRepository {
       currentSeason: Number(currentSeason || 1),
       maxPlayers: Number(maxPlayers || 0),
       clubNamesById: clubNamesById || {},
+      roundTimeModel:roundTimeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN,
+      roundDurationSeconds:Math.max(15, Number(roundDurationSeconds || 120)),
+      nextRoundAt:nextRoundAt || null,
       projectionUpdatedAt: nowIso()
     };
     await ref.set(patch, { merge:true });
