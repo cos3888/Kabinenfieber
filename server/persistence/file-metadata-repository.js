@@ -266,12 +266,16 @@ class FileMetadataRepository {
           progressionRunId:null,
           leaseId:null,
           leaseExpiresAt:null,
-          lastCompletedProgressionRunId:null
+          lastCompletedProgressionRunId:null,
+          matchIntentByUserId:{},
+          matchdayPlan:null
         };
       } else {
         if (!state.roundGeneration) state.roundGeneration = 1;
         if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
         if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+      state.matchIntentByUserId = state.matchIntentByUserId || {};
+      if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
         if (!state.timeModel) state.timeModel = TIME_MODEL_COUNTDOWN;
         if (state.status === ROUND_STATUS_OPEN) {
           state.revision = Number(revision);
@@ -370,6 +374,8 @@ class FileMetadataRepository {
       if (!state.roundGeneration) state.roundGeneration = 1;
       if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
       if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+      state.matchIntentByUserId = state.matchIntentByUserId || {};
+      if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
 
       const now = Date.now();
       if ((state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) &&
@@ -404,7 +410,7 @@ class FileMetadataRepository {
 
   async markTrainerReady({
     worldId, userId, expectedRevision, roundGeneration = null, activeUserIds,
-    deadlineAt, timeModel = TIME_MODEL_COUNTDOWN, leaseMs = 120000
+    deadlineAt, timeModel = TIME_MODEL_COUNTDOWN, matchIntent = 'QUICK', leaseMs = 120000
   }) {
     return this._mutate(data => {
       data.progression = data.progression || {};
@@ -423,12 +429,16 @@ class FileMetadataRepository {
           progressionRunId:null,
           leaseId:null,
           leaseExpiresAt:null,
-          lastCompletedProgressionRunId:null
+          lastCompletedProgressionRunId:null,
+          matchIntentByUserId:{},
+          matchdayPlan:null
         };
       }
       if (!state.roundGeneration) state.roundGeneration = 1;
       if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
       if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+      state.matchIntentByUserId = state.matchIntentByUserId || {};
+      if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
       if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) {
         throw new DomainRuleError('Round generation mismatch');
       }
@@ -446,7 +456,12 @@ class FileMetadataRepository {
         return { ...state, activeTrainerCount:active.length, readyTrainerCount:(state.readyUserIds || []).filter(id => active.includes(String(id))).length, shouldAdvance:false };
       }
 
+      const alreadyReady = (state.readyUserIds || []).map(String).includes(String(userId));
       state.readyUserIds = Array.from(new Set([...(state.readyUserIds || []).map(String), String(userId)]));
+      if (!alreadyReady) {
+        const normalizedIntent = String(matchIntent || 'QUICK').toUpperCase() === 'LIVE' ? 'LIVE' : 'QUICK';
+        state.matchIntentByUserId[String(userId)] = normalizedIntent;
+      }
       state.timeModel = timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
       if (state.timeModel === TIME_MODEL_COUNTDOWN) {
         if (!state.deadlineAt) state.deadlineAt = deadlineAt || new Date(now + 120000).toISOString();
@@ -475,7 +490,7 @@ class FileMetadataRepository {
     });
   }
 
-  async beginMatchday({ worldId, expectedRevision, roundGeneration, leaseId, progressionRunId }) {
+  async beginMatchday({ worldId, expectedRevision, roundGeneration, leaseId, progressionRunId, matchdayPlan = null }) {
     return this._mutate(data => {
       const state = data.progression && data.progression[worldId];
       if (!state) throw new DomainRuleError('Progression state not found');
@@ -489,6 +504,7 @@ class FileMetadataRepository {
         throw new DomainRuleError('Progression lease mismatch');
       }
       state.status = ROUND_STATUS_MATCHDAY;
+      state.matchdayPlan = matchdayPlan ? clone(matchdayPlan) : null;
       data.progression[worldId] = state;
       return state;
     });
