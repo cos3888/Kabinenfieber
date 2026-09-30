@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const { DomainRuleError, PersistenceNotFoundError } = require('./errors');
 const {
-  ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY,
+  ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY, ROUND_STATUS_FINALIZING,
   TIME_MODEL_COUNTDOWN, TIME_MODEL_FIXED_SCHEDULE,
   mergeWorldDeltas
 } = require('../domain/round-management');
@@ -481,6 +481,27 @@ class FirestoreMetadataRepository {
     });
   }
 
+  async beginFinalizing({ worldId, expectedRevision, roundGeneration, leaseId, progressionRunId }) {
+    const ref = this._progression(worldId);
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) throw new DomainRuleError('Progression state not found');
+      const state = doc.data();
+      if (Number(state.revision) !== Number(expectedRevision) ||
+          Number(state.roundGeneration) !== Number(roundGeneration)) {
+        throw new DomainRuleError('Progression generation mismatch');
+      }
+      if (state.status !== ROUND_STATUS_MATCHDAY ||
+          String(state.leaseId || '') !== String(leaseId || '') ||
+          String(state.progressionRunId || '') !== String(progressionRunId || '')) {
+        throw new DomainRuleError('Progression lease mismatch');
+      }
+      state.status = ROUND_STATUS_FINALIZING;
+      tx.set(ref, state);
+      return state;
+    });
+  }
+
   async completeWorldProgress({
     worldId, expectedRevision, nextRevision, leaseId, roundGeneration = null,
     progressionRunId = null, allowCommittedRecovery = false
@@ -552,7 +573,7 @@ class FirestoreMetadataRepository {
       if (!doc.exists) return null;
       const state = doc.data();
       if (Number(state.revision) !== Number(expectedRevision)) return state;
-      if ((state.status === ROUND_STATUS_MATCHDAY || state.status === ROUND_STATUS_LOCKING) &&
+      if ((state.status === ROUND_STATUS_MATCHDAY || state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_FINALIZING) &&
           String(state.leaseId || '') === String(leaseId || '')) {
         state.status=ROUND_STATUS_OPEN;
         state.leaseId=null;
