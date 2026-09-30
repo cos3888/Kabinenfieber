@@ -41,7 +41,7 @@ check('Current multiplayer match action is explicit Schnellberechnung with irrev
 
 check('Lobby explains the existing manual two-account multiplayer test path',
   app.includes('Für einen Mehrspielertest wähle „Offene Welt“.')&&
-  app.includes("data-action="kf-join-world"")&&
+  app.includes('data-action="kf-join-world"')&&
   app.includes('function kf030JoinWorld(worldId)'));
 
 check('Server merges round management overlays into the authoritative progression commit',
