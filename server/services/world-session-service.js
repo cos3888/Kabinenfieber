@@ -114,11 +114,23 @@ class WorldSessionService {
 
   async _syncLobbyProjection(record) {
     const clubs = record && record.gameState && record.gameState.clubs;
+    const settings = record && record.runtimeSettings || {};
+    const roundTimeModel = String(settings.roundTimeModel || TIME_MODEL_COUNTDOWN).toUpperCase() === TIME_MODEL_FIXED_SCHEDULE
+      ? TIME_MODEL_FIXED_SCHEDULE
+      : TIME_MODEL_COUNTDOWN;
+    const configuredSeconds = settings.roundDurationSeconds != null
+      ? Number(settings.roundDurationSeconds)
+      : (settings.roundDurationMinutes != null
+        ? Number(settings.roundDurationMinutes) * 60
+        : (settings.roundDurationHours != null ? Number(settings.roundDurationHours) * 3600 : 120));
     return this.metadata.setWorldLobbyProjection({
       worldId: record.id,
       currentSeason: Number(record.gameState.meta && record.gameState.meta.seasonNumber || 1),
       maxPlayers: clubs && Array.isArray(clubs.order) ? clubs.order.length : 0,
-      clubNamesById: this._clubNamesById(record)
+      clubNamesById: this._clubNamesById(record),
+      roundTimeModel,
+      roundDurationSeconds:Math.max(15, Number.isFinite(configuredSeconds) && configuredSeconds > 0 ? configuredSeconds : 120),
+      nextRoundAt:settings.nextRoundAt || null
     });
   }
 
