@@ -521,7 +521,8 @@ class FirestoreMetadataRepository {
 
       if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
       if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Progression generation mismatch');
-      if (state.status !== ROUND_STATUS_MATCHDAY && !(allowCommittedRecovery && state.status === ROUND_STATUS_LOCKING)) {
+      if (state.status !== ROUND_STATUS_FINALIZING &&
+          !(allowCommittedRecovery && (state.status === ROUND_STATUS_MATCHDAY || state.status === ROUND_STATUS_LOCKING))) {
         throw new DomainRuleError('Progression state mismatch');
       }
       if (progressionRunId != null && String(state.progressionRunId || '') !== String(progressionRunId || '')) {
@@ -543,7 +544,9 @@ class FirestoreMetadataRepository {
         progressionRunId:null,
         leaseId:null,
         leaseExpiresAt:null,
-        lastCompletedProgressionRunId:completedRunId
+        lastCompletedProgressionRunId:completedRunId,
+        matchIntentByUserId:{},
+        matchdayPlan:null
       };
       tx.set(ref, next);
       return { next, completedGeneration:Number(state.roundGeneration || 1), alreadyCompleted:false };
