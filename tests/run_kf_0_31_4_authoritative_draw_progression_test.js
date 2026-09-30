@@ -234,7 +234,7 @@ function makeServerWorld(worldId,userId){
       Number(saved.revision)===Number(manifest.revision)+1&&
       reloaded.worldRecord.gameState.calendar.currentSlotKey==='end-8'&&
       JSON.stringify(reloadedDraw)===JSON.stringify(draw)&&JSON.stringify(reloadedFixture)===JSON.stringify(fixture)&&
-      progression.status==='WAITING'&&Number(progression.revision)===Number(saved.revision),
+      progression.status==='OPEN'&&Number(progression.roundGeneration)===2&&Number(progression.revision)===Number(saved.revision),
       {revision:saved.revision,currentSlotKey:reloaded.worldRecord.gameState.calendar.currentSlotKey,progression});
 
     let managementError=null;
