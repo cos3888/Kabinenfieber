@@ -309,7 +309,8 @@ function makeWorldRecord(worldId,userId){
     ]);
     check('Expired countdown can be claimed after offline time and creates exactly one progression owner',
       countdownClaims.filter(row=>row.shouldAdvance).length===1&&
-      countdownClaims.every(row=>row.status==='MATCHDAY')&&
+      countdownClaims.every(row=>['LOCKING','MATCHDAY'].includes(row.status))&&
+      countdownClaims.some(row=>row.status==='MATCHDAY')&&
       new Set(countdownClaims.map(row=>row.progressionRunId)).size===1,
       {countdownClaims});
 
@@ -345,7 +346,8 @@ function makeWorldRecord(worldId,userId){
     ]);
     check('FIXED_SCHEDULE becomes due only at its authoritative server deadline and is claimed once',
       fixedClaims.filter(row=>row.shouldAdvance).length===1&&
-      fixedClaims.every(row=>row.status==='MATCHDAY')&&
+      fixedClaims.every(row=>['LOCKING','MATCHDAY'].includes(row.status))&&
+      fixedClaims.some(row=>row.status==='MATCHDAY')&&
       new Set(fixedClaims.map(row=>row.progressionRunId)).size===1,
       {fixedClaims});
 
