@@ -17914,19 +17914,24 @@ function renderOfficeView(){
       ((KF029Remote.managementSaving || KF029Remote.managementQueued) ? 'saving' :
         ((KF029Remote.managementDirty || KF029Remote.autosaveTimer) ? 'waiting' :
           (Number(KF029Remote.saveUiConfirmedUntil||0) > Date.now() ? 'confirmed' : 'clean'))));
-  var officeSaveBlocksAdvance = !requiredMail && ['waiting','saving','confirming','failed'].indexOf(officeSaveState)>=0;
+  var officeRoundReadOnly = typeof kf032RoundReadOnlyForMe==='function' && kf032RoundReadOnlyForMe();
+  var officeRoundState = KF029Remote && KF029Remote.progression || null;
+  var officeSaveBlocksAdvance = officeRoundReadOnly || (!requiredMail && ['waiting','saving','confirming','failed'].indexOf(officeSaveState)>=0);
   var officeSaveButtonClass = requiredMail ? '' :
     (officeSaveState === 'failed' ? ' is-save-failed' :
       (officeSaveState === 'waiting' ? ' is-save-pending save-phase-waiting' :
         (officeSaveState === 'saving' ? ' is-save-pending save-phase-saving' :
           (officeSaveState === 'confirming' ? ' is-save-pending save-phase-confirming' :
             (officeSaveState === 'confirmed' ? ' is-save-confirmed save-phase-confirmed' : '')))));
-  var officeSaveButtonAttrs = officeSaveBlocksAdvance ? ' disabled aria-disabled="true" aria-busy="true" title="Weiter ist möglich, sobald der aktuelle Stand serverseitig bestätigt ist."' : '';
+  var officeSaveButtonAttrs = officeSaveBlocksAdvance ? ' disabled aria-disabled="true" aria-busy="true" title="' + escapeHtml(officeRoundReadOnly ? 'Du bist für diese Runde bereit. Bis zum Rundenwechsel kannst du dich weiter umsehen, aber nichts mehr verändern.' : 'Weiter ist möglich, sobald der aktuelle Stand serverseitig bestätigt ist.') + '"' : '';
   var officeSavePhaseLabel = officeSaveState === 'waiting' ? 'Änderung erkannt · wartet' :
     (officeSaveState === 'saving' ? 'Wird gespeichert …' :
       (officeSaveState === 'confirming' ? 'Server bestätigt …' :
         (officeSaveState === 'confirmed' ? 'Gespeichert' : '')));
   var officeSaveStatusHtml = '';
+  var officeRoundStatusHtml = officeRoundState
+    ? '<div class="office-save-status is-pending" role="status">'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>'
+    : '';
   if (officeSaveState === 'failed') {
     officeSaveStatusHtml = '<div class="office-save-status is-failed" role="status"><span>Speichern fehlgeschlagen · Änderungen bleiben vorgemerkt.</span><button class="ghost-btn" type="button" data-action="kf-retry-management-save">Erneut versuchen</button></div>';
   } else if (officeSaveState === 'waiting') {
@@ -17968,7 +17973,8 @@ function renderOfficeView(){
     '        <section class="office-side-card office-mail-card">' +
     '          <div class="office-mail-header"><h3>Mail-Center</h3><button class="ghost-btn office-mail-open-btn" type="button" data-action="open-mail-center">Öffnen</button></div>' +
     '          <div class="office-mail-list">' + (mailPreview || '<div class="empty-state office-empty">Keine Nachrichten.</div>') + '</div>' +
-    '          <button class="primary-btn office-advance-btn' + (requiredMail ? ' is-mail-required' : (officeAdvanceStartsMatch ? ' is-start-match' : '')) + officeSaveButtonClass + '" type="button" data-action="office-advance"' + officeSaveButtonAttrs + '><span class="office-advance-label">' + (requiredMail ? 'Mail' : (officeAdvanceStartsMatch ? 'Spiel starten' : 'Weiter')) + '</span>' + (officeSavePhaseLabel ? '<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>' : '') + '</button>' +
+    '          <button class="primary-btn office-advance-btn' + (requiredMail ? ' is-mail-required' : (officeAdvanceStartsMatch ? ' is-start-match' : '')) + officeSaveButtonClass + '" type="button" data-action="office-advance"' + officeSaveButtonAttrs + '><span class="office-advance-label">' + (officeRoundReadOnly ? ((officeRoundState&&officeRoundState.status==='OPEN')?'Bereit ✓':'Spieltag läuft') : (requiredMail ? 'Mail' : (officeAdvanceStartsMatch ? 'Spiel starten' : 'Weiter'))) + '</span>' + (officeSavePhaseLabel ? '<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>' : '') + '</button>' +
+    officeRoundStatusHtml +
     officeSaveStatusHtml +
     '        </section>' +
     '      </aside>' +
@@ -24472,6 +24478,8 @@ var KF029Remote = {
   committedFinanceIds: {},
   committedGameState: null,
   progression: null,
+  roundGeneration: null,
+  scopeRevisions: {},
   progressLeaseId: null,
   progressTimer: null,
   progressRequestPending: false,
@@ -24699,11 +24707,13 @@ async function kf031RebaseManagementConflict(record, localDelta, attemptedDelta)
     KF029Remote.committedGameState=kf031CloneJson(serverRecord.gameState);
     KF029Remote.revision=Number(data.revision);
     KF029Remote.currentSeason=Number(data.currentSeason || KF029Remote.currentSeason || ((serverRecord.gameState.meta||{}).seasonNumber) || 1);
+    KF029Remote.roundGeneration=Number(data.roundGeneration || ((data.roundState||{}).roundGeneration) || KF029Remote.roundGeneration || 1);
+    KF029Remote.scopeRevisions=Object.assign({},data.scopeRevisions || {});
+    KF029Remote.progression=data.roundState || KF029Remote.progression || null;
     KF029Remote.lastSavedAt=data.committedAt || KF029Remote.lastSavedAt;
     KF029Remote.managementFailed=false;
     KF029Remote.managementError='';
     KF029Remote.managementDirty=kf031HasPendingManagementChanges();
-    KF029Remote.progression=null;
     kf031ClearProgressTimer();
     invalidateRuntimeDerivedIndex(rebasedGameState);
     return true;
@@ -24753,6 +24763,8 @@ function kf031QueueManagementSave(reason){
           expectedRevision:expectedRevision,
           clientVersion:KF029_REMOTE_CONTRACT_VERSION,
           worldDelta:worldDelta,
+          roundGeneration:KF029Remote.roundGeneration,
+          expectedScopeRevisions:Object.assign({},KF029Remote.scopeRevisions || {}),
           reason:KF029Remote.managementReason || reason || 'management'
         }
       });
@@ -24781,6 +24793,8 @@ function kf031QueueManagementSave(reason){
     }
     KF029Remote.revision=Number(data.revision);
     KF029Remote.currentSeason=Number(data.currentSeason || KF029Remote.currentSeason || (((record.gameState||{}).meta||{}).seasonNumber) || 1);
+    KF029Remote.roundGeneration=Number(data.roundGeneration || KF029Remote.roundGeneration || 1);
+    KF029Remote.scopeRevisions=Object.assign({},data.scopeRevisions || KF029Remote.scopeRevisions || {});
     KF029Remote.lastSavedAt=data.committedAt || new Date().toISOString();
     KF029Remote.error='';
     KF029Remote.managementSaving=false;
@@ -25066,6 +25080,9 @@ function kf029InstallLoadedWorld(data){
   KF029Remote.revision = Number(data.revision);
   KF029Remote.currentSeason = Number(data.currentSeason || ((record.gameState.meta||{}).seasonNumber)||1);
   KF029Remote.membership = membership;
+  KF029Remote.progression = data.roundState || null;
+  KF029Remote.roundGeneration = Number(data.roundGeneration || ((data.roundState||{}).roundGeneration) || 1);
+  KF029Remote.scopeRevisions = Object.assign({},data.scopeRevisions || {});
   KF029Remote.showWorldList = false;
   KF029Remote.lastSavedAt = data.committedAt || null;
   KF029Remote.lastCommittedSlotKey = (((record.gameState||{}).calendar||{}).currentSlotKey) || null;
@@ -25081,6 +25098,9 @@ function kf029InstallLoadedWorld(data){
     setCurrentView('club-selection');
   }
   renderApp(); renderModal();
+  if (KF029Remote.progression && (KF029Remote.progression.deadlineAt || KF029Remote.progression.status !== 'OPEN' || kf032CurrentUserReady(KF029Remote.progression))) {
+    kf032ScheduleProgressPoll(null,250);
+  }
 }
 function kf031ClearProgressTimer(){
   if (KF029Remote.progressTimer) {
@@ -25097,8 +25117,33 @@ function kf031ProgressMessage(state){
     var seconds=Math.max(0,Math.ceil((new Date(state.deadlineAt).getTime()-Date.now())/1000));
     suffix=' · '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
   }
-  if (state.status==='PROCESSING') return 'Spieltag wird von einem Trainer verarbeitet ...';
-  return String(ready)+'/'+String(total||'?')+' Trainer bereit'+suffix;
+  if (state.status==='LOCKING') return 'Runde wird gesperrt ...';
+  if (state.status==='MATCHDAY') return 'Spieltag läuft ...';
+  if (state.status==='FINALIZING') return 'Spieltag wird abgeschlossen ...';
+  var meReady=kf032CurrentUserReady(state);
+  if (state.timeModel==='FIXED_SCHEDULE') {
+    return (meReady?'Bereit · ':'')+String(ready)+'/'+String(total||'?')+' Trainer bereit · fester Termin'+suffix;
+  }
+  return (meReady?'Bereit · ':'')+String(ready)+'/'+String(total||'?')+' Trainer bereit'+suffix;
+}
+function kf032CurrentUserReady(state){
+  var userId=String(((KF029Remote||{}).user||{}).userId||'');
+  return !!(userId && state && (state.readyUserIds||[]).map(String).indexOf(userId)>=0);
+}
+function kf032RoundReadOnlyForMe(){
+  var state=KF029Remote && KF029Remote.progression;
+  if (!state) return false;
+  if (state.status && state.status!=='OPEN') return true;
+  return kf032CurrentUserReady(state);
+}
+function kf032ActionMutatesWorld(action,actionEl){
+  if (KF031_IMMEDIATE_MANAGEMENT_ACTIONS && KF031_IMMEDIATE_MANAGEMENT_ACTIONS[action]) return true;
+  if (KF031_COALESCED_MANAGEMENT_ACTIONS && KF031_COALESCED_MANAGEMENT_ACTIONS[action]) return true;
+  if (action==='lineup-goalkeeper-autofix') {
+    var mode=actionEl && actionEl.getAttribute ? actionEl.getAttribute('data-mode') : '';
+    return mode!=='advance' && mode!=='sim-until';
+  }
+  return false;
 }
 async function kf031ReleaseProgressLease(worldId, expectedRevision, leaseId){
   if (!worldId || !leaseId) return null;
@@ -25112,63 +25157,114 @@ async function kf031ReleaseProgressLease(worldId, expectedRevision, leaseId){
   }
 }
 
+async function kf032AdvanceClaimedRound(state,actionEl){
+  if (!state || !state.shouldAdvance || !state.leaseId || !AppState.worldRecord) return state;
+  KF029Remote.progressLeaseId=state.leaseId;
+  KF029Remote.progression=state;
+  KF029Remote.roundGeneration=Number(state.roundGeneration || KF029Remote.roundGeneration || 1);
+  KF029Remote.message='Spieltag wird verarbeitet ...';
+  renderApp();
+  var record=AppState.worldRecord;
+  var expectedRevision=KF029Remote.revision;
+  var beforeSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
+  var beforeSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
+  AppState.ui.deferCupDrawPresentation=true;
+  try {
+    kf029BaseHandleAction('office-advance',actionEl);
+  } finally {
+    AppState.ui.deferCupDrawPresentation=false;
+  }
+  var afterSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
+  var afterSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
+  var postAdvanceDelta=kf031BuildWorldDelta(record);
+  var requiresProgressCheckpoint=kf031DeltaTouchesProgression(postAdvanceDelta);
+  if(afterSlot!==beforeSlot || afterSeason!==beforeSeason || requiresProgressCheckpoint){
+    await kf029CommitHardCheckpoint('calendar-slot');
+    KF029Remote.progression=null;
+    KF029Remote.progressLeaseId=null;
+    KF029Remote.scopeRevisions={};
+    KF029Remote.roundGeneration=Number(KF029Remote.roundGeneration||1)+1;
+    KF029Remote.message=KF029Remote.managementDirty ? 'Spielstand bestätigt · neue Änderungen werden gespeichert.' : 'Spielstand gespeichert.';
+    if (!presentNextQueuedCupDraw()) renderApp();
+  } else {
+    await kf031ReleaseProgressLease(record.id,expectedRevision,state.leaseId);
+    KF029Remote.progressLeaseId=null;
+    KF029Remote.progression=null;
+    if (kf031DeltaHasOps(postAdvanceDelta)) kf031MarkManagementDirty('office-advance-local-management',false);
+  }
+  return state;
+}
+function kf032ScheduleProgressPoll(actionEl,delayMs){
+  kf031ClearProgressTimer();
+  KF029Remote.progressTimer=setTimeout(function(){
+    KF029Remote.progressTimer=null;
+    void kf032PollProgressAndMaybeAdvance(actionEl).catch(function(){});
+  },Math.max(200,Number(delayMs||1000)));
+}
+async function kf032PollProgressAndMaybeAdvance(actionEl){
+  if (!KF029Remote.user || !AppState.worldRecord || KF029Remote.progressRequestPending) return null;
+  KF029Remote.progressRequestPending=true;
+  try {
+    var record=AppState.worldRecord;
+    var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(record.id)+'/progression');
+    var state=data&&data.progression||null;
+    if (!state) return null;
+    KF029Remote.progression=state;
+    KF029Remote.roundGeneration=Number(state.roundGeneration || KF029Remote.roundGeneration || 1);
+    KF029Remote.scopeRevisions=Object.assign({},state.scopeRevisions || KF029Remote.scopeRevisions || {});
+    if (Number(state.revision)!==Number(KF029Remote.revision)) {
+      KF029Remote.message='Die Runde wurde fortgesetzt. Neuer Stand wird geladen ...';
+      renderApp();
+      await kf029LoadWorld(record.id);
+      return state;
+    }
+    KF029Remote.message=kf031ProgressMessage(state);
+    renderApp();
+    if (state.shouldAdvance && state.leaseId) {
+      return await kf032AdvanceClaimedRound(state,actionEl);
+    }
+    if (state.status!=='OPEN' || state.deadlineAt || kf032CurrentUserReady(state)) {
+      kf032ScheduleProgressPoll(actionEl,1000);
+    }
+    return state;
+  } catch(error) {
+    KF029Remote.error='Rundenstatus konnte nicht aktualisiert werden: '+(error.message||'Unbekannter Fehler');
+    renderApp();
+    throw error;
+  } finally {
+    KF029Remote.progressRequestPending=false;
+  }
+}
 async function kf031RequestReadyAndMaybeAdvance(actionEl){
   if (!KF029Remote.user || !AppState.worldRecord || KF029Remote.progressRequestPending) return null;
+  if (kf032RoundReadOnlyForMe()) {
+    kf032ScheduleProgressPoll(actionEl,200);
+    return KF029Remote.progression;
+  }
   KF029Remote.progressRequestPending=true;
   kf031ClearProgressTimer();
   var record=AppState.worldRecord;
   var expectedRevision=KF029Remote.revision;
   try {
     await kf031FlushManagementSave('ready');
-    if (kf031ManagementBlocksProgress()) {
-      throw new Error('Die letzten Managementänderungen sind noch nicht serverseitig bestätigt.');
-    }
+    if (kf031ManagementBlocksProgress()) throw new Error('Die letzten Managementänderungen sind noch nicht serverseitig bestätigt.');
     record=AppState.worldRecord;
     expectedRevision=KF029Remote.revision;
     var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(record.id)+'/ready',{
       method:'POST',
-      body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION,expectedRevision:expectedRevision}
+      body:{
+        clientVersion:KF029_REMOTE_CONTRACT_VERSION,
+        expectedRevision:expectedRevision,
+        roundGeneration:KF029Remote.roundGeneration
+      }
     });
     var state=data&&data.progression||null;
     KF029Remote.progression=state;
+    KF029Remote.roundGeneration=Number((state&&state.roundGeneration)||KF029Remote.roundGeneration||1);
     KF029Remote.message=kf031ProgressMessage(state);
     renderApp();
-    if (state && state.shouldAdvance && state.leaseId) {
-      KF029Remote.progressLeaseId=state.leaseId;
-      KF029Remote.message='Spieltag wird verarbeitet ...';
-      renderApp();
-      var beforeSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
-      var beforeSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
-      AppState.ui.deferCupDrawPresentation=true;
-      try {
-        kf029BaseHandleAction('office-advance',actionEl);
-      } finally {
-        AppState.ui.deferCupDrawPresentation=false;
-      }
-      var afterSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
-      var afterSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
-      var postAdvanceDelta=kf031BuildWorldDelta(record);
-      var requiresProgressCheckpoint=kf031DeltaTouchesProgression(postAdvanceDelta);
-      if(afterSlot!==beforeSlot || afterSeason!==beforeSeason || requiresProgressCheckpoint){
-        await kf029CommitHardCheckpoint('calendar-slot');
-        KF029Remote.progression=null;
-        KF029Remote.progressLeaseId=null;
-        KF029Remote.message=KF029Remote.managementDirty ? 'Spielstand bestätigt · neue Änderungen werden gespeichert.' : 'Spielstand gespeichert.';
-        if (!presentNextQueuedCupDraw()) renderApp();
-      } else {
-        await kf031ReleaseProgressLease(record.id,expectedRevision,state.leaseId);
-        KF029Remote.progressLeaseId=null;
-        KF029Remote.progression=null;
-        if (kf031DeltaHasOps(postAdvanceDelta)) {
-          kf031MarkManagementDirty('office-advance-local-management',false);
-        }
-      }
-      return state;
-    }
-    KF029Remote.progressTimer=setTimeout(function(){
-      KF029Remote.progressTimer=null;
-      void kf031RequestReadyAndMaybeAdvance(actionEl);
-    },1000);
+    if (state && state.shouldAdvance && state.leaseId) return await kf032AdvanceClaimedRound(state,actionEl);
+    kf032ScheduleProgressPoll(actionEl,1000);
     return state;
   } catch(error) {
     if (error && error.code==='MANAGEMENT_SAVE_FAILED') {
@@ -25308,6 +25404,11 @@ function kf029ConfirmWorldCreate(){
   KF029Remote.committedMatchIds={};
   KF029Remote.committedFinanceIds={};
   KF029Remote.committedGameState=null;
+  KF029Remote.progression=null;
+  KF029Remote.roundGeneration=null;
+  KF029Remote.scopeRevisions={};
+  KF029Remote.progressLeaseId=null;
+  kf031ClearProgressTimer();
   kf031ResetManagementSaveState();
   KF029Remote.progression=null;
   KF029Remote.progressLeaseId=null;
@@ -25863,6 +25964,22 @@ handleAction = function(action, actionEl){
   if (action === 'kf-exit-world-discard') { void kf029ExitWorldToList(true); return; }
   var progressAction = action === 'office-advance' || action === 'calendar-sim-until-confirm' ||
     (action === 'lineup-goalkeeper-autofix' && ['advance','sim-until'].indexOf(actionEl && actionEl.getAttribute('data-mode')) >= 0);
+  if (KF029Remote.user && AppState.worldRecord && action === 'calendar-sim-until-confirm') {
+    KF029Remote.message='Mehrspielerwelten werden rundenweise fortgesetzt. Mehrere Kalenderslots können nicht an den anderen Trainern vorbei simuliert werden.';
+    renderApp();
+    return;
+  }
+  if (KF029Remote.user && AppState.worldRecord && progressAction && action !== 'office-advance' &&
+      action === 'lineup-goalkeeper-autofix') {
+    KF029Remote.message='Bitte besetze den Torwartslot zuerst manuell oder per Assistent und bestätige danach im Büro mit Weiter.';
+    renderApp();
+    return;
+  }
+  if (KF029Remote.user && AppState.worldRecord && kf032RoundReadOnlyForMe() && kf032ActionMutatesWorld(action,actionEl)) {
+    KF029Remote.message='Du bist für diese Runde bereits bereit. Du kannst dich weiter umsehen, aber bis zum Rundenwechsel nichts mehr verändern.';
+    renderApp();
+    return;
+  }
   if ((KF029Remote.checkpointPending || KF029Remote.checkpointFailed) && progressAction) {
     KF029Remote.message=KF029Remote.checkpointPending
       ? 'Der letzte Fortschritt wird noch gespeichert.'
@@ -25916,7 +26033,8 @@ handleAction = function(action, actionEl){
     return;
   }
   if (action === 'office-advance' && KF029Remote.user && AppState.worldRecord) {
-    void kf031RequestReadyAndMaybeAdvance(actionEl).catch(function(){});
+    if (kf032RoundReadOnlyForMe()) void kf032PollProgressAndMaybeAdvance(actionEl).catch(function(){});
+    else void kf031RequestReadyAndMaybeAdvance(actionEl).catch(function(){});
     return;
   }
   kf029BaseHandleAction(action, actionEl);
