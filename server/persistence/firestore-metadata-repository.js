@@ -2,6 +2,11 @@
 
 const crypto = require('crypto');
 const { DomainRuleError, PersistenceNotFoundError } = require('./errors');
+const {
+  ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY,
+  TIME_MODEL_COUNTDOWN, TIME_MODEL_FIXED_SCHEDULE,
+  mergeWorldDeltas
+} = require('../domain/round-management');
 const { STATUS_ACTIVE, STATUS_LEFT, MAX_WORLD_SLOTS, MAX_ACTIVE_WORLDS_PER_USER } = require('./file-metadata-repository');
 
 function nowIso() { return new Date().toISOString(); }
@@ -21,6 +26,7 @@ class FirestoreMetadataRepository {
       invitations: `${collectionPrefix}_invitations`,
       applications: `${collectionPrefix}_applications`,
       progression: `${collectionPrefix}_world_progression`,
+      managementScopes: `${collectionPrefix}_world_management_scopes`,
       system: `${collectionPrefix}_system`
     };
   }
@@ -29,6 +35,9 @@ class FirestoreMetadataRepository {
   _world(worldId) { return this.db.collection(this.names.worlds).doc(String(worldId)); }
   _participation(worldId, userId) { return this.db.collection(this.names.participation).doc(participationId(worldId, userId)); }
   _progression(worldId) { return this.db.collection(this.names.progression).doc(String(worldId)); }
+  _managementScope(worldId, roundGeneration, scope) {
+    return this.db.collection(this.names.managementScopes).doc(`${encodeURIComponent(String(worldId))}__${Number(roundGeneration)}__${encodeURIComponent(String(scope))}`);
+  }
 
   async listActiveWorldIdsForUser(userId) {
     const snap = await this.db.collection(this.names.participation).where('userId', '==', userId).where('status', '==', STATUS_ACTIVE).get();
@@ -218,68 +227,236 @@ class FirestoreMetadataRepository {
     return doc.exists ? doc.data() : null;
   }
 
-  async markTrainerReady({ worldId, userId, expectedRevision, activeUserIds, deadlineAt, leaseMs = 120000 }) {
+  async ensureWorldRound({ worldId, revision, timeModel = TIME_MODEL_COUNTDOWN, fixedDeadlineAt = null }) {
+    const ref = this._progression(worldId);
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      let state = doc.exists ? doc.data() : null;
+      if (!state) {
+        state = {
+          worldId,
+          revision:Number(revision),
+          roundGeneration:1,
+          status:ROUND_STATUS_OPEN,
+          timeModel:timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN,
+          readyUserIds:[],
+          deadlineAt:fixedDeadlineAt || null,
+          progressionRunId:null,
+          leaseId:null,
+          leaseExpiresAt:null,
+          lastCompletedProgressionRunId:null
+        };
+      } else {
+        if (!state.roundGeneration) state.roundGeneration = 1;
+        if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
+        if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+        if (!state.timeModel) state.timeModel = TIME_MODEL_COUNTDOWN;
+        if (state.status === ROUND_STATUS_OPEN) {
+          state.revision = Number(revision);
+          state.timeModel = timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
+          if (state.timeModel === TIME_MODEL_FIXED_SCHEDULE && fixedDeadlineAt) state.deadlineAt = fixedDeadlineAt;
+        }
+      }
+      tx.set(ref, state);
+      return state;
+    });
+  }
+
+  async getManagementScopes({ worldId, roundGeneration }) {
+    const snap = await this.db.collection(this.names.managementScopes).where('worldId', '==', String(worldId)).get();
+    return snap.docs.map(doc => doc.data())
+      .filter(row => Number(row.roundGeneration) === Number(roundGeneration))
+      .sort((a,b) => String(a.scope).localeCompare(String(b.scope)));
+  }
+
+  async commitManagementScopes({
+    worldId, userId, roundGeneration, expectedWorldRevision,
+    scopeDeltas, expectedScopeRevisions = {}
+  }) {
+    const progressRef = this._progression(worldId);
+    const items = (scopeDeltas || []).map(item => ({
+      item,
+      ref:this._managementScope(worldId, roundGeneration, item && item.scope)
+    }));
+    return this.db.runTransaction(async tx => {
+      const progressDoc = await tx.get(progressRef);
+      if (!progressDoc.exists) throw new DomainRuleError('Round state not found');
+      const state = progressDoc.data();
+      if (Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Round generation mismatch');
+      if (Number(state.revision) !== Number(expectedWorldRevision)) throw new DomainRuleError('Round world revision mismatch');
+      if (state.status !== ROUND_STATUS_OPEN) throw new DomainRuleError('Round is locked for management changes', { status:state.status });
+      if ((state.readyUserIds || []).map(String).includes(String(userId))) throw new DomainRuleError('Trainer is already ready for this round');
+
+      const docs = [];
+      for (const entry of items) docs.push(await tx.get(entry.ref));
+      const staged = [];
+      for (let index=0; index<items.length; index+=1) {
+        const { item, ref } = items[index];
+        if (!item || !item.scope || !item.worldDelta) throw new DomainRuleError('Invalid management scope delta');
+        const current = docs[index].exists ? docs[index].data() : null;
+        const currentRevision = Number(current && current.scopeRevision || 0);
+        const expectedScopeRevision = Number(Object.prototype.hasOwnProperty.call(expectedScopeRevisions || {}, item.scope)
+          ? expectedScopeRevisions[item.scope]
+          : 0);
+        if (currentRevision !== expectedScopeRevision) {
+          const error = new DomainRuleError('Management scope revision mismatch', {
+            scope:item.scope,
+            expectedScopeRevision,
+            actualScopeRevision:currentRevision
+          });
+          error.code = 'PERSISTENCE_CONFLICT';
+          throw error;
+        }
+        const row = {
+          worldId:String(worldId),
+          roundGeneration:Number(roundGeneration),
+          scope:String(item.scope),
+          scopeRevision:currentRevision + 1,
+          worldDelta:mergeWorldDeltas(current && current.worldDelta, item.worldDelta),
+          updatedByUserId:String(userId),
+          updatedAt:nowIso()
+        };
+        staged.push(row);
+        tx.set(ref, row);
+      }
+      return {
+        worldId,
+        revision:Number(state.revision),
+        roundGeneration:Number(state.roundGeneration),
+        scopeRows:staged
+      };
+    });
+  }
+
+  async markTrainerReady({
+    worldId, userId, expectedRevision, roundGeneration = null, activeUserIds,
+    deadlineAt, timeModel = TIME_MODEL_COUNTDOWN, leaseMs = 120000
+  }) {
     const ref = this._progression(worldId);
     const active = Array.from(new Set((activeUserIds || []).map(String)));
     if (!active.includes(String(userId))) throw new DomainRuleError('User is not an active trainer in this world');
     return this.db.runTransaction(async tx => {
       const doc = await tx.get(ref);
       let state = doc.exists ? doc.data() : null;
-      if (!state || Number(state.revision) !== Number(expectedRevision)) {
+      if (!state) {
         state = {
           worldId,
           revision:Number(expectedRevision),
-          status:'WAITING',
+          roundGeneration:1,
+          status:ROUND_STATUS_OPEN,
+          timeModel:timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN,
           readyUserIds:[],
           deadlineAt:null,
+          progressionRunId:null,
           leaseId:null,
-          leaseExpiresAt:null
+          leaseExpiresAt:null,
+          lastCompletedProgressionRunId:null
         };
       }
+      if (!state.roundGeneration) state.roundGeneration = 1;
+      if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
+      if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+      if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Round generation mismatch');
+      if (state.status === ROUND_STATUS_OPEN) state.revision = Number(expectedRevision);
+      if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
+
       const now = Date.now();
-      if (state.status === 'PROCESSING' && state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
-        state.status='WAITING';
-        state.leaseId=null;
-        state.leaseExpiresAt=null;
+      if (state.status === ROUND_STATUS_MATCHDAY && state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
+        state.status = ROUND_STATUS_OPEN;
+        state.leaseId = null;
+        state.leaseExpiresAt = null;
       }
+      if (state.status !== ROUND_STATUS_OPEN) {
+        tx.set(ref, state);
+        return { ...state, activeTrainerCount:active.length, readyTrainerCount:(state.readyUserIds || []).filter(id => active.includes(String(id))).length, shouldAdvance:false };
+      }
+
       state.readyUserIds = Array.from(new Set([...(state.readyUserIds || []).map(String), String(userId)]));
-      if (!state.deadlineAt) state.deadlineAt = deadlineAt || new Date(now + 120000).toISOString();
+      state.timeModel = timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
+      if (state.timeModel === TIME_MODEL_COUNTDOWN) {
+        if (!state.deadlineAt) state.deadlineAt = deadlineAt || new Date(now + 120000).toISOString();
+      } else if (deadlineAt) {
+        state.deadlineAt = deadlineAt;
+      }
+      const allReady = active.length > 0 && active.every(id => state.readyUserIds.includes(id));
+      const expired = state.deadlineAt && new Date(state.deadlineAt).getTime() <= now;
+      const due = state.timeModel === TIME_MODEL_FIXED_SCHEDULE ? Boolean(expired) : Boolean(allReady || expired);
       let shouldAdvance = false;
-      if (state.status !== 'PROCESSING') {
-        const allReady = active.length > 0 && active.every(id => state.readyUserIds.includes(id));
-        const expired = state.deadlineAt && new Date(state.deadlineAt).getTime() <= now;
-        if (allReady || expired) {
-          state.status='PROCESSING';
-          state.leaseId=crypto.randomUUID();
-          state.leaseExpiresAt=new Date(now + Math.max(30000, Number(leaseMs || 120000))).toISOString();
-          shouldAdvance=true;
-        }
+      if (due) {
+        state.status = ROUND_STATUS_LOCKING;
+        state.progressionRunId = state.progressionRunId || crypto.randomUUID();
+        state.leaseId = crypto.randomUUID();
+        state.leaseExpiresAt = new Date(now + Math.max(30000, Number(leaseMs || 120000))).toISOString();
+        shouldAdvance = true;
       }
       tx.set(ref, state);
-      return { ...state, activeTrainerCount:active.length, readyTrainerCount:state.readyUserIds.filter(id => active.includes(id)).length, shouldAdvance };
+      return {
+        ...state,
+        activeTrainerCount:active.length,
+        readyTrainerCount:state.readyUserIds.filter(id => active.includes(id)).length,
+        shouldAdvance
+      };
     });
   }
 
-  async completeWorldProgress({ worldId, expectedRevision, nextRevision, leaseId }) {
+  async beginMatchday({ worldId, expectedRevision, roundGeneration, leaseId, progressionRunId }) {
     const ref = this._progression(worldId);
     return this.db.runTransaction(async tx => {
       const doc = await tx.get(ref);
       if (!doc.exists) throw new DomainRuleError('Progression state not found');
       const state = doc.data();
+      if (Number(state.revision) !== Number(expectedRevision) || Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Progression generation mismatch');
+      if (state.status !== ROUND_STATUS_LOCKING ||
+          String(state.leaseId || '') !== String(leaseId || '') ||
+          String(state.progressionRunId || '') !== String(progressionRunId || '')) {
+        throw new DomainRuleError('Progression lease mismatch');
+      }
+      state.status = ROUND_STATUS_MATCHDAY;
+      tx.set(ref, state);
+      return state;
+    });
+  }
+
+  async completeWorldProgress({ worldId, expectedRevision, nextRevision, leaseId, roundGeneration = null, progressionRunId = null }) {
+    const ref = this._progression(worldId);
+    const completed = await this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) throw new DomainRuleError('Progression state not found');
+      const state = doc.data();
       if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
-      if (state.status !== 'PROCESSING' || String(state.leaseId || '') !== String(leaseId || '')) throw new DomainRuleError('Progression lease mismatch');
+      if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Progression generation mismatch');
+      if (state.status !== ROUND_STATUS_MATCHDAY || String(state.leaseId || '') !== String(leaseId || '')) throw new DomainRuleError('Progression lease mismatch');
+      if (progressionRunId != null && String(state.progressionRunId || '') !== String(progressionRunId || '')) throw new DomainRuleError('Progression run mismatch');
       const next = {
         worldId,
         revision:Number(nextRevision),
-        status:'WAITING',
+        roundGeneration:Number(state.roundGeneration || 1) + 1,
+        status:ROUND_STATUS_OPEN,
+        timeModel:state.timeModel || TIME_MODEL_COUNTDOWN,
         readyUserIds:[],
         deadlineAt:null,
+        progressionRunId:null,
         leaseId:null,
-        leaseExpiresAt:null
+        leaseExpiresAt:null,
+        lastCompletedProgressionRunId:state.progressionRunId || null
       };
       tx.set(ref, next);
-      return next;
+      return { next, completedGeneration:Number(state.roundGeneration || 1) };
     });
+    try {
+      const snap = await this.db.collection(this.names.managementScopes).where('worldId', '==', String(worldId)).get();
+      const batch = this.db.batch();
+      let count = 0;
+      snap.docs.forEach(doc => {
+        const row = doc.data();
+        if (Number(row.roundGeneration) === completed.completedGeneration) {
+          batch.delete(doc.ref);
+          count += 1;
+        }
+      });
+      if (count) await batch.commit();
+    } catch (_) {}
+    return completed.next;
   }
 
   async releaseWorldProgress({ worldId, expectedRevision, leaseId }) {
@@ -289,8 +466,9 @@ class FirestoreMetadataRepository {
       if (!doc.exists) return null;
       const state = doc.data();
       if (Number(state.revision) !== Number(expectedRevision)) return state;
-      if (state.status === 'PROCESSING' && String(state.leaseId || '') === String(leaseId || '')) {
-        state.status='WAITING';
+      if ((state.status === ROUND_STATUS_MATCHDAY || state.status === ROUND_STATUS_LOCKING) &&
+          String(state.leaseId || '') === String(leaseId || '')) {
+        state.status=ROUND_STATUS_OPEN;
         state.leaseId=null;
         state.leaseExpiresAt=null;
         tx.set(ref, state);
