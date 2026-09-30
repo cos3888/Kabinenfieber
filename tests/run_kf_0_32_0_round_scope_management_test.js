@@ -349,6 +349,62 @@ function makeWorldRecord(worldId,userId){
       new Set(fixedClaims.map(row=>row.progressionRunId)).size===1,
       {fixedClaims});
 
+    const recoveryWorld='world-finalizing-recovery';
+    const recoveryRecord=makeWorldRecord(recoveryWorld,'rA');
+    const recoveryCreated=await sessions.createWorld({
+      userId:'rA',worldRecord:recoveryRecord,worldName:'Finalizing Recovery',
+      visibility:'PUBLIC',joinPolicy:'OPEN'
+    });
+    const recoveryAAssigned=await sessions.assignClub({
+      userId:'rA',worldId:recoveryWorld,clubId:'club-a',expectedRevision:recoveryCreated.revision
+    });
+    const recoveryJoined=await sessions.joinWorld({userId:'rB',displayName:'RB',worldId:recoveryWorld});
+    const recoveryBAssigned=await sessions.assignClub({
+      userId:'rB',worldId:recoveryWorld,clubId:'club-b',expectedRevision:recoveryJoined.revision
+    });
+    const recoveryRevision=recoveryBAssigned.revision;
+    await sessions.markReady({
+      userId:'rA',worldId:recoveryWorld,expectedRevision:recoveryRevision,roundGeneration:1,matchIntent:'QUICK'
+    });
+    const recoveryReady=await sessions.markReady({
+      userId:'rB',worldId:recoveryWorld,expectedRevision:recoveryRevision,roundGeneration:1,matchIntent:'QUICK'
+    });
+    const originalComplete=metadata.completeWorldProgress.bind(metadata);
+    let failCompleteOnce=true;
+    metadata.completeWorldProgress=async function(args){
+      if(failCompleteOnce){
+        failCompleteOnce=false;
+        throw new Error('simulated-finalizing-metadata-failure');
+      }
+      return originalComplete(args);
+    };
+    let recoverySaveError=null;
+    try{
+      await sessions.saveSlot({
+        userId:'rB',worldId:recoveryWorld,
+        worldDelta:delta(recoveryWorld,[{path:['gameState','calendar','currentSlotKey'],value:'w1'}]),
+        expectedRevision:recoveryRevision,season:1,slotKey:'w1',
+        matches:[],financeEvents:[],progressLeaseId:recoveryReady.leaseId
+      });
+    }catch(error){recoverySaveError=error;}
+    const stuckManifest=await worlds.getManifest(recoveryWorld);
+    const stuckRound=await metadata.getWorldProgression(recoveryWorld);
+    check('World commit followed by a metadata failure remains recoverable in FINALIZING',
+      !!recoverySaveError&&/simulated-finalizing/i.test(String(recoverySaveError.message||''))&&
+      Number(stuckManifest.revision)===Number(recoveryRevision)+1&&
+      stuckRound.status==='FINALIZING'&&Number(stuckRound.revision)===Number(recoveryRevision),
+      {error:recoverySaveError&&recoverySaveError.message,stuckManifest,stuckRound});
+    metadata.completeWorldProgress=originalComplete;
+    const recoveredRound=await sessions.getProgression({userId:'rA',worldId:recoveryWorld});
+    await runtime.unloadWorld(recoveryWorld);
+    const recoveredWorld=await sessions.openWorld({userId:'rA',worldId:recoveryWorld});
+    check('Reload/poll repairs FINALIZING after an already committed world revision without replaying the slot',
+      recoveredRound.status==='OPEN'&&recoveredRound.roundGeneration===2&&
+      Number(recoveredRound.revision)===Number(stuckManifest.revision)&&
+      recoveredRound.lastCompletedProgressionRunId===recoveryReady.progressionRunId&&
+      recoveredWorld.worldRecord.gameState.calendar.currentSlotKey==='w1',
+      {recoveredRound,currentSlotKey:recoveredWorld.worldRecord.gameState.calendar.currentSlotKey});
+
     const capacityWorld='world-capacity-18';
     const capacityRecord=makeWorldRecord(capacityWorld,'cap0');
     await sessions.createWorld({
