@@ -5,6 +5,12 @@ const { DomainRuleError } = require('../persistence/errors');
 const { ROLE_WORLD_ADMIN, ensureWorldMembershipRoles, activeMemberships, membershipForUser } = require('../domain/world-memberships');
 const { MAX_WORLD_SLOTS, MAX_ACTIVE_WORLDS_PER_USER } = require('../persistence/file-metadata-repository');
 const { normalizeWorldName, normalizeWorldAccess } = require('../domain/world-metadata');
+const { applyWorldDelta } = require('../domain/world-delta');
+const {
+  ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY,
+  TIME_MODEL_COUNTDOWN, TIME_MODEL_FIXED_SCHEDULE,
+  splitManagementDeltaByScope, scopeRevisionMap
+} = require('../domain/round-management');
 
 function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
 
@@ -14,6 +20,51 @@ class WorldSessionService {
     this.metadata = metadataRepository;
     this.worlds = worldPersistence;
     this.runtime = runtimeManager;
+  }
+
+  _roundConfig(meta) {
+    const raw = String(meta && (meta.roundTimeModel || meta.timeModel) || TIME_MODEL_COUNTDOWN).toUpperCase();
+    const timeModel = raw === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
+    return {
+      timeModel,
+      durationSeconds:Math.max(15, Number(meta && meta.roundDurationSeconds || 120)),
+      fixedDeadlineAt:timeModel === TIME_MODEL_FIXED_SCHEDULE
+        ? (meta && (meta.nextRoundAt || meta.fixedDeadlineAt) || null)
+        : null
+    };
+  }
+
+  async _ensureRound(worldId, revision) {
+    const meta = await this.metadata.getWorld(worldId);
+    const config = this._roundConfig(meta);
+    const state = await this.metadata.ensureWorldRound({
+      worldId,
+      revision:Number(revision),
+      timeModel:config.timeModel,
+      fixedDeadlineAt:config.fixedDeadlineAt
+    });
+    return { state, config };
+  }
+
+  async _managementOverlayContext(worldId, revision) {
+    const ensured = await this._ensureRound(worldId, revision);
+    const rows = await this.metadata.getManagementScopes({
+      worldId,
+      roundGeneration:ensured.state.roundGeneration
+    });
+    return {
+      ...ensured,
+      rows,
+      scopeRevisions:scopeRevisionMap(rows)
+    };
+  }
+
+  _applyManagementOverlays(worldRecord, rows) {
+    const effective = clone(worldRecord);
+    for (const row of rows || []) {
+      if (row && row.worldDelta) applyWorldDelta(effective, row.worldDelta);
+    }
+    return effective;
   }
 
   _clubNamesById(record) {
@@ -327,23 +378,16 @@ class WorldSessionService {
     if (!participation) throw new DomainRuleError('User is not a member of this world');
     const manifest = await this.worlds.getManifest(worldId);
     if (!manifest) throw new DomainRuleError('Active world not found');
-    const stored = await this.metadata.getWorldProgression(worldId);
-    if (!stored || Number(stored.revision) !== Number(manifest.revision)) {
-      return {
-        worldId,
-        revision:Number(manifest.revision),
-        status:'WAITING',
-        readyUserIds:[],
-        deadlineAt:null,
-        leaseId:null,
-        leaseExpiresAt:null,
-        shouldAdvance:false
-      };
-    }
-    return stored;
+    const { state } = await this._ensureRound(worldId, manifest.revision);
+    const rows = await this.metadata.getManagementScopes({ worldId, roundGeneration:state.roundGeneration });
+    return {
+      ...state,
+      scopeRevisions:scopeRevisionMap(rows),
+      shouldAdvance:false
+    };
   }
 
-  async markReady({ userId, worldId, expectedRevision }) {
+  async markReady({ userId, worldId, expectedRevision, roundGeneration = null }) {
     const participation = await this.metadata.getParticipation({ worldId, userId });
     if (!participation) throw new DomainRuleError('User is not a member of this world');
     const manifest = await this.worlds.getManifest(worldId);
@@ -356,15 +400,42 @@ class WorldSessionService {
     }
     const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
     const meta = await this.metadata.getWorld(worldId);
-    const durationSeconds = Math.max(15, Number((meta && meta.roundDurationSeconds) || 120));
-    return this.metadata.markTrainerReady({
+    const config = this._roundConfig(meta);
+    const ensured = await this._ensureRound(worldId, manifest.revision);
+    if (roundGeneration != null && Number(roundGeneration) !== Number(ensured.state.roundGeneration)) {
+      const error = new Error('Round generation mismatch');
+      error.code = 'PERSISTENCE_CONFLICT';
+      error.details = { worldId, expectedRoundGeneration:roundGeneration, actualRoundGeneration:ensured.state.roundGeneration };
+      throw error;
+    }
+    const deadlineAt = config.timeModel === TIME_MODEL_FIXED_SCHEDULE
+      ? config.fixedDeadlineAt
+      : new Date(Date.now() + config.durationSeconds * 1000).toISOString();
+    let result = await this.metadata.markTrainerReady({
       worldId,
       userId,
       expectedRevision:Number(manifest.revision),
+      roundGeneration:Number(ensured.state.roundGeneration),
       activeUserIds,
-      deadlineAt:new Date(Date.now() + durationSeconds * 1000).toISOString(),
+      deadlineAt,
+      timeModel:config.timeModel,
       leaseMs:120000
     });
+    if (result.shouldAdvance && result.status === ROUND_STATUS_LOCKING) {
+      const matchday = await this.metadata.beginMatchday({
+        worldId,
+        expectedRevision:Number(manifest.revision),
+        roundGeneration:Number(result.roundGeneration),
+        leaseId:result.leaseId,
+        progressionRunId:result.progressionRunId
+      });
+      result = {
+        ...result,
+        ...matchday,
+        shouldAdvance:true
+      };
+    }
+    return result;
   }
 
   async releaseProgress({ userId, worldId, expectedRevision, leaseId }) {
@@ -385,6 +456,15 @@ class WorldSessionService {
       const membership = membershipForUser(record, userId);
       await this._syncLobbyProjection(record).catch(() => {});
       if (membership) await this._syncParticipationProjection(worldId, membership).catch(() => {});
+      const overlay = await this._managementOverlayContext(worldId, opened.revision);
+      const effectiveRecord = this._applyManagementOverlays(record, overlay.rows);
+      return {
+        ...opened,
+        worldRecord:effectiveRecord,
+        roundState:clone(overlay.state),
+        roundGeneration:Number(overlay.state.roundGeneration),
+        scopeRevisions:clone(overlay.scopeRevisions)
+      };
     }
     return opened;
   }
@@ -406,7 +486,7 @@ class WorldSessionService {
       const state = await this.metadata.getWorldProgression(worldId);
       if (!state ||
           Number(state.revision) !== Number(expectedRevision) ||
-          state.status !== 'PROCESSING' ||
+          state.status !== ROUND_STATUS_MATCHDAY ||
           String(state.leaseId || '') !== String(progressLeaseId)) {
         throw new DomainRuleError('Progression lease mismatch');
       }
@@ -425,7 +505,9 @@ class WorldSessionService {
           worldId,
           expectedRevision:Number(expectedRevision),
           nextRevision:Number(result.revision),
-          leaseId:progressLeaseId
+          leaseId:progressLeaseId,
+          roundGeneration:Number(state.roundGeneration),
+          progressionRunId:state.progressionRunId || null
         }).catch(() => {});
       }
       return result;
@@ -441,14 +523,67 @@ class WorldSessionService {
     }
   }
 
-  async saveManagementDelta({ userId, worldId, worldDelta, expectedRevision }) {
-    const result = await this.runtime.saveManagementDelta({
-      userId,
+  async saveManagementDelta({
+    userId, worldId, worldDelta, expectedRevision,
+    roundGeneration = null, expectedScopeRevisions = {}
+  }) {
+    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    if (activeUserIds.length <= 1) {
+      return this.runtime.saveManagementDelta({
+        userId,
+        worldId,
+        worldDelta,
+        expectedRevision
+      });
+    }
+
+    const manifest = await this.worlds.getManifest(worldId);
+    if (!manifest) throw new DomainRuleError('Active world not found');
+    if (Number(expectedRevision) !== Number(manifest.revision)) {
+      const error = new Error('World revision mismatch');
+      error.code = 'PERSISTENCE_CONFLICT';
+      error.details = { worldId, expectedRevision, actualRevision:manifest.revision };
+      throw error;
+    }
+
+    const base = await this.runtime.openWorld({ userId, worldId });
+    const membership = membershipForUser(base.worldRecord, userId);
+    if (!membership) throw new DomainRuleError('User is not a member of this world');
+    const overlay = await this._managementOverlayContext(worldId, manifest.revision);
+    if (roundGeneration != null && Number(roundGeneration) !== Number(overlay.state.roundGeneration)) {
+      const error = new Error('Round generation mismatch');
+      error.code = 'PERSISTENCE_CONFLICT';
+      error.details = { expectedRoundGeneration:roundGeneration, actualRoundGeneration:overlay.state.roundGeneration };
+      throw error;
+    }
+    if (overlay.state.status !== ROUND_STATUS_OPEN) {
+      throw new DomainRuleError('Round is locked for management changes', { status:overlay.state.status });
+    }
+    if ((overlay.state.readyUserIds || []).map(String).includes(String(userId))) {
+      throw new DomainRuleError('Trainer is already ready for this round');
+    }
+
+    const effectiveRecord = this._applyManagementOverlays(base.worldRecord, overlay.rows);
+    const scopeDeltas = splitManagementDeltaByScope(effectiveRecord, membership, worldDelta);
+    const committed = await this.metadata.commitManagementScopes({
       worldId,
-      worldDelta,
-      expectedRevision
+      userId,
+      roundGeneration:Number(overlay.state.roundGeneration),
+      expectedWorldRevision:Number(manifest.revision),
+      scopeDeltas,
+      expectedScopeRevisions:expectedScopeRevisions || {}
     });
-    return result;
+    const rows = await this.metadata.getManagementScopes({
+      worldId,
+      roundGeneration:Number(overlay.state.roundGeneration)
+    });
+    return {
+      revision:Number(manifest.revision),
+      currentSeason:Number(manifest.currentSeason || base.currentSeason || 1),
+      committedAt:new Date().toISOString(),
+      roundGeneration:Number(committed.roundGeneration),
+      scopeRevisions:scopeRevisionMap(rows)
+    };
   }
 
   async saveSlot({ userId, worldId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches, financeEvents, progressLeaseId = null }) {
@@ -458,7 +593,7 @@ class WorldSessionService {
       const state = await this.metadata.getWorldProgression(worldId);
       if (!state ||
           Number(state.revision) !== Number(expectedRevision) ||
-          state.status !== 'PROCESSING' ||
+          state.status !== ROUND_STATUS_MATCHDAY ||
           String(state.leaseId || '') !== String(progressLeaseId)) {
         throw new DomainRuleError('Progression lease mismatch');
       }
@@ -470,7 +605,9 @@ class WorldSessionService {
           worldId,
           expectedRevision:Number(expectedRevision),
           nextRevision:Number(result.revision),
-          leaseId:progressLeaseId
+          leaseId:progressLeaseId,
+          roundGeneration:Number(state.roundGeneration),
+          progressionRunId:state.progressionRunId || null
         }).catch(() => {});
       }
       return result;
