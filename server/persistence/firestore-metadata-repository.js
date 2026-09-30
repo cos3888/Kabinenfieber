@@ -417,16 +417,36 @@ class FirestoreMetadataRepository {
     });
   }
 
-  async completeWorldProgress({ worldId, expectedRevision, nextRevision, leaseId, roundGeneration = null, progressionRunId = null }) {
+  async completeWorldProgress({
+    worldId, expectedRevision, nextRevision, leaseId, roundGeneration = null,
+    progressionRunId = null, allowCommittedRecovery = false
+  }) {
     const ref = this._progression(worldId);
     const completed = await this.db.runTransaction(async tx => {
       const doc = await tx.get(ref);
       if (!doc.exists) throw new DomainRuleError('Progression state not found');
       const state = doc.data();
+
+      if (progressionRunId &&
+          state.status === ROUND_STATUS_OPEN &&
+          String(state.lastCompletedProgressionRunId || '') === String(progressionRunId) &&
+          Number(state.revision) === Number(nextRevision)) {
+        return { next:state, completedGeneration:null, alreadyCompleted:true };
+      }
+
       if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
       if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Progression generation mismatch');
-      if (state.status !== ROUND_STATUS_MATCHDAY || String(state.leaseId || '') !== String(leaseId || '')) throw new DomainRuleError('Progression lease mismatch');
-      if (progressionRunId != null && String(state.progressionRunId || '') !== String(progressionRunId || '')) throw new DomainRuleError('Progression run mismatch');
+      if (state.status !== ROUND_STATUS_MATCHDAY && !(allowCommittedRecovery && state.status === ROUND_STATUS_LOCKING)) {
+        throw new DomainRuleError('Progression state mismatch');
+      }
+      if (progressionRunId != null && String(state.progressionRunId || '') !== String(progressionRunId || '')) {
+        throw new DomainRuleError('Progression run mismatch');
+      }
+      if (!allowCommittedRecovery && String(state.leaseId || '') !== String(leaseId || '')) {
+        throw new DomainRuleError('Progression lease mismatch');
+      }
+
+      const completedRunId = progressionRunId || state.progressionRunId || null;
       const next = {
         worldId,
         revision:Number(nextRevision),
@@ -438,24 +458,26 @@ class FirestoreMetadataRepository {
         progressionRunId:null,
         leaseId:null,
         leaseExpiresAt:null,
-        lastCompletedProgressionRunId:state.progressionRunId || null
+        lastCompletedProgressionRunId:completedRunId
       };
       tx.set(ref, next);
-      return { next, completedGeneration:Number(state.roundGeneration || 1) };
+      return { next, completedGeneration:Number(state.roundGeneration || 1), alreadyCompleted:false };
     });
-    try {
-      const snap = await this.db.collection(this.names.managementScopes).where('worldId', '==', String(worldId)).get();
-      const batch = this.db.batch();
-      let count = 0;
-      snap.docs.forEach(doc => {
-        const row = doc.data();
-        if (Number(row.roundGeneration) === completed.completedGeneration) {
-          batch.delete(doc.ref);
-          count += 1;
-        }
-      });
-      if (count) await batch.commit();
-    } catch (_) {}
+    if (!completed.alreadyCompleted && completed.completedGeneration != null) {
+      try {
+        const snap = await this.db.collection(this.names.managementScopes).where('worldId', '==', String(worldId)).get();
+        const batch = this.db.batch();
+        let count = 0;
+        snap.docs.forEach(doc => {
+          const row = doc.data();
+          if (Number(row.roundGeneration) === completed.completedGeneration) {
+            batch.delete(doc.ref);
+            count += 1;
+          }
+        });
+        if (count) await batch.commit();
+      } catch (_) {}
+    }
     return completed.next;
   }
 
