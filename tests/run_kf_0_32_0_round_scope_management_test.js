@@ -569,7 +569,10 @@ function makeWorldRecord(worldId,userId){
       baseRevision,
       progressedRevision:progressed.revision,
       roundGeneration:nextRound.roundGeneration,
-      scopeCountBeforeProgress:(beforeAtomicConflict||[]).length,\n      maxHumanManagers:18,\n      maxParallelSaveMs:maxSaveMs,\n      maxParallelReadyMs:maxReadyMs
+      scopeCountBeforeProgress:(beforeAtomicConflict||[]).length,
+      maxHumanManagers:18,
+      maxParallelSaveMs:maxSaveMs,
+      maxParallelReadyMs:maxReadyMs
     };
   }finally{
     await fs.rm(root,{recursive:true,force:true});
