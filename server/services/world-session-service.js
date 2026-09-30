@@ -22,6 +22,17 @@ class WorldSessionService {
     this.runtime = runtimeManager;
   }
 
+  _clubNamesById(record) {
+    const clubs = record && record.gameState && record.gameState.clubs;
+    const names = {};
+    if (!clubs || !clubs.byId) return names;
+    Object.keys(clubs.byId).forEach(clubId => {
+      const club = clubs.byId[clubId];
+      if (club) names[clubId] = club.name || club.clubName || clubId;
+    });
+    return names;
+  }
+
   _roundConfig(meta) {
     const raw = String(meta && (meta.roundTimeModel || meta.timeModel) || TIME_MODEL_COUNTDOWN).toUpperCase();
     const timeModel = raw === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
