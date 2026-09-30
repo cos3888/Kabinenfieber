@@ -387,7 +387,8 @@ const server = http.createServer(async (req, res) => {
       const progression = await persistence.worldSessions.markReady({
         userId:auth.user.userId,
         worldId:readyWorldId,
-        expectedRevision:body.expectedRevision
+        expectedRevision:body.expectedRevision,
+        roundGeneration:body.roundGeneration == null ? null : body.roundGeneration
       });
       await sendJson(req, res, 200, { ok:true, progression });
       return;
@@ -457,7 +458,9 @@ const server = http.createServer(async (req, res) => {
         userId: auth.user.userId,
         worldId: managementWorldId,
         worldDelta: body.worldDelta,
-        expectedRevision: body.expectedRevision
+        expectedRevision: body.expectedRevision,
+        roundGeneration: body.roundGeneration == null ? null : body.roundGeneration,
+        expectedScopeRevisions: body.expectedScopeRevisions || {}
       });
       await sendJson(req, res, 200, { ok:true, ...result });
       return;
