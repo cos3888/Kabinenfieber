@@ -77,6 +77,18 @@ class GoogleCloudObjectStore {
   async deletePrefix(prefix) {
     await this.bucket.deleteFiles({ prefix });
   }
+
+  async getRecoveryCapabilities() {
+    const [metadata] = await this.bucket.getMetadata();
+    const retentionSeconds = Number(metadata && metadata.softDeletePolicy && metadata.softDeletePolicy.retentionDurationSeconds || 0);
+    return {
+      driver: 'gcs',
+      objectVersioningEnabled: Boolean(metadata && metadata.versioning && metadata.versioning.enabled),
+      softDeleteEnabled: Number.isFinite(retentionSeconds) && retentionSeconds > 0,
+      softDeleteRetentionSeconds: Number.isFinite(retentionSeconds) ? retentionSeconds : 0,
+      softDeleteEffectiveTime: metadata && metadata.softDeletePolicy && metadata.softDeletePolicy.effectiveTime || null
+    };
+  }
 }
 
 module.exports = { GoogleCloudObjectStore };

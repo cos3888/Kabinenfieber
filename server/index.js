@@ -11,7 +11,7 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const SERVICE_VERSION = '0.31.3';
+const SERVICE_VERSION = '0.31.4';
 const API_VERSION = '0.30.0';
 
 let persistenceVerificationState = {
@@ -416,6 +416,17 @@ const server = http.createServer(async (req, res) => {
         leaseId:body.leaseId
       });
       await sendJson(req, res, 200, { ok:true, progression });
+      return;
+    }
+
+    const integrityWorldId = worldIdFromPath(pathname, '/integrity');
+    if (req.method === 'GET' && integrityWorldId) {
+      const auth = await requireAuth(req);
+      const integrity = await persistence.worldSessions.inspectWorldIntegrity({
+        userId: auth.user.userId,
+        worldId: integrityWorldId
+      });
+      await sendJson(req, res, 200, { ok:true, integrity });
       return;
     }
 

@@ -1,0 +1,23 @@
+name: KF 0.31.4 Regression
+
+on:
+  push:
+    branches:
+      - fix/kf-0.31.4-save-object-isolation-integrity
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  core-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Verify listener-safe pinned GCS SDK
+        run: npm ls @google-cloud/storage --depth=0 | grep '@google-cloud/storage@8.0.0'
+      - name: Current core regression suite
+        run: npm test
