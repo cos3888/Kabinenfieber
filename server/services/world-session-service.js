@@ -81,7 +81,67 @@ class WorldSessionService {
     };
   }
 
-  async _claimProgressIfDue(worldId, revision, activeUserIds) {
+  _buildMatchdayPlan(record, progressionState) {
+    const world = record && record.gameState;
+    const calendar = world && world.calendar || {};
+    const slots = Array.isArray(calendar.slots) ? calendar.slots : [];
+    const currentKey = String(calendar.currentSlotKey || '');
+    const currentIndex = slots.findIndex(slot => slot && String(slot.key || '') === currentKey);
+    const nextSlot = currentIndex >= 0 ? slots[currentIndex + 1] : null;
+    const nextSlotKey = nextSlot && nextSlot.key ? String(nextSlot.key) : null;
+    const fixtures = nextSlotKey
+      ? (calendar.fixtures || []).filter(fixture => fixture && String(fixture.slotKey || '') === nextSlotKey && String(fixture.status || 'scheduled') !== 'played')
+      : [];
+    const members = activeMemberships(record);
+    const memberByClubId = {};
+    members.forEach(member => {
+      if (member && member.clubId) memberByClubId[String(member.clubId)] = member;
+    });
+    const intents = progressionState && progressionState.matchIntentByUserId || {};
+    const fixturePlans = fixtures.map(fixture => {
+      const participants = [fixture.homeClubId, fixture.awayClubId].map(clubId => {
+        const member = memberByClubId[String(clubId || '')];
+        if (!member) return null;
+        const userId = String(member.userProfileId);
+        const intent = String(intents[userId] || 'QUICK').toUpperCase() === 'LIVE' ? 'LIVE' : 'QUICK';
+        return {
+          userId,
+          trainerId:member.trainerId,
+          clubId:String(clubId),
+          intent,
+          delegatedToCoTrainer:intent !== 'LIVE'
+        };
+      }).filter(Boolean);
+      const liveUserIds = participants.filter(row => row.intent === 'LIVE').map(row => row.userId);
+      const delegatedUserIds = participants.filter(row => row.delegatedToCoTrainer).map(row => row.userId);
+      return {
+        fixtureId:String(fixture.id),
+        homeClubId:String(fixture.homeClubId || ''),
+        awayClubId:String(fixture.awayClubId || ''),
+        mode:liveUserIds.length ? 'LIVE' : 'QUICK',
+        liveUserIds,
+        delegatedUserIds,
+        participants
+      };
+    });
+    const liveUserIds = Array.from(new Set(fixturePlans.flatMap(row => row.liveUserIds)));
+    const delegatedUserIds = Array.from(new Set(fixturePlans.flatMap(row => row.delegatedUserIds)));
+    return {
+      slotKey:nextSlotKey,
+      fixturePlans,
+      hasLiveFixtures:fixturePlans.some(row => row.mode === 'LIVE'),
+      liveUserIds,
+      delegatedUserIds
+    };
+  }
+
+  async _effectiveRoundRecord(worldId, userId, revision, roundGeneration) {
+    const opened = await this.runtime.openWorld({ userId, worldId });
+    const rows = await this.metadata.getManagementScopes({ worldId, roundGeneration });
+    return this._applyManagementOverlays(opened.worldRecord, rows);
+  }
+
+  async _claimProgressIfDue(worldId, revision, activeUserIds, actorUserId) {
     let state = await this.metadata.claimDueWorldProgress({
       worldId,
       expectedRevision:Number(revision),
@@ -89,27 +149,24 @@ class WorldSessionService {
       leaseMs:120000
     });
     if (state && state.shouldAdvance && state.status === ROUND_STATUS_LOCKING) {
+      const effectiveRecord = await this._effectiveRoundRecord(
+        worldId,
+        actorUserId || activeUserIds[0],
+        revision,
+        Number(state.roundGeneration)
+      );
+      const matchdayPlan = this._buildMatchdayPlan(effectiveRecord, state);
       const matchday = await this.metadata.beginMatchday({
         worldId,
         expectedRevision:Number(revision),
         roundGeneration:Number(state.roundGeneration),
         leaseId:state.leaseId,
-        progressionRunId:state.progressionRunId
+        progressionRunId:state.progressionRunId,
+        matchdayPlan
       });
       state = { ...state, ...matchday, shouldAdvance:true };
     }
     return state;
-  }
-
-  _clubNamesById(record) {
-    const clubs = record && record.gameState && record.gameState.clubs;
-    const names = {};
-    if (!clubs || !clubs.byId) return names;
-    Object.keys(clubs.byId).forEach(clubId => {
-      const club = clubs.byId[clubId];
-      if (club) names[clubId] = club.name || club.clubName || clubId;
-    });
-    return names;
   }
 
   async _syncLobbyProjection(record) {
@@ -430,7 +487,7 @@ class WorldSessionService {
     if (!manifest) throw new DomainRuleError('Active world not found');
     const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
     const { state:ensuredState } = await this._ensureRound(worldId, manifest.revision);
-    let state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds);
+    let state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds, userId);
     if (!state) state = ensuredState;
     const rows = await this.metadata.getManagementScopes({ worldId, roundGeneration:state.roundGeneration });
     return {
@@ -442,7 +499,7 @@ class WorldSessionService {
     };
   }
 
-  async markReady({ userId, worldId, expectedRevision, roundGeneration = null }) {
+  async markReady({ userId, worldId, expectedRevision, roundGeneration = null, matchIntent = 'QUICK' }) {
     const participation = await this.metadata.getParticipation({ worldId, userId });
     if (!participation) throw new DomainRuleError('User is not a member of this world');
     const manifest = await this.worlds.getManifest(worldId);
@@ -474,15 +531,24 @@ class WorldSessionService {
       activeUserIds,
       deadlineAt,
       timeModel:config.timeModel,
+      matchIntent,
       leaseMs:120000
     });
     if (result.shouldAdvance && result.status === ROUND_STATUS_LOCKING) {
+      const effectiveRecord = await this._effectiveRoundRecord(
+        worldId,
+        userId,
+        manifest.revision,
+        Number(result.roundGeneration)
+      );
+      const matchdayPlan = this._buildMatchdayPlan(effectiveRecord, result);
       const matchday = await this.metadata.beginMatchday({
         worldId,
         expectedRevision:Number(manifest.revision),
         roundGeneration:Number(result.roundGeneration),
         leaseId:result.leaseId,
-        progressionRunId:result.progressionRunId
+        progressionRunId:result.progressionRunId,
+        matchdayPlan
       });
       result = {
         ...result,
