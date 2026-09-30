@@ -284,6 +284,49 @@ function makeWorldRecord(worldId,userId){
       mixedPlan.liveUserIds.join(',')==='lB'&&mixedPlan.delegatedUserIds.join(',')==='lA',
       {matchdayPlan:liveReadyB.matchdayPlan});
 
+    let liveFinalizeEarlyError=null;
+    try{
+      await sessions.saveSlot({
+        userId:'lB',worldId:liveWorld,
+        worldDelta:delta(liveWorld,[{path:['gameState','calendar','currentSlotKey'],value:'w1'}]),
+        expectedRevision:liveRevision,season:1,slotKey:'w1',
+        matches:[],financeEvents:[],progressLeaseId:liveReadyB.leaseId
+      });
+    }catch(error){liveFinalizeEarlyError=error;}
+    check('Round finalization waits while a planned Live fixture is still running',
+      !!liveFinalizeEarlyError&&/live matches are still running/i.test(String(liveFinalizeEarlyError.message||'')),
+      {error:liveFinalizeEarlyError&&liveFinalizeEarlyError.message});
+
+    let delegatedCompleteError=null;
+    try{
+      await sessions.markLiveFixtureCompleted({
+        userId:'lA',worldId:liveWorld,roundGeneration:1,
+        progressionRunId:liveReadyB.progressionRunId,fixtureId:'f1'
+      });
+    }catch(error){delegatedCompleteError=error;}
+    check('A Schnellberechnung participant delegated to the Co-Trainer cannot falsely finish a Live fixture',
+      !!delegatedCompleteError&&/only a live participant/i.test(String(delegatedCompleteError.message||'')),
+      {error:delegatedCompleteError&&delegatedCompleteError.message});
+
+    const liveCompleted=await sessions.markLiveFixtureCompleted({
+      userId:'lB',worldId:liveWorld,roundGeneration:1,
+      progressionRunId:liveReadyB.progressionRunId,fixtureId:'f1'
+    });
+    check('The live participant can mark the Live fixture completed for finalization',
+      (liveCompleted.matchdayPlan.completedLiveFixtureIds||[]).includes('f1'),
+      {matchdayPlan:liveCompleted.matchdayPlan});
+
+    const liveFinalized=await sessions.saveSlot({
+      userId:'lB',worldId:liveWorld,
+      worldDelta:delta(liveWorld,[{path:['gameState','calendar','currentSlotKey'],value:'w1'}]),
+      expectedRevision:liveRevision,season:1,slotKey:'w1',
+      matches:[],financeEvents:[],progressLeaseId:liveReadyB.leaseId
+    });
+    const liveNextRound=await sessions.getProgression({userId:'lA',worldId:liveWorld});
+    check('Results/table phase can open only after every Live fixture is complete',
+      liveFinalized.revision===liveRevision+1&&liveNextRound.status==='OPEN'&&liveNextRound.roundGeneration===2,
+      {liveFinalized,liveNextRound});
+
     const countdownWorld='world-countdown-offline';
     const countdownRecord=makeWorldRecord(countdownWorld,'cA');
     countdownRecord.runtimeSettings={roundTimeModel:'COUNTDOWN',roundDurationSeconds:120};
