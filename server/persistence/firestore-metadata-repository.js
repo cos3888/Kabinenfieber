@@ -5,7 +5,7 @@ const { DomainRuleError, PersistenceNotFoundError } = require('./errors');
 const {
   ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY, ROUND_STATUS_FINALIZING,
   TIME_MODEL_COUNTDOWN, TIME_MODEL_FIXED_SCHEDULE,
-  mergeWorldDeltas
+  mergeWorldDeltas, findConflictingDeltaPath
 } = require('../domain/round-management');
 const { STATUS_ACTIVE, STATUS_LEFT, MAX_WORLD_SLOTS, MAX_ACTIVE_WORLDS_PER_USER } = require('./file-metadata-repository');
 
@@ -299,6 +299,10 @@ class FirestoreMetadataRepository {
 
       const docs = [];
       for (const entry of items) docs.push(await tx.get(entry.ref));
+      const existingQuery = this.db.collection(this.names.managementScopes).where('worldId', '==', String(worldId));
+      const existingSnap = await tx.get(existingQuery);
+      const existingRows = existingSnap.docs.map(doc => doc.data())
+        .filter(row => Number(row.roundGeneration) === Number(roundGeneration));
       const staged = [];
       for (let index=0; index<items.length; index+=1) {
         const { item, ref } = items[index];
@@ -316,6 +320,19 @@ class FirestoreMetadataRepository {
           });
           error.code = 'PERSISTENCE_CONFLICT';
           throw error;
+        }
+        for (const other of existingRows) {
+          if (!other || String(other.scope) === String(item.scope)) continue;
+          const conflictingPath = findConflictingDeltaPath(other.worldDelta, item.worldDelta);
+          if (conflictingPath) {
+            const error = new DomainRuleError('Management resources overlap on a shared storage path', {
+              scope:item.scope,
+              conflictingScope:other.scope,
+              path:conflictingPath
+            });
+            error.code = 'PERSISTENCE_CONFLICT';
+            throw error;
+          }
         }
         const row = {
           worldId:String(worldId),
