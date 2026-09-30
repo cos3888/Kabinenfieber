@@ -250,12 +250,16 @@ class FirestoreMetadataRepository {
           progressionRunId:null,
           leaseId:null,
           leaseExpiresAt:null,
-          lastCompletedProgressionRunId:null
+          lastCompletedProgressionRunId:null,
+          matchIntentByUserId:{},
+          matchdayPlan:null
         };
       } else {
         if (!state.roundGeneration) state.roundGeneration = 1;
         if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
         if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+      state.matchIntentByUserId = state.matchIntentByUserId || {};
+      if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
         if (!state.timeModel) state.timeModel = TIME_MODEL_COUNTDOWN;
         if (state.status === ROUND_STATUS_OPEN) {
           state.revision = Number(revision);
@@ -345,6 +349,8 @@ class FirestoreMetadataRepository {
       if (!state.roundGeneration) state.roundGeneration = 1;
       if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
       if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+      state.matchIntentByUserId = state.matchIntentByUserId || {};
+      if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
 
       const now = Date.now();
       if ((state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) &&
@@ -378,7 +384,7 @@ class FirestoreMetadataRepository {
 
   async markTrainerReady({
     worldId, userId, expectedRevision, roundGeneration = null, activeUserIds,
-    deadlineAt, timeModel = TIME_MODEL_COUNTDOWN, leaseMs = 120000
+    deadlineAt, timeModel = TIME_MODEL_COUNTDOWN, matchIntent = 'QUICK', leaseMs = 120000
   }) {
     const ref = this._progression(worldId);
     const active = Array.from(new Set((activeUserIds || []).map(String)));
@@ -398,12 +404,16 @@ class FirestoreMetadataRepository {
           progressionRunId:null,
           leaseId:null,
           leaseExpiresAt:null,
-          lastCompletedProgressionRunId:null
+          lastCompletedProgressionRunId:null,
+          matchIntentByUserId:{},
+          matchdayPlan:null
         };
       }
       if (!state.roundGeneration) state.roundGeneration = 1;
       if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
       if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+      state.matchIntentByUserId = state.matchIntentByUserId || {};
+      if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
       if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Round generation mismatch');
       if (state.status === ROUND_STATUS_OPEN) state.revision = Number(expectedRevision);
       if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
@@ -419,7 +429,12 @@ class FirestoreMetadataRepository {
         return { ...state, activeTrainerCount:active.length, readyTrainerCount:(state.readyUserIds || []).filter(id => active.includes(String(id))).length, shouldAdvance:false };
       }
 
+      const alreadyReady = (state.readyUserIds || []).map(String).includes(String(userId));
       state.readyUserIds = Array.from(new Set([...(state.readyUserIds || []).map(String), String(userId)]));
+      if (!alreadyReady) {
+        const normalizedIntent = String(matchIntent || 'QUICK').toUpperCase() === 'LIVE' ? 'LIVE' : 'QUICK';
+        state.matchIntentByUserId[String(userId)] = normalizedIntent;
+      }
       state.timeModel = timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
       if (state.timeModel === TIME_MODEL_COUNTDOWN) {
         if (!state.deadlineAt) state.deadlineAt = deadlineAt || new Date(now + 120000).toISOString();
@@ -447,7 +462,7 @@ class FirestoreMetadataRepository {
     });
   }
 
-  async beginMatchday({ worldId, expectedRevision, roundGeneration, leaseId, progressionRunId }) {
+  async beginMatchday({ worldId, expectedRevision, roundGeneration, leaseId, progressionRunId, matchdayPlan = null }) {
     const ref = this._progression(worldId);
     return this.db.runTransaction(async tx => {
       const doc = await tx.get(ref);
@@ -460,6 +475,7 @@ class FirestoreMetadataRepository {
         throw new DomainRuleError('Progression lease mismatch');
       }
       state.status = ROUND_STATUS_MATCHDAY;
+      state.matchdayPlan = matchdayPlan || null;
       tx.set(ref, state);
       return state;
     });
