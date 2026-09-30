@@ -328,6 +328,48 @@ class FirestoreMetadataRepository {
     });
   }
 
+  async claimDueWorldProgress({ worldId, expectedRevision, activeUserIds, leaseMs = 120000 }) {
+    const ref = this._progression(worldId);
+    const active = Array.from(new Set((activeUserIds || []).map(String)));
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) return null;
+      const state = doc.data();
+      if (Number(state.revision) !== Number(expectedRevision)) return state;
+      if (!state.roundGeneration) state.roundGeneration = 1;
+      if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
+      if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+
+      const now = Date.now();
+      if ((state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) &&
+          state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
+        state.status = ROUND_STATUS_OPEN;
+        state.leaseId = null;
+        state.leaseExpiresAt = null;
+      }
+
+      const ready = (state.readyUserIds || []).map(String);
+      const allReady = active.length > 0 && active.every(id => ready.includes(id));
+      const expired = Boolean(state.deadlineAt && new Date(state.deadlineAt).getTime() <= now);
+      const due = state.timeModel === TIME_MODEL_FIXED_SCHEDULE ? expired : (allReady || expired);
+      let shouldAdvance = false;
+      if (state.status === ROUND_STATUS_OPEN && due) {
+        state.status = ROUND_STATUS_LOCKING;
+        state.progressionRunId = state.progressionRunId || crypto.randomUUID();
+        state.leaseId = crypto.randomUUID();
+        state.leaseExpiresAt = new Date(now + Math.max(30000, Number(leaseMs || 120000))).toISOString();
+        shouldAdvance = true;
+      }
+      tx.set(ref, state);
+      return {
+        ...state,
+        activeTrainerCount:active.length,
+        readyTrainerCount:ready.filter(id => active.includes(id)).length,
+        shouldAdvance
+      };
+    });
+  }
+
   async markTrainerReady({
     worldId, userId, expectedRevision, roundGeneration = null, activeUserIds,
     deadlineAt, timeModel = TIME_MODEL_COUNTDOWN, leaseMs = 120000
