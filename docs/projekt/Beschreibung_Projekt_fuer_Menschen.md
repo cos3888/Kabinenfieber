@@ -98,7 +98,35 @@ Ein neuer Regressionstest `tests/run_kf_0_31_4_large_world_memory_test.js` rekon
 
 Die `MaxListenersExceededWarning` mit 11 `error/close`-Listenern auf `PassThrough` wurde ebenfalls untersucht. Sie stammt nicht aus einer eigenen Listener-Registrierung von Kabinenfieber, sondern entspricht dem offenen Upstream-Fehler `googleapis/google-cloud-node#9185` in `@google-cloud/storage` ab 8.0.1; der Fehler wurde upstream ausdruecklich auch fuer 8.2.0 reproduziert. Es wird **kein** Listener-Limit angehoben. Bis zu einem offiziellen Upstream-Fix wird `@google-cloud/storage` exakt auf die dort als nicht betroffene 8.0.0 gepinnt.
 
-Der Produktivdienst bleibt unveraendert. Nach gruenem Abschluss-CI muss der Testdienst erneut gebaut und Welt `123` gezielt wieder mit 512 MiB getestet werden. Erst dieser Praxistest entscheidet, ob 512 MiB dauerhaft ausreichen.
+Der Produktivdienst blieb waehrend KF_0.31.4 unveraendert. Der Testdienst wird fuer den weiteren Entwicklungsbetrieb bewusst bei 1 GiB RAM belassen; ein Rueckbau auf 512 MiB ist kein offener Abschluss-Schritt mehr. Die reale grosse Welt `123` wurde auf dieser Konfiguration erfolgreich weitergespielt und zeigte keine erkennbare progressive Verlangsamung.
+
+### Finaler Praxistest und Versionsabschluss
+
+KF_0.31.4 wurde nach den technischen Regressionen auch praktisch erfolgreich verifiziert:
+- Testbackend bleibt bei 1 GiB RAM;
+- Welt `abc` ist nach dem finalen Pokalauslosungsfix wieder ueber den vorher blockierenden Stand hinaus weiterspielbar;
+- grosse Welt `123` wurde erfolgreich bis mindestens Ende 35 weitergespielt;
+- normale Slotwechsel waren nach dem Praxistest nach etwa 2-3 Sekunden wieder bedienbar;
+- die serverseitige Speicherung lief danach typischerweise noch etwa 4-5 Sekunden weiter;
+- `Weiter` blieb bis zur Serverbestaetigung gesperrt;
+- ein Spieltag mit Schnellberechnung benoetigte ungefaehr 5 Sekunden bis zur Ergebnisdarstellung;
+- es war keine erkennbare progressive Verlangsamung feststellbar.
+
+Der finale Pokalauslosungsfix gilt fuer nationale Pokale und den Fiebercup: faellige Auslosungen werden autoritativ waehrend der Progression erzeugt und gespeichert, bevor ihre UI-Praesentation beginnt. Die Praesentation liest nur bereits gespeicherte Wahrheit und darf weder Fixtures noch Kalenderstand erzeugen oder veraendern. Dadurch kann ein Reload oder eine spaetere Praesentation keine zweite Kalenderwahrheit erzeugen.
+
+Letzter verifizierter funktionaler HEAD vor dem reinen Dokumentationsabschluss:
+`52e71747c0cee19b1f9030bc3eeece56520ea7af`
+
+Finale Verifikation dieses funktionalen Stands:
+- Fixbranch 32 Commits vor `main`, 0 dahinter;
+- KF-0.31.4-CI gruen;
+- GitHub Pages Build gruen;
+- komplette aktuelle Core-Regressionssuite gruen;
+- 45/45 Testskripte erfolgreich;
+- authoritative Pokalauslosungs-Regression gruen;
+- Large-World-Memory-Test gruen.
+
+Der danach folgende Commit ist ausschliesslich Dokumentationsabschluss und darf keine funktionale Aenderung enthalten.
 
 ### Conflict-/Retry-UX
 
