@@ -256,6 +256,34 @@ function makeWorldRecord(worldId,userId){
       !!lateSaveError&&lateSaveError.code==='PERSISTENCE_CONFLICT',
       {error:lateSaveError&&lateSaveError.message});
 
+    const liveWorld='world-live-intent';
+    const liveRecord=makeWorldRecord(liveWorld,'lA');
+    const liveCreated=await sessions.createWorld({
+      userId:'lA',worldRecord:liveRecord,worldName:'Live Intent',
+      visibility:'PUBLIC',joinPolicy:'OPEN'
+    });
+    const liveAAssigned=await sessions.assignClub({userId:'lA',worldId:liveWorld,clubId:'club-a',expectedRevision:liveCreated.revision});
+    const liveJoined=await sessions.joinWorld({userId:'lB',displayName:'LB',worldId:liveWorld});
+    const liveBAssigned=await sessions.assignClub({userId:'lB',worldId:liveWorld,clubId:'club-b',expectedRevision:liveJoined.revision});
+    const liveRevision=liveBAssigned.revision;
+    const liveReadyA=await sessions.markReady({
+      userId:'lA',worldId:liveWorld,expectedRevision:liveRevision,roundGeneration:1,matchIntent:'QUICK'
+    });
+    const liveRetryA=await sessions.markReady({
+      userId:'lA',worldId:liveWorld,expectedRevision:liveRevision,roundGeneration:1,matchIntent:'LIVE'
+    });
+    check('A trainer who chose Schnellberechnung cannot later switch back to Live for the same round',
+      liveReadyA.matchIntentByUserId.lA==='QUICK'&&liveRetryA.matchIntentByUserId.lA==='QUICK',
+      {liveReadyA,liveRetryA});
+    const liveReadyB=await sessions.markReady({
+      userId:'lB',worldId:liveWorld,expectedRevision:liveRevision,roundGeneration:1,matchIntent:'LIVE'
+    });
+    const mixedPlan=liveReadyB.matchdayPlan&&liveReadyB.matchdayPlan.fixturePlans&&liveReadyB.matchdayPlan.fixturePlans[0];
+    check('In a human-vs-human match one Live request makes the fixture Live while Schnellberechnung remains delegated',
+      liveReadyB.status==='MATCHDAY'&&mixedPlan&&mixedPlan.mode==='LIVE'&&
+      mixedPlan.liveUserIds.join(',')==='lB'&&mixedPlan.delegatedUserIds.join(',')==='lA',
+      {matchdayPlan:liveReadyB.matchdayPlan});
+
     const countdownWorld='world-countdown-offline';
     const countdownRecord=makeWorldRecord(countdownWorld,'cA');
     countdownRecord.runtimeSettings={roundTimeModel:'COUNTDOWN',roundDurationSeconds:120};
