@@ -185,14 +185,46 @@ Temporäre Abhaengigkeitsstrategie:
 - `@google-cloud/storage` wird exakt auf `8.0.0` gepinnt, die im Upstream-Issue als nicht betroffen beschrieben ist.
 - Spaeter nur nach verifiziertem Upstream-Fix wieder auf eine neuere 8.x/9.x-Version wechseln.
 
-Praxistest nach Abschluss-CI:
-1. Testbackend neu bauen.
-2. Testdienst wieder mit 512 MiB betreiben.
-3. Welt `123` cold laden.
-4. `GET /api/v1/worlds/world-mul8kohq-hyn9m0/integrity` pruefen.
-5. Management-Save und Slot-Wechsel/Slot-Save pruefen.
-6. Produktivdienst nicht veraendern.
-7. Nicht nach `main` mergen, bis der Praxistest freigegeben ist.
+Finaler Praxistest:
+1. Testbackend bleibt bewusst bei 1 GiB RAM.
+2. Welt `abc` ist nach dem finalen Pokalauslosungsfix wieder weiterspielbar.
+3. Grosse Welt `123` wurde erfolgreich bis mindestens Ende 35 weitergespielt.
+4. Normale Slotwechsel waren nach etwa 2-3 Sekunden wieder bedienbar; der serverseitige Save lief danach typischerweise noch etwa 4-5 Sekunden.
+5. `Weiter` blieb bis zur Save-Bestaetigung gesperrt.
+6. Spieltag mit Schnellberechnung lag im Praxistest bei ungefaehr 5 Sekunden bis zum Ergebnis.
+7. Keine erkennbare progressive Verlangsamung.
+8. Produktivdienst wurde fuer diesen Test nicht veraendert.
+
+### Finaler Pokalauslosungsfix / autoritative Progression
+
+Die in KF_0.31.4 gefundene Blockade nach Pokalauslosungen ist final behoben.
+
+Verbindliche Architektur:
+- faellige Auslosungen werden im autoritativen Progressionspfad erzeugt und gespeichert;
+- erst danach wird die vorhandene Auslosung dem jeweiligen Client praesentiert;
+- die Praesentation selbst veraendert weder Kalender noch Fixtures;
+- nationale Pokale und Fiebercup verwenden diese Regel;
+- wiederholte Due-Checks muessen dieselbe gespeicherte Auslosung wiederverwenden und duerfen keine Fixtures duplizieren.
+
+Damit ist die Kalenderwahrheit nicht mehr von einem offenen Browser, Modal oder Praesentationszeitpunkt abhaengig.
+
+### Finaler verifizierter KF_0.31.4-Stand
+
+Letzter funktionaler HEAD vor dem reinen Dokumentationsabschluss:
+`52e71747c0cee19b1f9030bc3eeece56520ea7af`
+
+Verifiziert:
+- Fixbranch 32 Commits vor `main`, 0 dahinter;
+- KF-0.31.4-CI gruen;
+- GitHub Pages Build gruen;
+- komplette aktuelle Core-Regressionssuite gruen;
+- 45/45 Testskripte erfolgreich;
+- authoritative Pokalauslosungs-Regression gruen;
+- Large-World-Memory-Test gruen;
+- Welt `abc` praktisch weiterspielbar;
+- Welt `123` praktisch bis mindestens Ende 35 erfolgreich getestet.
+
+Der anschliessende Commit darf ausschliesslich diese Abschlussdokumentation aktualisieren. Danach CI erneut ausfuehren und bei gruenem Stand KF_0.31.4 nach `main` mergen.
 
 ### Save-/Conflict-UX
 
