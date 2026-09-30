@@ -83,13 +83,19 @@ class FileMetadataRepository {
     return data.worlds[worldId] ? clone(data.worlds[worldId]) : null;
   }
 
-  async setWorldLobbyProjection({ worldId, currentSeason = 1, maxPlayers = 0, clubNamesById = {} }) {
+  async setWorldLobbyProjection({
+    worldId, currentSeason = 1, maxPlayers = 0, clubNamesById = {},
+    roundTimeModel = TIME_MODEL_COUNTDOWN, roundDurationSeconds = 120, nextRoundAt = null
+  }) {
     return this._mutate(data => {
       const world = data.worlds[worldId];
       if (!world) throw new PersistenceNotFoundError('World not found', { worldId });
       world.currentSeason = Number(currentSeason || 1);
       world.maxPlayers = Number(maxPlayers || 0);
       world.clubNamesById = clone(clubNamesById || {});
+      world.roundTimeModel = roundTimeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
+      world.roundDurationSeconds = Math.max(15, Number(roundDurationSeconds || 120));
+      world.nextRoundAt = nextRoundAt || null;
       world.projectionUpdatedAt = nowIso();
       return world;
     });
