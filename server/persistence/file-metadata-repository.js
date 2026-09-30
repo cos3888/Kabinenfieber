@@ -7,7 +7,7 @@ const { DomainRuleError, PersistenceNotFoundError } = require('./errors');
 const {
   ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY, ROUND_STATUS_FINALIZING,
   TIME_MODEL_COUNTDOWN, TIME_MODEL_FIXED_SCHEDULE,
-  mergeWorldDeltas
+  mergeWorldDeltas, findConflictingDeltaPath
 } = require('../domain/round-management');
 
 const STATUS_ACTIVE = 'ACTIVE';
@@ -324,6 +324,8 @@ class FileMetadataRepository {
         throw new DomainRuleError('Trainer is already ready for this round');
       }
 
+      const existingRows = Object.values(data.managementScopes)
+        .filter(row => row && String(row.worldId) === String(worldId) && Number(row.roundGeneration) === Number(roundGeneration));
       const staged = [];
       for (const item of scopeDeltas || []) {
         if (!item || !item.scope || !item.worldDelta) throw new DomainRuleError('Invalid management scope delta');
@@ -341,6 +343,19 @@ class FileMetadataRepository {
           });
           error.code = 'PERSISTENCE_CONFLICT';
           throw error;
+        }
+        for (const other of existingRows) {
+          if (!other || String(other.scope) === String(item.scope)) continue;
+          const conflictingPath = findConflictingDeltaPath(other.worldDelta, item.worldDelta);
+          if (conflictingPath) {
+            const error = new DomainRuleError('Management resources overlap on a shared storage path', {
+              scope:item.scope,
+              conflictingScope:other.scope,
+              path:conflictingPath
+            });
+            error.code = 'PERSISTENCE_CONFLICT';
+            throw error;
+          }
         }
         staged.push({
           key,
