@@ -447,15 +447,34 @@ class FileMetadataRepository {
     });
   }
 
-  async completeWorldProgress({ worldId, expectedRevision, nextRevision, leaseId, roundGeneration = null, progressionRunId = null }) {
+  async completeWorldProgress({
+    worldId, expectedRevision, nextRevision, leaseId, roundGeneration = null,
+    progressionRunId = null, allowCommittedRecovery = false
+  }) {
     return this._mutate(data => {
       data.progression = data.progression || {};
       data.managementScopes = data.managementScopes || {};
       const state = data.progression[worldId];
-      if (!state || Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
+      if (!state) throw new DomainRuleError('Progression state not found');
+
+      if (progressionRunId &&
+          state.status === ROUND_STATUS_OPEN &&
+          String(state.lastCompletedProgressionRunId || '') === String(progressionRunId) &&
+          Number(state.revision) === Number(nextRevision)) {
+        return state;
+      }
+
+      if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
       if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Progression generation mismatch');
-      if (state.status !== ROUND_STATUS_MATCHDAY || String(state.leaseId || '') !== String(leaseId || '')) throw new DomainRuleError('Progression lease mismatch');
-      if (progressionRunId != null && String(state.progressionRunId || '') !== String(progressionRunId || '')) throw new DomainRuleError('Progression run mismatch');
+      if (state.status !== ROUND_STATUS_MATCHDAY && !(allowCommittedRecovery && state.status === ROUND_STATUS_LOCKING)) {
+        throw new DomainRuleError('Progression state mismatch');
+      }
+      if (progressionRunId != null && String(state.progressionRunId || '') !== String(progressionRunId || '')) {
+        throw new DomainRuleError('Progression run mismatch');
+      }
+      if (!allowCommittedRecovery && String(state.leaseId || '') !== String(leaseId || '')) {
+        throw new DomainRuleError('Progression lease mismatch');
+      }
 
       const completedGeneration = Number(state.roundGeneration || 1);
       for (const key of Object.keys(data.managementScopes)) {
@@ -465,6 +484,7 @@ class FileMetadataRepository {
         }
       }
 
+      const completedRunId = progressionRunId || state.progressionRunId || null;
       const next = {
         worldId,
         revision:Number(nextRevision),
@@ -476,7 +496,7 @@ class FileMetadataRepository {
         progressionRunId:null,
         leaseId:null,
         leaseExpiresAt:null,
-        lastCompletedProgressionRunId:state.progressionRunId || null
+        lastCompletedProgressionRunId:completedRunId
       };
       data.progression[worldId]=next;
       return next;
