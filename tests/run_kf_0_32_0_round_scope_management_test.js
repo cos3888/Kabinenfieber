@@ -211,9 +211,6 @@ function makeWorldRecord(worldId,userId){
 
     const effectiveForProgress=await sessions.openWorld({userId:'uB',worldId});
     const progressDelta=delta(worldId,[
-      {path:['gameState','squads','club-a'],value:effectiveForProgress.worldRecord.gameState.squads['club-a']},
-      {path:['gameState','squads','club-b'],value:effectiveForProgress.worldRecord.gameState.squads['club-b']},
-      {path:['gameState','players','byId','pa'],value:effectiveForProgress.worldRecord.gameState.players.byId.pa},
       {path:['gameState','calendar','currentSlotKey'],value:'w1'}
     ]);
     const progressed=await sessions.saveSlot({
@@ -247,6 +244,89 @@ function makeWorldRecord(worldId,userId){
     check('Late saves from the previous roundGeneration can never enter the new slot',
       !!lateSaveError&&lateSaveError.code==='PERSISTENCE_CONFLICT',
       {error:lateSaveError&&lateSaveError.message});
+
+    const countdownWorld='world-countdown-offline';
+    const countdownRecord=makeWorldRecord(countdownWorld,'cA');
+    countdownRecord.runtimeSettings={roundTimeModel:'COUNTDOWN',roundDurationSeconds:120};
+    await sessions.createWorld({
+      userId:'cA',worldRecord:countdownRecord,worldName:'Countdown Offline',
+      visibility:'PUBLIC',joinPolicy:'OPEN'
+    });
+    await sessions.joinWorld({userId:'cB',displayName:'CB',worldId:countdownWorld});
+    const countdownManifest=await worlds.getManifest(countdownWorld);
+    const countdownReady=await sessions.markReady({
+      userId:'cA',worldId:countdownWorld,expectedRevision:countdownManifest.revision,roundGeneration:1
+    });
+    check('Countdown starts only with the first Ready and stores an absolute deadline',
+      countdownReady.status==='OPEN'&&countdownReady.readyTrainerCount===1&&!!countdownReady.deadlineAt,
+      {countdownReady});
+    await metadata._mutate(data=>{
+      data.progression[countdownWorld].deadlineAt=new Date(Date.now()-1000).toISOString();
+      return data.progression[countdownWorld];
+    });
+    const countdownClaims=await Promise.all([
+      sessions.getProgression({userId:'cA',worldId:countdownWorld}),
+      sessions.getProgression({userId:'cB',worldId:countdownWorld})
+    ]);
+    check('Expired countdown can be claimed after offline time and creates exactly one progression owner',
+      countdownClaims.filter(row=>row.shouldAdvance).length===1&&
+      countdownClaims.every(row=>row.status==='MATCHDAY')&&
+      new Set(countdownClaims.map(row=>row.progressionRunId)).size===1,
+      {countdownClaims});
+
+    const fixedWorld='world-fixed-schedule';
+    const fixedRecord=makeWorldRecord(fixedWorld,'fA');
+    fixedRecord.runtimeSettings={
+      roundTimeModel:'FIXED_SCHEDULE',
+      roundDurationSeconds:120,
+      nextRoundAt:new Date(Date.now()+60*60*1000).toISOString()
+    };
+    await sessions.createWorld({
+      userId:'fA',worldRecord:fixedRecord,worldName:'Fixed Schedule',
+      visibility:'PUBLIC',joinPolicy:'OPEN'
+    });
+    await sessions.joinWorld({userId:'fB',displayName:'FB',worldId:fixedWorld});
+    const fixedManifest=await worlds.getManifest(fixedWorld);
+    const fixedReadyA=await sessions.markReady({userId:'fA',worldId:fixedWorld,expectedRevision:fixedManifest.revision,roundGeneration:1});
+    const fixedReadyB=await sessions.markReady({userId:'fB',worldId:fixedWorld,expectedRevision:fixedManifest.revision,roundGeneration:1});
+    check('FIXED_SCHEDULE never advances early merely because all trainers are ready',
+      fixedReadyA.status==='OPEN'&&!fixedReadyA.shouldAdvance&&
+      fixedReadyB.status==='OPEN'&&!fixedReadyB.shouldAdvance&&
+      fixedReadyB.readyTrainerCount===2,
+      {fixedReadyA,fixedReadyB});
+    const expiredFixedAt=new Date(Date.now()-1000).toISOString();
+    await metadata._mutate(data=>{
+      data.worlds[fixedWorld].nextRoundAt=expiredFixedAt;
+      data.progression[fixedWorld].deadlineAt=expiredFixedAt;
+      return data.progression[fixedWorld];
+    });
+    const fixedClaims=await Promise.all([
+      sessions.getProgression({userId:'fA',worldId:fixedWorld}),
+      sessions.getProgression({userId:'fB',worldId:fixedWorld})
+    ]);
+    check('FIXED_SCHEDULE becomes due only at its authoritative server deadline and is claimed once',
+      fixedClaims.filter(row=>row.shouldAdvance).length===1&&
+      fixedClaims.every(row=>row.status==='MATCHDAY')&&
+      new Set(fixedClaims.map(row=>row.progressionRunId)).size===1,
+      {fixedClaims});
+
+    const capacityWorld='world-capacity-18';
+    const capacityRecord=makeWorldRecord(capacityWorld,'cap0');
+    await sessions.createWorld({
+      userId:'cap0',worldRecord:capacityRecord,worldName:'Capacity',
+      visibility:'PUBLIC',joinPolicy:'OPEN'
+    });
+    for(let i=1;i<18;i+=1){
+      await sessions.joinWorld({userId:'cap'+i,displayName:'Cap '+i,worldId:capacityWorld});
+    }
+    let capacityError=null;
+    try{
+      await sessions.joinWorld({userId:'cap18',displayName:'Cap 18',worldId:capacityWorld});
+    }catch(error){capacityError=error;}
+    const capacityUsers=await metadata.listActiveUserIdsForWorld(capacityWorld);
+    check('A world accepts at most 18 active human managers',
+      capacityUsers.length===18&&!!capacityError&&/maximum of 18/i.test(String(capacityError.message||'')),
+      {participantCount:capacityUsers.length,error:capacityError&&capacityError.message});
 
     report.metrics={
       baseRevision,
