@@ -482,8 +482,10 @@ class WorldSessionService {
   async saveWorld({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents, progressLeaseId = null }) {
     const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
     let allowMultiplayerProgress = false;
+    let progressState = null;
     if (progressLeaseId) {
-      const state = await this.metadata.getWorldProgression(worldId);
+      progressState = await this.metadata.getWorldProgression(worldId);
+      const state = progressState;
       if (!state ||
           Number(state.revision) !== Number(expectedRevision) ||
           state.status !== ROUND_STATUS_MATCHDAY ||
@@ -506,8 +508,8 @@ class WorldSessionService {
           expectedRevision:Number(expectedRevision),
           nextRevision:Number(result.revision),
           leaseId:progressLeaseId,
-          roundGeneration:Number(state.roundGeneration),
-          progressionRunId:state.progressionRunId || null
+          roundGeneration:Number(progressState.roundGeneration),
+          progressionRunId:progressState.progressionRunId || null
         }).catch(() => {});
       }
       return result;
@@ -589,8 +591,10 @@ class WorldSessionService {
   async saveSlot({ userId, worldId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches, financeEvents, progressLeaseId = null }) {
     const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
     if (activeUserIds.length > 1 && !progressLeaseId) throw new DomainRuleError('Multiplayer slot progress requires a progress lease');
+    let progressState = null;
     if (progressLeaseId) {
-      const state = await this.metadata.getWorldProgression(worldId);
+      progressState = await this.metadata.getWorldProgression(worldId);
+      const state = progressState;
       if (!state ||
           Number(state.revision) !== Number(expectedRevision) ||
           state.status !== ROUND_STATUS_MATCHDAY ||
@@ -606,8 +610,8 @@ class WorldSessionService {
           expectedRevision:Number(expectedRevision),
           nextRevision:Number(result.revision),
           leaseId:progressLeaseId,
-          roundGeneration:Number(state.roundGeneration),
-          progressionRunId:state.progressionRunId || null
+          roundGeneration:Number(progressState.roundGeneration),
+          progressionRunId:progressState.progressionRunId || null
         }).catch(() => {});
       }
       return result;
