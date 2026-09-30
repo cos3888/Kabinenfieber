@@ -7,7 +7,7 @@ const { MAX_WORLD_SLOTS, MAX_ACTIVE_WORLDS_PER_USER } = require('../persistence/
 const { normalizeWorldName, normalizeWorldAccess } = require('../domain/world-metadata');
 const { applyWorldDelta } = require('../domain/world-delta');
 const {
-  ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY,
+  ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY, ROUND_STATUS_FINALIZING,
   TIME_MODEL_COUNTDOWN, TIME_MODEL_FIXED_SCHEDULE,
   splitManagementDeltaByScope, scopeRevisionMap, mergeWorldDeltas
 } = require('../domain/round-management');
@@ -37,12 +37,24 @@ class WorldSessionService {
   async _ensureRound(worldId, revision) {
     const meta = await this.metadata.getWorld(worldId);
     const config = this._roundConfig(meta);
-    const state = await this.metadata.ensureWorldRound({
+    let state = await this.metadata.ensureWorldRound({
       worldId,
       revision:Number(revision),
       timeModel:config.timeModel,
       fixedDeadlineAt:config.fixedDeadlineAt
     });
+    if (state && state.status === ROUND_STATUS_FINALIZING &&
+        Number(state.revision) !== Number(revision) &&
+        state.leaseId && state.progressionRunId) {
+      state = await this.metadata.completeWorldProgress({
+        worldId,
+        expectedRevision:Number(state.revision),
+        nextRevision:Number(revision),
+        leaseId:state.leaseId,
+        roundGeneration:Number(state.roundGeneration),
+        progressionRunId:state.progressionRunId
+      });
+    }
     return { state, config };
   }
 
@@ -609,7 +621,7 @@ class WorldSessionService {
       const state = progressState;
       if (!state ||
           Number(state.revision) !== Number(expectedRevision) ||
-          state.status !== ROUND_STATUS_MATCHDAY ||
+          (state.status !== ROUND_STATUS_MATCHDAY && state.status !== ROUND_STATUS_FINALIZING) ||
           String(state.leaseId || '') !== String(progressLeaseId)) {
         throw new DomainRuleError('Progression lease mismatch');
       }
@@ -618,7 +630,17 @@ class WorldSessionService {
       throw new DomainRuleError('Multiplayer snapshot progress requires a progress lease');
     }
 
+    let worldCommitted = false;
     try {
+      if (progressLeaseId && progressState && progressState.status === ROUND_STATUS_MATCHDAY) {
+        progressState = await this.metadata.beginFinalizing({
+          worldId,
+          expectedRevision:Number(expectedRevision),
+          roundGeneration:Number(progressState.roundGeneration),
+          leaseId:progressLeaseId,
+          progressionRunId:progressState.progressionRunId
+        });
+      }
       let snapshotRecord = worldRecord;
       if (progressLeaseId && progressState) {
         const rows = await this.metadata.getManagementScopes({
@@ -630,6 +652,7 @@ class WorldSessionService {
       const result = await this.runtime.saveSnapshot({
         userId, worldId, worldRecord:snapshotRecord, expectedRevision, matches, financeEvents, allowMultiplayerProgress
       });
+      worldCommitted = true;
       await this._syncLobbyProjection(snapshotRecord).catch(() => {});
       if (progressLeaseId) {
         await this.metadata.completeWorldProgress({
@@ -639,11 +662,11 @@ class WorldSessionService {
           leaseId:progressLeaseId,
           roundGeneration:Number(progressState.roundGeneration),
           progressionRunId:progressState.progressionRunId || null
-        }).catch(() => {});
+        });
       }
       return result;
     } catch (error) {
-      if (progressLeaseId) {
+      if (progressLeaseId && !worldCommitted) {
         await this.metadata.releaseWorldProgress({
           worldId,
           expectedRevision:Number(expectedRevision),
@@ -726,12 +749,22 @@ class WorldSessionService {
       const state = progressState;
       if (!state ||
           Number(state.revision) !== Number(expectedRevision) ||
-          state.status !== ROUND_STATUS_MATCHDAY ||
+          (state.status !== ROUND_STATUS_MATCHDAY && state.status !== ROUND_STATUS_FINALIZING) ||
           String(state.leaseId || '') !== String(progressLeaseId)) {
         throw new DomainRuleError('Progression lease mismatch');
       }
     }
+    let worldCommitted = false;
     try {
+      if (progressLeaseId && progressState && progressState.status === ROUND_STATUS_MATCHDAY) {
+        progressState = await this.metadata.beginFinalizing({
+          worldId,
+          expectedRevision:Number(expectedRevision),
+          roundGeneration:Number(progressState.roundGeneration),
+          leaseId:progressLeaseId,
+          progressionRunId:progressState.progressionRunId
+        });
+      }
       let progressWorldRecord = worldRecord;
       let progressWorldDelta = worldDelta;
       if (progressLeaseId && progressState) {
@@ -749,6 +782,7 @@ class WorldSessionService {
         userId, worldId, worldRecord:progressWorldRecord, worldDelta:progressWorldDelta,
         expectedRevision, season, slotKey, matches, financeEvents
       });
+      worldCommitted = true;
       if (progressLeaseId) {
         await this.metadata.completeWorldProgress({
           worldId,
@@ -757,11 +791,11 @@ class WorldSessionService {
           leaseId:progressLeaseId,
           roundGeneration:Number(progressState.roundGeneration),
           progressionRunId:progressState.progressionRunId || null
-        }).catch(() => {});
+        });
       }
       return result;
     } catch (error) {
-      if (progressLeaseId) {
+      if (progressLeaseId && !worldCommitted) {
         await this.metadata.releaseWorldProgress({
           worldId,
           expectedRevision:Number(expectedRevision),
