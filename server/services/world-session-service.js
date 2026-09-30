@@ -9,7 +9,7 @@ const { applyWorldDelta } = require('../domain/world-delta');
 const {
   ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY,
   TIME_MODEL_COUNTDOWN, TIME_MODEL_FIXED_SCHEDULE,
-  splitManagementDeltaByScope, scopeRevisionMap
+  splitManagementDeltaByScope, scopeRevisionMap, mergeWorldDeltas
 } = require('../domain/round-management');
 
 function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
@@ -65,6 +65,40 @@ class WorldSessionService {
       if (row && row.worldDelta) applyWorldDelta(effective, row.worldDelta);
     }
     return effective;
+  }
+
+  _mergeManagementOverlayDelta(worldId, rows, progressDelta) {
+    let combined = null;
+    for (const row of rows || []) {
+      if (!row || !row.worldDelta) continue;
+      combined = mergeWorldDeltas(combined, row.worldDelta);
+    }
+    if (progressDelta) combined = mergeWorldDeltas(combined, progressDelta);
+    return combined || {
+      schemaVersion:'kf-world-delta-0.31.0',
+      worldId:String(worldId),
+      ops:[]
+    };
+  }
+
+  async _claimProgressIfDue(worldId, revision, activeUserIds) {
+    let state = await this.metadata.claimDueWorldProgress({
+      worldId,
+      expectedRevision:Number(revision),
+      activeUserIds,
+      leaseMs:120000
+    });
+    if (state && state.shouldAdvance && state.status === ROUND_STATUS_LOCKING) {
+      const matchday = await this.metadata.beginMatchday({
+        worldId,
+        expectedRevision:Number(revision),
+        roundGeneration:Number(state.roundGeneration),
+        leaseId:state.leaseId,
+        progressionRunId:state.progressionRunId
+      });
+      state = { ...state, ...matchday, shouldAdvance:true };
+    }
+    return state;
   }
 
   _clubNamesById(record) {
@@ -237,6 +271,8 @@ class WorldSessionService {
   }
 
   async joinWorld({ userId, displayName, worldId }) {
+    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    if (activeUserIds.length >= 18) throw new DomainRuleError('World already has the maximum of 18 human managers');
     const meta = await this.metadata.getWorld(worldId);
     if (!meta || meta.status !== 'ACTIVE') throw new DomainRuleError('Active world not found');
     if (meta.visibility !== 'PUBLIC' || meta.joinPolicy !== 'OPEN') throw new DomainRuleError('World does not allow direct joining');
@@ -295,6 +331,8 @@ class WorldSessionService {
     if (!accept) {
       return this.metadata.resolveWorldApplication({ worldId, userId:applicantUserId, status:'REJECTED', resolvedByUserId:actorUserId });
     }
+    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    if (activeUserIds.length >= 18) throw new DomainRuleError('World already has the maximum of 18 human managers');
     const meta = await this.metadata.getWorld(worldId);
     if (!meta || meta.status !== 'ACTIVE' || meta.joinPolicy !== 'APPLICATION') throw new DomainRuleError('World does not accept applications');
     if (membershipForUser(record, applicantUserId)) throw new DomainRuleError('User already participates in this world');
@@ -378,12 +416,17 @@ class WorldSessionService {
     if (!participation) throw new DomainRuleError('User is not a member of this world');
     const manifest = await this.worlds.getManifest(worldId);
     if (!manifest) throw new DomainRuleError('Active world not found');
-    const { state } = await this._ensureRound(worldId, manifest.revision);
+    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    const { state:ensuredState } = await this._ensureRound(worldId, manifest.revision);
+    let state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds);
+    if (!state) state = ensuredState;
     const rows = await this.metadata.getManagementScopes({ worldId, roundGeneration:state.roundGeneration });
     return {
       ...state,
+      activeTrainerCount:activeUserIds.length,
+      readyTrainerCount:(state.readyUserIds || []).map(String).filter(id => activeUserIds.map(String).includes(id)).length,
       scopeRevisions:scopeRevisionMap(rows),
-      shouldAdvance:false
+      shouldAdvance:Boolean(state.shouldAdvance)
     };
   }
 
@@ -498,10 +541,18 @@ class WorldSessionService {
     }
 
     try {
+      let snapshotRecord = worldRecord;
+      if (progressLeaseId && progressState) {
+        const rows = await this.metadata.getManagementScopes({
+          worldId,
+          roundGeneration:Number(progressState.roundGeneration)
+        });
+        snapshotRecord = this._applyManagementOverlays(worldRecord, rows);
+      }
       const result = await this.runtime.saveSnapshot({
-        userId, worldId, worldRecord, expectedRevision, matches, financeEvents, allowMultiplayerProgress
+        userId, worldId, worldRecord:snapshotRecord, expectedRevision, matches, financeEvents, allowMultiplayerProgress
       });
-      await this._syncLobbyProjection(worldRecord).catch(() => {});
+      await this._syncLobbyProjection(snapshotRecord).catch(() => {});
       if (progressLeaseId) {
         await this.metadata.completeWorldProgress({
           worldId,
@@ -603,7 +654,23 @@ class WorldSessionService {
       }
     }
     try {
-      const result = await this.runtime.saveSlot({ userId, worldId, worldRecord, worldDelta, expectedRevision, season, slotKey, matches, financeEvents });
+      let progressWorldRecord = worldRecord;
+      let progressWorldDelta = worldDelta;
+      if (progressLeaseId && progressState) {
+        const rows = await this.metadata.getManagementScopes({
+          worldId,
+          roundGeneration:Number(progressState.roundGeneration)
+        });
+        if (worldDelta) {
+          progressWorldDelta = this._mergeManagementOverlayDelta(worldId, rows, worldDelta);
+        } else if (worldRecord) {
+          progressWorldRecord = this._applyManagementOverlays(worldRecord, rows);
+        }
+      }
+      const result = await this.runtime.saveSlot({
+        userId, worldId, worldRecord:progressWorldRecord, worldDelta:progressWorldDelta,
+        expectedRevision, season, slotKey, matches, financeEvents
+      });
       if (progressLeaseId) {
         await this.metadata.completeWorldProgress({
           worldId,
