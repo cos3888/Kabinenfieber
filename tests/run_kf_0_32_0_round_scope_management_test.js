@@ -450,6 +450,103 @@ function makeWorldRecord(worldId,userId){
       recoveredWorld.worldRecord.gameState.calendar.currentSlotKey==='w1',
       {recoveredRound,currentSlotKey:recoveredWorld.worldRecord.gameState.calendar.currentSlotKey});
 
+    const maxWorld='world-max-human-managers';
+    const maxRecord=makeWorldRecord(maxWorld,'m0');
+    maxRecord.gameState.clubs={byId:{},order:[]};
+    maxRecord.gameState.players={byId:{},order:[]};
+    maxRecord.gameState.squads={};
+    maxRecord.gameState.clubFinances={byClub:{}};
+    maxRecord.gameState.calendar.fixtures=[];
+    for(let i=0;i<18;i+=1){
+      const clubId='max-club-'+String(i).padStart(2,'0');
+      const playerId='max-player-'+String(i).padStart(2,'0');
+      maxRecord.gameState.clubs.byId[clubId]={id:clubId,name:'Max Club '+i};
+      maxRecord.gameState.clubs.order.push(clubId);
+      maxRecord.gameState.players.byId[playerId]={id:playerId,clubId,contract:{salaryBase:1,validUntilSeason:3}};
+      maxRecord.gameState.players.order.push(playerId);
+      maxRecord.gameState.squads[clubId]={playerIds:[playerId],tactics:{pressing:'normal'}};
+      maxRecord.gameState.clubFinances.byClub[clubId]={};
+    }
+    for(let i=0;i<18;i+=2){
+      maxRecord.gameState.calendar.fixtures.push({
+        id:'max-f'+String(i/2+1),
+        slotKey:'w1',
+        status:'scheduled',
+        competition:'league',
+        homeClubId:'max-club-'+String(i).padStart(2,'0'),
+        awayClubId:'max-club-'+String(i+1).padStart(2,'0')
+      });
+    }
+    const maxCreated=await sessions.createWorld({
+      userId:'m0',worldRecord:maxRecord,worldName:'Max Human Managers',
+      visibility:'PUBLIC',joinPolicy:'OPEN'
+    });
+    let maxRevision=(await sessions.assignClub({
+      userId:'m0',worldId:maxWorld,clubId:'max-club-00',expectedRevision:maxCreated.revision
+    })).revision;
+    for(let i=1;i<18;i+=1){
+      const joinedMax=await sessions.joinWorld({userId:'m'+i,displayName:'M'+i,worldId:maxWorld});
+      const assignedMax=await sessions.assignClub({
+        userId:'m'+i,worldId:maxWorld,clubId:'max-club-'+String(i).padStart(2,'0'),
+        expectedRevision:joinedMax.revision
+      });
+      maxRevision=assignedMax.revision;
+    }
+    const maxUsers=Array.from({length:18},(_,i)=>'m'+i);
+    const maxSaveStarted=Date.now();
+    const maxSaves=await Promise.all(maxUsers.map((userId,i)=>sessions.saveManagementDelta({
+      userId,worldId:maxWorld,expectedRevision:maxRevision,roundGeneration:1,
+      expectedScopeRevisions:{['SQUAD:max-club-'+String(i).padStart(2,'0')]:0},
+      worldDelta:delta(maxWorld,[{
+        path:['gameState','squads','max-club-'+String(i).padStart(2,'0'),'tactics','pressing'],
+        value:'max-'+i
+      }])
+    })));
+    const maxSaveMs=Date.now()-maxSaveStarted;
+    const maxManifestAfterSaves=await worlds.getManifest(maxWorld);
+    check('Theoretical maximum: all 18 human managers can save disjoint club resources in parallel without losing data',
+      maxSaves.length===18&&
+      maxSaves.every((row,i)=>row.scopeRevisions['SQUAD:max-club-'+String(i).padStart(2,'0')]===1)&&
+      Number(maxManifestAfterSaves.revision)===Number(maxRevision),
+      {managerCount:maxSaves.length,saveDurationMs:maxSaveMs,revision:maxManifestAfterSaves.revision});
+    await runtime.unloadWorld(maxWorld);
+    const maxOverlay=await sessions.openWorld({userId:'m0',worldId:maxWorld});
+    check('Theoretical maximum: reopening the world materializes every one of the 18 confirmed club overlays',
+      maxUsers.every((_,i)=>maxOverlay.worldRecord.gameState.squads['max-club-'+String(i).padStart(2,'0')].tactics.pressing==='max-'+i),
+      {scopeCount:Object.keys(maxOverlay.scopeRevisions||{}).length});
+
+    const maxReadyStarted=Date.now();
+    const maxReadyResults=await Promise.all(maxUsers.map(userId=>sessions.markReady({
+      userId,worldId:maxWorld,expectedRevision:maxRevision,roundGeneration:1,matchIntent:'QUICK'
+    })));
+    const maxReadyMs=Date.now()-maxReadyStarted;
+    const maxProgress=await sessions.getProgression({userId:'m0',worldId:maxWorld});
+    check('Theoretical maximum: 18 simultaneous Ready requests create one shared MATCHDAY progression run',
+      maxProgress.status==='MATCHDAY'&&
+      maxProgress.readyTrainerCount===18&&
+      !!maxProgress.progressionRunId&&
+      new Set(maxReadyResults.filter(row=>row&&row.progressionRunId).map(row=>row.progressionRunId)).size===1,
+      {
+        readyDurationMs:maxReadyMs,
+        readyTrainerCount:maxProgress.readyTrainerCount,
+        progressionRunId:maxProgress.progressionRunId
+      });
+
+    const maxProgressed=await sessions.saveSlot({
+      userId:'m0',worldId:maxWorld,
+      worldDelta:delta(maxWorld,[{path:['gameState','calendar','currentSlotKey'],value:'w1'}]),
+      expectedRevision:maxRevision,season:1,slotKey:'w1',
+      matches:[],financeEvents:[],progressLeaseId:maxProgress.leaseId
+    });
+    await runtime.unloadWorld(maxWorld);
+    const maxFinal=await sessions.openWorld({userId:'m0',worldId:maxWorld});
+    const maxNextRound=await sessions.getProgression({userId:'m0',worldId:maxWorld});
+    check('Theoretical maximum: one authoritative slot commit preserves all 18 locked management states and opens generation 2',
+      maxProgressed.revision===maxRevision+1&&
+      maxNextRound.roundGeneration===2&&maxNextRound.status==='OPEN'&&
+      maxUsers.every((_,i)=>maxFinal.worldRecord.gameState.squads['max-club-'+String(i).padStart(2,'0')].tactics.pressing==='max-'+i),
+      {revision:maxProgressed.revision,roundGeneration:maxNextRound.roundGeneration});
+
     const capacityWorld='world-capacity-18';
     const capacityRecord=makeWorldRecord(capacityWorld,'cap0');
     await sessions.createWorld({
@@ -472,7 +569,7 @@ function makeWorldRecord(worldId,userId){
       baseRevision,
       progressedRevision:progressed.revision,
       roundGeneration:nextRound.roundGeneration,
-      scopeCountBeforeProgress:(beforeAtomicConflict||[]).length
+      scopeCountBeforeProgress:(beforeAtomicConflict||[]).length,\n      maxHumanManagers:18,\n      maxParallelSaveMs:maxSaveMs,\n      maxParallelReadyMs:maxReadyMs
     };
   }finally{
     await fs.rm(root,{recursive:true,force:true});
