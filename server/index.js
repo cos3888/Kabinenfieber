@@ -388,7 +388,8 @@ const server = http.createServer(async (req, res) => {
         userId:auth.user.userId,
         worldId:readyWorldId,
         expectedRevision:body.expectedRevision,
-        roundGeneration:body.roundGeneration == null ? null : body.roundGeneration
+        roundGeneration:body.roundGeneration == null ? null : body.roundGeneration,
+        matchIntent:String(body.matchIntent || 'QUICK').toUpperCase() === 'LIVE' ? 'LIVE' : 'QUICK'
       });
       await sendJson(req, res, 200, { ok:true, progression });
       return;
