@@ -41,7 +41,11 @@ function makeWorldRecord(worldId,userId){
         'club-a':{playerIds:['pa'],tactics:{pressing:'normal'}},
         'club-b':{playerIds:['pb'],tactics:{pressing:'normal'}}
       },
-      calendar:{currentSlotKey:'w0',fixtures:[],slots:[]},
+      calendar:{
+        currentSlotKey:'w0',
+        slots:[{key:'w0',week:1,phase:'Mitte'},{key:'w1',week:1,phase:'Ende'}],
+        fixtures:[{id:'f1',slotKey:'w1',status:'scheduled',competition:'league',homeClubId:'club-a',awayClubId:'club-b'}]
+      },
       history:{matches:[],seasonResults:{},seasonStandings:{},playerSeasons:{},playerMarketValues:{}},
       clubFinances:{byClub:{'club-a':{},'club-b':{}}}
     }
@@ -190,6 +194,13 @@ function makeWorldRecord(worldId,userId){
     check('All Ready creates one MATCHDAY lease with a stable progressionRunId',
       readyB.status==='MATCHDAY'&&readyB.shouldAdvance&&!!readyB.leaseId&&!!readyB.progressionRunId,
       {readyB});
+
+    const quickFixturePlan=readyB.matchdayPlan&&readyB.matchdayPlan.fixturePlans&&readyB.matchdayPlan.fixturePlans[0];
+    check('Current multiplayer client path records full-match Co-Trainer delegation for Schnellberechnung',
+      quickFixturePlan&&quickFixturePlan.fixtureId==='f1'&&quickFixturePlan.mode==='QUICK'&&
+      quickFixturePlan.delegatedUserIds.slice().sort().join(',')==='uA,uB'&&
+      quickFixturePlan.liveUserIds.length===0,
+      {matchdayPlan:readyB.matchdayPlan});
 
     const duplicateReady=await sessions.markReady({userId:'uA',worldId,expectedRevision:baseRevision,roundGeneration:1});
     check('Further Ready calls cannot create a second progression lease',
