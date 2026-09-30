@@ -18,6 +18,38 @@ function operationKey(op) {
   return JSON.stringify((op && op.path || []).map(String));
 }
 
+function operationPath(op) {
+  return Array.isArray(op && op.path) ? op.path.map(String) : [];
+}
+
+function pathsOverlap(left, right) {
+  const a = operationPath(left);
+  const b = operationPath(right);
+  const common = Math.min(a.length, b.length);
+  for (let index=0; index<common; index+=1) {
+    if (a[index] !== b[index]) return false;
+  }
+  return common > 0;
+}
+
+function operationsEquivalent(left, right) {
+  const a = left || {};
+  const b = right || {};
+  if (a.delete === true || b.delete === true) return a.delete === true && b.delete === true;
+  return JSON.stringify(a.value) === JSON.stringify(b.value);
+}
+
+function findConflictingDeltaPath(existingDelta, incomingDelta) {
+  for (const incoming of (incomingDelta && incomingDelta.ops) || []) {
+    for (const existing of (existingDelta && existingDelta.ops) || []) {
+      if (!pathsOverlap(existing, incoming)) continue;
+      if (operationKey(existing) === operationKey(incoming) && operationsEquivalent(existing, incoming)) continue;
+      return operationPath(incoming).join('.');
+    }
+  }
+  return null;
+}
+
 function mergeWorldDeltas(base, incoming) {
   if (!base) return clone(incoming);
   const order = [];
@@ -132,6 +164,7 @@ module.exports = {
   TIME_MODEL_COUNTDOWN,
   TIME_MODEL_FIXED_SCHEDULE,
   mergeWorldDeltas,
+  findConflictingDeltaPath,
   splitManagementDeltaByScope,
   scopeRevisionMap
 };
