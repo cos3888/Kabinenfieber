@@ -256,8 +256,12 @@ function makeWorldRecord(worldId,userId){
       app.includes("kf031FlushManagementSave('close-modal')")&&
       app.includes("var KF031_MANAGEMENT_VIEWS={office:1,squad:1,lineup:1,contracts:1,'squad-planning':1,finance:1,sponsoring:1};"),
       {});
+    const claimedStart=app.indexOf('async function kf032AdvanceClaimedRound(');
+    const claimedEnd=app.indexOf('function kf032ScheduleProgressPoll(',claimedStart);
+    const claimedSource=app.slice(claimedStart,claimedEnd);
     check('Ready path detects local management mutations when no calendar slot advanced',
-      readySource.includes("kf031MarkManagementDirty('office-advance-local-management',false)"),
+      claimedSource.includes("kf031MarkManagementDirty('office-advance-local-management',false)")&&
+      readySource.includes('kf032AdvanceClaimedRound(state,actionEl)'),
       {});
 
     report.metrics={
