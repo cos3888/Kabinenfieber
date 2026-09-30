@@ -34,6 +34,11 @@ check('Round waiting uses GET polling instead of repeatedly sending Ready',
 check('Multiplayer cannot skip coordinated rounds with calendar sim-until',
   app.includes('Mehrspielerwelten werden rundenweise fortgesetzt. Mehrere Kalenderslots können nicht an den anderen Trainern vorbei simuliert werden.'));
 
+check('Current multiplayer match action is explicit Schnellberechnung with irreversible Co-Trainer delegation',
+  app.includes("matchIntent:'QUICK'")&&
+  app.includes("'Schnellberechnen'")&&
+  app.includes('Der Co-Trainer übernimmt dein gesamtes Spiel. Ein späterer Live-Einstieg ist für dieses Match nicht möglich.'));
+
 check('Server merges round management overlays into the authoritative progression commit',
   server.includes('_mergeManagementOverlayDelta')&&
   server.includes('progressWorldDelta = this._mergeManagementOverlayDelta(worldId, rows, worldDelta)'));
