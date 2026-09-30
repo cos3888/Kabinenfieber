@@ -164,6 +164,42 @@ class WorldSessionService {
     return this._applyManagementOverlays(opened.worldRecord, rows);
   }
 
+  _assertLiveFixturesComplete(progressState) {
+    const plan = progressState && progressState.matchdayPlan || {};
+    const liveFixtureIds = (plan.fixturePlans || [])
+      .filter(row => row && row.mode === 'LIVE')
+      .map(row => String(row.fixtureId));
+    if (!liveFixtureIds.length) return;
+    const completed = new Set((plan.completedLiveFixtureIds || []).map(String));
+    const pendingFixtureIds = liveFixtureIds.filter(id => !completed.has(id));
+    if (pendingFixtureIds.length) {
+      throw new DomainRuleError('Live matches are still running', { pendingFixtureIds });
+    }
+  }
+
+  async markLiveFixtureCompleted({ userId, worldId, roundGeneration, progressionRunId, fixtureId }) {
+    const participation = await this.metadata.getParticipation({ worldId, userId });
+    if (!participation) throw new DomainRuleError('User is not a member of this world');
+    const state = await this.metadata.getWorldProgression(worldId);
+    if (!state || state.status !== ROUND_STATUS_MATCHDAY) throw new DomainRuleError('Matchday is not active');
+    if (Number(state.roundGeneration) !== Number(roundGeneration) ||
+        String(state.progressionRunId || '') !== String(progressionRunId || '')) {
+      throw new DomainRuleError('Progression generation mismatch');
+    }
+    const fixturePlan = (((state.matchdayPlan||{}).fixturePlans)||[])
+      .find(row => row && String(row.fixtureId) === String(fixtureId));
+    if (!fixturePlan || fixturePlan.mode !== 'LIVE') throw new DomainRuleError('Live fixture is not part of this matchday');
+    if (!(fixturePlan.liveUserIds || []).map(String).includes(String(userId))) {
+      throw new DomainRuleError('Only a live participant may complete this fixture');
+    }
+    return this.metadata.markLiveFixtureCompleted({
+      worldId,
+      roundGeneration:Number(roundGeneration),
+      progressionRunId,
+      fixtureId
+    });
+  }
+
   async _claimProgressIfDue(worldId, revision, activeUserIds, actorUserId) {
     let state = await this.metadata.claimDueWorldProgress({
       worldId,
@@ -640,6 +676,7 @@ class WorldSessionService {
     } else if (activeUserIds.length > 1) {
       throw new DomainRuleError('Multiplayer snapshot progress requires a progress lease');
     }
+    if (progressLeaseId && progressState) this._assertLiveFixturesComplete(progressState);
 
     let worldCommitted = false;
     try {
@@ -765,6 +802,7 @@ class WorldSessionService {
         throw new DomainRuleError('Progression lease mismatch');
       }
     }
+    if (progressLeaseId && progressState) this._assertLiveFixturesComplete(progressState);
     let worldCommitted = false;
     try {
       if (progressLeaseId && progressState && progressState.status === ROUND_STATUS_MATCHDAY) {
