@@ -4,6 +4,11 @@ const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
 const { DomainRuleError, PersistenceNotFoundError } = require('./errors');
+const {
+  ROUND_STATUS_OPEN, ROUND_STATUS_LOCKING, ROUND_STATUS_MATCHDAY,
+  TIME_MODEL_COUNTDOWN, TIME_MODEL_FIXED_SCHEDULE,
+  mergeWorldDeltas
+} = require('../domain/round-management');
 
 const STATUS_ACTIVE = 'ACTIVE';
 const STATUS_LEFT = 'LEFT';
@@ -13,6 +18,9 @@ const MAX_ACTIVE_WORLDS_PER_USER = 5;
 function nowIso() { return new Date().toISOString(); }
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function participationKey(worldId, userId) { return `${worldId}__${userId}`; }
+function managementScopeKey(worldId, roundGeneration, scope) {
+  return `${worldId}__${Number(roundGeneration)}__${String(scope)}`;
+}
 
 class FileMetadataRepository {
   constructor({ filePath }) {
@@ -30,9 +38,10 @@ class FileMetadataRepository {
       parsed.invitations = parsed.invitations || {};
       parsed.applications = parsed.applications || {};
       parsed.progression = parsed.progression || {};
+      parsed.managementScopes = parsed.managementScopes || {};
       return parsed;
     } catch (error) {
-      if (error && error.code === 'ENOENT') return { schemaVersion: 1, slots: {}, worlds: {}, participationIndex: {}, invitations: {}, applications: {}, progression: {} };
+      if (error && error.code === 'ENOENT') return { schemaVersion: 1, slots: {}, worlds: {}, participationIndex: {}, invitations: {}, applications: {}, progression: {}, managementScopes: {} };
       throw error;
     }
   }
@@ -235,61 +244,239 @@ class FileMetadataRepository {
     return row ? clone(row) : null;
   }
 
-  async markTrainerReady({ worldId, userId, expectedRevision, activeUserIds, deadlineAt, leaseMs = 120000 }) {
+  async ensureWorldRound({ worldId, revision, timeModel = TIME_MODEL_COUNTDOWN, fixedDeadlineAt = null }) {
+    return this._mutate(data => {
+      data.progression = data.progression || {};
+      let state = data.progression[worldId] || null;
+      if (!state) {
+        state = {
+          worldId,
+          revision:Number(revision),
+          roundGeneration:1,
+          status:ROUND_STATUS_OPEN,
+          timeModel:timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN,
+          readyUserIds:[],
+          deadlineAt:fixedDeadlineAt || null,
+          progressionRunId:null,
+          leaseId:null,
+          leaseExpiresAt:null,
+          lastCompletedProgressionRunId:null
+        };
+      } else {
+        if (!state.roundGeneration) state.roundGeneration = 1;
+        if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
+        if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+        if (!state.timeModel) state.timeModel = TIME_MODEL_COUNTDOWN;
+        if (state.status === ROUND_STATUS_OPEN) {
+          state.revision = Number(revision);
+          if (timeModel) state.timeModel = timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
+          if (state.timeModel === TIME_MODEL_FIXED_SCHEDULE && fixedDeadlineAt) state.deadlineAt = fixedDeadlineAt;
+        }
+      }
+      data.progression[worldId] = state;
+      return state;
+    });
+  }
+
+  async getManagementScopes({ worldId, roundGeneration }) {
+    const data = await this._read();
+    return Object.values(data.managementScopes || {})
+      .filter(row => row && String(row.worldId) === String(worldId) && Number(row.roundGeneration) === Number(roundGeneration))
+      .map(clone)
+      .sort((a,b) => String(a.scope).localeCompare(String(b.scope)));
+  }
+
+  async commitManagementScopes({
+    worldId, userId, roundGeneration, expectedWorldRevision,
+    scopeDeltas, expectedScopeRevisions = {}
+  }) {
+    return this._mutate(data => {
+      data.progression = data.progression || {};
+      data.managementScopes = data.managementScopes || {};
+      const state = data.progression[worldId];
+      if (!state) throw new DomainRuleError('Round state not found');
+      if (Number(state.roundGeneration) !== Number(roundGeneration)) {
+        throw new DomainRuleError('Round generation mismatch', {
+          expectedRoundGeneration:roundGeneration,
+          actualRoundGeneration:state.roundGeneration
+        });
+      }
+      if (Number(state.revision) !== Number(expectedWorldRevision)) {
+        throw new DomainRuleError('Round world revision mismatch', {
+          expectedRevision:expectedWorldRevision,
+          actualRevision:state.revision
+        });
+      }
+      if (state.status !== ROUND_STATUS_OPEN) {
+        throw new DomainRuleError('Round is locked for management changes', { status:state.status });
+      }
+      if ((state.readyUserIds || []).map(String).includes(String(userId))) {
+        throw new DomainRuleError('Trainer is already ready for this round');
+      }
+
+      const staged = [];
+      for (const item of scopeDeltas || []) {
+        if (!item || !item.scope || !item.worldDelta) throw new DomainRuleError('Invalid management scope delta');
+        const key = managementScopeKey(worldId, roundGeneration, item.scope);
+        const current = data.managementScopes[key] || null;
+        const currentRevision = Number(current && current.scopeRevision || 0);
+        const expectedScopeRevision = Number(Object.prototype.hasOwnProperty.call(expectedScopeRevisions || {}, item.scope)
+          ? expectedScopeRevisions[item.scope]
+          : 0);
+        if (currentRevision !== expectedScopeRevision) {
+          const error = new DomainRuleError('Management scope revision mismatch', {
+            scope:item.scope,
+            expectedScopeRevision,
+            actualScopeRevision:currentRevision
+          });
+          error.code = 'PERSISTENCE_CONFLICT';
+          throw error;
+        }
+        staged.push({
+          key,
+          row:{
+            worldId,
+            roundGeneration:Number(roundGeneration),
+            scope:String(item.scope),
+            scopeRevision:currentRevision + 1,
+            worldDelta:mergeWorldDeltas(current && current.worldDelta, item.worldDelta),
+            updatedByUserId:String(userId),
+            updatedAt:nowIso()
+          }
+        });
+      }
+      staged.forEach(item => { data.managementScopes[item.key] = item.row; });
+      return {
+        worldId,
+        revision:Number(state.revision),
+        roundGeneration:Number(state.roundGeneration),
+        scopeRows:staged.map(item => item.row)
+      };
+    });
+  }
+
+  async markTrainerReady({
+    worldId, userId, expectedRevision, roundGeneration = null, activeUserIds,
+    deadlineAt, timeModel = TIME_MODEL_COUNTDOWN, leaseMs = 120000
+  }) {
     return this._mutate(data => {
       data.progression = data.progression || {};
       const active = Array.from(new Set((activeUserIds || []).map(String)));
       if (!active.includes(String(userId))) throw new DomainRuleError('User is not an active trainer in this world');
       let state = data.progression[worldId] || null;
-      if (!state || Number(state.revision) !== Number(expectedRevision)) {
+      if (!state) {
         state = {
           worldId,
           revision:Number(expectedRevision),
-          status:'WAITING',
+          roundGeneration:1,
+          status:ROUND_STATUS_OPEN,
+          timeModel:timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN,
           readyUserIds:[],
           deadlineAt:null,
+          progressionRunId:null,
           leaseId:null,
-          leaseExpiresAt:null
+          leaseExpiresAt:null,
+          lastCompletedProgressionRunId:null
         };
       }
+      if (!state.roundGeneration) state.roundGeneration = 1;
+      if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
+      if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
+      if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) {
+        throw new DomainRuleError('Round generation mismatch');
+      }
+      if (state.status === ROUND_STATUS_OPEN) state.revision = Number(expectedRevision);
+      if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
+
       const now = Date.now();
-      if (state.status === 'PROCESSING' && state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
-        state.status='WAITING';
-        state.leaseId=null;
-        state.leaseExpiresAt=null;
+      if (state.status === ROUND_STATUS_MATCHDAY && state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
+        state.status = ROUND_STATUS_OPEN;
+        state.leaseId = null;
+        state.leaseExpiresAt = null;
       }
+      if (state.status !== ROUND_STATUS_OPEN) {
+        data.progression[worldId] = state;
+        return { ...state, activeTrainerCount:active.length, readyTrainerCount:(state.readyUserIds || []).filter(id => active.includes(String(id))).length, shouldAdvance:false };
+      }
+
       state.readyUserIds = Array.from(new Set([...(state.readyUserIds || []).map(String), String(userId)]));
-      if (!state.deadlineAt) state.deadlineAt = deadlineAt || new Date(now + 120000).toISOString();
-      let shouldAdvance = false;
-      if (state.status !== 'PROCESSING') {
-        const allReady = active.length > 0 && active.every(id => state.readyUserIds.includes(id));
-        const expired = state.deadlineAt && new Date(state.deadlineAt).getTime() <= now;
-        if (allReady || expired) {
-          state.status='PROCESSING';
-          state.leaseId=crypto.randomUUID();
-          state.leaseExpiresAt=new Date(now + Math.max(30000, Number(leaseMs || 120000))).toISOString();
-          shouldAdvance=true;
-        }
+      state.timeModel = timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
+      if (state.timeModel === TIME_MODEL_COUNTDOWN) {
+        if (!state.deadlineAt) state.deadlineAt = deadlineAt || new Date(now + 120000).toISOString();
+      } else if (deadlineAt) {
+        state.deadlineAt = deadlineAt;
       }
-      data.progression[worldId]=state;
-      return { ...state, activeTrainerCount:active.length, readyTrainerCount:state.readyUserIds.filter(id => active.includes(id)).length, shouldAdvance };
+
+      const allReady = active.length > 0 && active.every(id => state.readyUserIds.includes(id));
+      const expired = state.deadlineAt && new Date(state.deadlineAt).getTime() <= now;
+      const due = state.timeModel === TIME_MODEL_FIXED_SCHEDULE ? Boolean(expired) : Boolean(allReady || expired);
+      let shouldAdvance = false;
+      if (due) {
+        state.status = ROUND_STATUS_LOCKING;
+        state.progressionRunId = state.progressionRunId || crypto.randomUUID();
+        state.leaseId = crypto.randomUUID();
+        state.leaseExpiresAt = new Date(now + Math.max(30000, Number(leaseMs || 120000))).toISOString();
+        shouldAdvance = true;
+      }
+      data.progression[worldId] = state;
+      return {
+        ...state,
+        activeTrainerCount:active.length,
+        readyTrainerCount:state.readyUserIds.filter(id => active.includes(id)).length,
+        shouldAdvance
+      };
     });
   }
 
-  async completeWorldProgress({ worldId, expectedRevision, nextRevision, leaseId }) {
+  async beginMatchday({ worldId, expectedRevision, roundGeneration, leaseId, progressionRunId }) {
+    return this._mutate(data => {
+      const state = data.progression && data.progression[worldId];
+      if (!state) throw new DomainRuleError('Progression state not found');
+      if (Number(state.revision) !== Number(expectedRevision) ||
+          Number(state.roundGeneration) !== Number(roundGeneration)) {
+        throw new DomainRuleError('Progression generation mismatch');
+      }
+      if (state.status !== ROUND_STATUS_LOCKING ||
+          String(state.leaseId || '') !== String(leaseId || '') ||
+          String(state.progressionRunId || '') !== String(progressionRunId || '')) {
+        throw new DomainRuleError('Progression lease mismatch');
+      }
+      state.status = ROUND_STATUS_MATCHDAY;
+      data.progression[worldId] = state;
+      return state;
+    });
+  }
+
+  async completeWorldProgress({ worldId, expectedRevision, nextRevision, leaseId, roundGeneration = null, progressionRunId = null }) {
     return this._mutate(data => {
       data.progression = data.progression || {};
+      data.managementScopes = data.managementScopes || {};
       const state = data.progression[worldId];
       if (!state || Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
-      if (state.status !== 'PROCESSING' || String(state.leaseId || '') !== String(leaseId || '')) throw new DomainRuleError('Progression lease mismatch');
+      if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Progression generation mismatch');
+      if (state.status !== ROUND_STATUS_MATCHDAY || String(state.leaseId || '') !== String(leaseId || '')) throw new DomainRuleError('Progression lease mismatch');
+      if (progressionRunId != null && String(state.progressionRunId || '') !== String(progressionRunId || '')) throw new DomainRuleError('Progression run mismatch');
+
+      const completedGeneration = Number(state.roundGeneration || 1);
+      for (const key of Object.keys(data.managementScopes)) {
+        const row = data.managementScopes[key];
+        if (row && String(row.worldId) === String(worldId) && Number(row.roundGeneration) === completedGeneration) {
+          delete data.managementScopes[key];
+        }
+      }
+
       const next = {
         worldId,
         revision:Number(nextRevision),
-        status:'WAITING',
+        roundGeneration:completedGeneration + 1,
+        status:ROUND_STATUS_OPEN,
+        timeModel:state.timeModel || TIME_MODEL_COUNTDOWN,
         readyUserIds:[],
         deadlineAt:null,
+        progressionRunId:null,
         leaseId:null,
-        leaseExpiresAt:null
+        leaseExpiresAt:null,
+        lastCompletedProgressionRunId:state.progressionRunId || null
       };
       data.progression[worldId]=next;
       return next;
@@ -301,8 +488,9 @@ class FileMetadataRepository {
       data.progression = data.progression || {};
       const state = data.progression[worldId];
       if (!state || Number(state.revision) !== Number(expectedRevision)) return state || null;
-      if (state.status === 'PROCESSING' && String(state.leaseId || '') === String(leaseId || '')) {
-        state.status='WAITING';
+      if ((state.status === ROUND_STATUS_MATCHDAY || state.status === ROUND_STATUS_LOCKING) &&
+          String(state.leaseId || '') === String(leaseId || '')) {
+        state.status=ROUND_STATUS_OPEN;
         state.leaseId=null;
         state.leaseExpiresAt=null;
       }
