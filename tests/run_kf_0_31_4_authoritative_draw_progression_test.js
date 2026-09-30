@@ -235,7 +235,19 @@ function makeServerWorld(worldId,userId){
       reloaded.worldRecord.gameState.calendar.currentSlotKey==='end-8'&&
       JSON.stringify(reloadedDraw)===JSON.stringify(draw)&&JSON.stringify(reloadedFixture)===JSON.stringify(fixture)&&
       progression.status==='OPEN'&&Number(progression.roundGeneration)===2&&Number(progression.revision)===Number(saved.revision),
-      {revision:saved.revision,currentSlotKey:reloaded.worldRecord.gameState.calendar.currentSlotKey,progression});
+      {
+        revision:saved.revision,
+        manifestRevision:manifest.revision,
+        revisionAdvanced:Number(saved.revision)===Number(manifest.revision)+1,
+        currentSlotKey:reloaded.worldRecord.gameState.calendar.currentSlotKey,
+        drawEqual:JSON.stringify(reloadedDraw)===JSON.stringify(draw),
+        fixtureEqual:JSON.stringify(reloadedFixture)===JSON.stringify(fixture),
+        reloadedDraw,
+        expectedDraw:draw,
+        reloadedFixture,
+        expectedFixture:fixture,
+        progression
+      });
 
     let managementError=null;
     try{
