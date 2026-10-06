@@ -216,6 +216,22 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/api/v1/internal/progression/sweep') {
+      const supplied = String(req.headers['x-kf-progression-token'] || '');
+      if (!config.progressionWakeToken || supplied !== config.progressionWakeToken) {
+        await sendJson(req, res, 403, { ok:false, error:'progression_wake_forbidden' });
+        return;
+      }
+      const results = await persistence.worldSessions.sweepDueProgressions();
+      await sendJson(req, res, 200, {
+        ok:true,
+        checked:results.length,
+        failed:results.filter(row => !row.ok).length,
+        results
+      });
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/v1/persistence/status') {
       const verification = getPersistenceVerificationState();
       await sendJson(req, res, 200, {
@@ -539,6 +555,16 @@ const idleSweep = setInterval(() => {
   }
 }, Math.min(60 * 1000, Math.max(10 * 1000, Math.floor(config.runtimeIdleMs / 3))));
 if (idleSweep.unref) idleSweep.unref();
+
+let progressionSweepRunning = false;
+const progressionSweep = setInterval(() => {
+  if (progressionSweepRunning) return;
+  progressionSweepRunning = true;
+  Promise.resolve(persistence.worldSessions.sweepDueProgressions())
+    .catch(error => console.error('World progression sweep failed', error))
+    .finally(() => { progressionSweepRunning = false; });
+}, config.progressionSweepMs);
+if (progressionSweep.unref) progressionSweep.unref();
 
 if (require.main === module) {
   server.listen(config.port, () => {
