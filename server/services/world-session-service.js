@@ -688,6 +688,7 @@ class WorldSessionService {
     if (state.status === ROUND_STATUS_OPEN || state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) {
       state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds, null) || state;
     }
+    if (!this.progressionEngine) return state;
     if (state && (state.status === ROUND_STATUS_FINALIZING ||
         (state.shouldAdvance && state.status === ROUND_STATUS_MATCHDAY))) {
       return this._executeClaimedProgression(worldId, manifest.revision, { ...state, shouldAdvance:true });
@@ -795,7 +796,7 @@ class WorldSessionService {
         ...matchday,
         shouldAdvance:true
       };
-      if (!matchdayPlan.hasLiveFixtures) {
+      if (!matchdayPlan.hasLiveFixtures && this.progressionEngine) {
         result = await this._executeClaimedProgression(worldId, manifest.revision, result);
       }
     }
