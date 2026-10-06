@@ -47,7 +47,8 @@ function makeWorldRecord(worldId,userId){
         fixtures:[{id:'f1',slotKey:'w1',status:'scheduled',competition:'league',homeClubId:'club-a',awayClubId:'club-b'}]
       },
       history:{matches:[],seasonResults:{},seasonStandings:{},playerSeasons:{},playerMarketValues:{}},
-      clubFinances:{byClub:{'club-a':{},'club-b':{}}}
+      clubFinances:{byClub:{'club-a':{},'club-b':{}}},
+      clubMailboxes:{byClub:{}}
     }
   };
 }
@@ -69,6 +70,19 @@ function makeWorldRecord(worldId,userId){
     const joined=await sessions.joinWorld({userId:'uB',displayName:'B',worldId});
     const bAssigned=await sessions.assignClub({userId:'uB',worldId,clubId:'club-b',expectedRevision:joined.revision});
     const baseRevision=bAssigned.revision;
+    const staleRevisionBeforeSecondManager=aAssigned.revision;
+
+    const staleMailboxSave=await sessions.saveManagementDelta({
+      userId:'uA',worldId,expectedRevision:staleRevisionBeforeSecondManager,roundGeneration:1,
+      expectedScopeRevisions:{'CLUB:club-a':0},
+      worldDelta:delta(worldId,[{
+        path:['gameState','clubMailboxes','byClub','club-a'],
+        value:{byId:{welcome:{id:'welcome',subject:'Willkommen',read:false}},order:['welcome'],dismissedIds:{},initialized:true}
+      }])
+    });
+    check('Joining and assigning a second manager does not invalidate a first manager club-scoped save in the same round',
+      staleMailboxSave.revision===baseRevision&&staleMailboxSave.scopeRevisions['CLUB:club-a']===1,
+      {staleRevisionBeforeSecondManager,baseRevision,saveRevision:staleMailboxSave.revision});
 
     const openedA=await sessions.openWorld({userId:'uA',worldId});
     const openedB=await sessions.openWorld({userId:'uB',worldId});
@@ -112,6 +126,18 @@ function makeWorldRecord(worldId,userId){
     check('Server ownership blocks a trainer from mutating another club',
       !!ownershipError&&/owned by the assigned club/i.test(String(ownershipError.message||'')),
       {error:ownershipError&&ownershipError.message});
+
+    let mailboxOwnershipError=null;
+    try{
+      await sessions.saveManagementDelta({
+        userId:'uA',worldId,expectedRevision:baseRevision,roundGeneration:1,
+        expectedScopeRevisions:{'CLUB:club-b':0},
+        worldDelta:delta(worldId,[{path:['gameState','clubMailboxes','byClub','club-b','initialized'],value:true}])
+      });
+    }catch(error){mailboxOwnershipError=error;}
+    check('Club mailbox scope cannot be written by another manager',
+      !!mailboxOwnershipError&&/owned by the assigned club/i.test(String(mailboxOwnershipError.message||'')),
+      {error:mailboxOwnershipError&&mailboxOwnershipError.message});
 
     const sameScopeOne=delta(worldId,[{path:['gameState','squads','club-a','tactics','width'],value:'wide'}]);
     const sameScopeTwo=delta(worldId,[{path:['gameState','squads','club-a','tactics','tempo'],value:'fast'}]);
@@ -163,7 +189,7 @@ function makeWorldRecord(worldId,userId){
       JSON.stringify(beforeAtomicConflict)===JSON.stringify(afterAtomicConflict),
       {error:atomicConflict&&atomicConflict.message});
 
-    const readyA=await sessions.markReady({userId:'uA',worldId,expectedRevision:baseRevision,roundGeneration:1});
+    const readyA=await sessions.markReady({userId:'uA',worldId,expectedRevision:staleRevisionBeforeSecondManager,roundGeneration:1});
     check('First Ready starts COUNTDOWN but keeps the round open for other trainers',
       readyA.status==='OPEN'&&readyA.readyTrainerCount===1&&!!readyA.deadlineAt&&!readyA.shouldAdvance,
       {readyA});

@@ -10934,22 +10934,54 @@ function renderFixtureRowForDisplay(world, entry, options){
   '</div>';
 }
 
+function kf032EnsureClubMailboxStore(world){
+  if(!world)return null;
+  world.clubMailboxes=world.clubMailboxes||{byClub:{}};
+  world.clubMailboxes.byClub=world.clubMailboxes.byClub||{};
+  return world.clubMailboxes;
+}
+function kf032ClubMailbox(world,clubId,create){
+  if(!world||!clubId)return null;
+  var store=kf032EnsureClubMailboxStore(world);
+  var key=String(clubId),box=store.byClub[key]||null;
+  if(!box&&create){box={byId:{},order:[],dismissedIds:{},initialized:false};store.byClub[key]=box;}
+  if(!box)return null;
+  box.byId=box.byId||{};box.order=box.order||[];box.dismissedIds=box.dismissedIds||{};
+  if(typeof box.initialized!=='boolean')box.initialized=!!box.order.length;
+  return box;
+}
+function kf032ActiveClubMailbox(create){
+  var world=AppState.world,club=activeClub();
+  return club?kf032ClubMailbox(world,club.id,!!create):null;
+}
+function kf032MigrateLegacyMailboxForMembership(record,membership){
+  var world=record&&record.gameState,clubId=membership&&membership.clubId;if(!world||!clubId)return false;
+  kf032EnsureClubMailboxStore(world);
+  var legacy=world.mailbox;
+  if(!legacy)return false;
+  var members=activeMemberships(record).filter(function(row){return row&&row.clubId;});
+  if(members.length>1)return false;
+  if(!world.clubMailboxes.byClub[String(clubId)]){
+    world.clubMailboxes.byClub[String(clubId)]=kf031CloneJson(legacy);
+  }
+  delete world.mailbox;
+  return true;
+}
 function ensureOfficeMailbox(){
   var world=AppState.world,club=activeClub();if(!world||!club)return;
-  if(!world.mailbox)world.mailbox={byId:{},order:[],dismissedIds:{},initialized:false};
-  world.mailbox.byId=world.mailbox.byId||{};world.mailbox.order=world.mailbox.order||[];world.mailbox.dismissedIds=world.mailbox.dismissedIds||{};
-  if(world.mailbox.order.length){world.mailbox.initialized=true;if(!AppState.ui.selectedMailId||!world.mailbox.byId[AppState.ui.selectedMailId])AppState.ui.selectedMailId=world.mailbox.order[0]||null;return;}
-  if(world.mailbox.initialized)return;
+  var mailbox=kf032ClubMailbox(world,club.id,true);
+  if(mailbox.order.length){mailbox.initialized=true;if(!AppState.ui.selectedMailId||!mailbox.byId[AppState.ui.selectedMailId])AppState.ui.selectedMailId=mailbox.order[0]||null;return;}
+  if(mailbox.initialized)return;
   var nextCtx=nextLeagueContext(world,club),season=Number((world.meta||{}).seasonNumber||1);
   var items=[
     {id:'mail_seed_target_'+club.id+'_'+season,sender:'Vorstand',subject:'Saisonziel bestätigt',body:'Das offizielle Saisonziel für '+club.name+' lautet: '+seasonTargetLabel(club.seasonTarget)+'.\n\nHalte die Mannschaft im planbaren Bereich und verliere das Ziel im Saisonverlauf nicht aus den Augen.',createdAtLabel:'Heute',read:false},
     {id:'mail_seed_match_'+club.id+'_'+season,sender:'Co-Trainer',subject:'Nächstes Ligaspiel vorbereitet',body:nextCtx&&nextCtx.opponent?'Das nächste Ligaspiel führt uns gegen '+nextCtx.opponent.name+'.\n\nUnsere geschätzte Startelfstärke: '+nextCtx.ownLineupStrength+'\nGegnerische Startelfstärke: '+nextCtx.oppLineupStrength:'Die Voranalyse für das nächste Ligaspiel wird vorbereitet.',createdAtLabel:'Heute',read:false},
     {id:'mail_seed_schedule_'+club.id+'_'+season,sender:'Ligaleitung',subject:'Spielplan freigegeben',body:nextCtx?'Der nächste Ligaspieltag ist '+nextCtx.slot.label+' in Woche '+nextCtx.slot.week+' ('+nextCtx.slot.phase+').':'Der Spielplan wurde bereitgestellt.',createdAtLabel:'Gestern',read:true}
   ];
-  items.forEach(function(mail){if(world.mailbox.dismissedIds[mail.id])return;world.mailbox.byId[mail.id]=mail;world.mailbox.order.push(mail.id);});
-  world.mailbox.initialized=true;AppState.ui.selectedMailId=world.mailbox.order[0]||null;
+  items.forEach(function(mail){if(mailbox.dismissedIds[mail.id])return;mailbox.byId[mail.id]=mail;mailbox.order.push(mail.id);});
+  mailbox.initialized=true;AppState.ui.selectedMailId=mailbox.order[0]||null;
 }
-function markMailRead(mailId){var world=AppState.world,mail=world&&world.mailbox&&world.mailbox.byId?world.mailbox.byId[mailId]:null;if(mail){mail.read=true;mail.readAtSlotKey=((world.calendar||{}).currentSlotKey||'');}}
+function markMailRead(mailId){var world=AppState.world,mailbox=kf032ActiveClubMailbox(false),mail=mailbox&&mailbox.byId?mailbox.byId[mailId]:null;if(mail){mail.read=true;mail.readAtSlotKey=((world&&world.calendar||{}).currentSlotKey||'');}}
 function latestNegotiationRecordForMail(world,ref){
   ref=ref||{};if(!world||!ref.type||!ref.id)return null;
   var box=ref.type==='transfer'?(world.negotiations&&world.negotiations.transfers):(world.negotiations&&world.negotiations.playerContracts);
@@ -10986,16 +11018,16 @@ function resolveCompletedMailAction(world,mail){
   mail.requiresAction=false;mail.actionResolved=true;mail.resolvedAtSlotKey=((world&&world.calendar||{}).currentSlotKey||'');return true;
 }
 function reconcileMailboxRequiredActions(world){
-  if(!world||!world.mailbox||!world.mailbox.byId)return 0;
-  var resolved=0;(world.mailbox.order||[]).forEach(function(id){if(resolveCompletedMailAction(world,world.mailbox.byId[id]))resolved+=1;});return resolved;
+  var mailbox=kf032ActiveClubMailbox(false);if(!world||!mailbox||!mailbox.byId)return 0;
+  var resolved=0;(mailbox.order||[]).forEach(function(id){if(resolveCompletedMailAction(world,mailbox.byId[id]))resolved+=1;});return resolved;
 }
 function mailRequiredActionActive(world,mail){if(!mail||!mail.requiresAction)return false;if(!mailRequiredActionRefActive(world,mail)){resolveCompletedMailAction(world,mail);return false;}return true;}
 function officeRequiredActionMail(world){reconcileMailboxRequiredActions(world);return officeMailboxItems().find(function(mail){return mailRequiredActionActive(world,mail);})||null;}
 
 function officeMailboxItems(){
-  var world = AppState.world;
-  if (!world || !world.mailbox) return [];
-  return (world.mailbox.order || []).map(function(id){ return world.mailbox.byId[id]; }).filter(Boolean);
+  var mailbox=kf032ActiveClubMailbox(false);
+  if(!mailbox)return [];
+  return (mailbox.order||[]).map(function(id){return mailbox.byId[id];}).filter(Boolean);
 }
 
 function renderOfficeInfoPanel(precomputedNextCtx){
@@ -16702,7 +16734,7 @@ function completeScoutingOrder(world,clubId,order,reason,mailText){
   var data=ensureClubScoutingPlanning(world,clubId);if(!data||!order)return false;
   data.scouting.orders=data.scouting.orders.filter(function(item){return item.id!==order.id;});
   data.scouting.history.push(Object.assign({},order,{status:'completed',completionReason:reason||'completed',completedSlotKey:((world.calendar||{}).currentSlotKey||''),completedSlotIndex:currentScoutingSlotIndex(world)}));
-  if(mailText)addTransferMailboxMessage(world,'Scoutingabteilung','Scoutingauftrag abgeschlossen',mailText,{requiresAction:false,actionRef:{type:'scouting',id:order.id}});
+  if(mailText)addTransferMailboxMessage(world,'Scoutingabteilung','Scoutingauftrag abgeschlossen',mailText,{requiresAction:false,clubId:clubId,actionRef:{type:'scouting',id:order.id}});
   return true;
 }
 function cancelScoutingOrder(world,clubId,orderId,reason){var order=scoutingOrderById(world,clubId,orderId);if(!order)return false;return completeScoutingOrder(world,clubId,order,reason||'cancelled','');}
@@ -16766,18 +16798,19 @@ function processDueScoutingTasks(world){
 }
 
 function addTransferMailboxMessage(world, sender, subject, body, options){
-  if (!world) return null;
-  options = options || {};
-  world.mailbox = world.mailbox || { byId:{}, order:[], dismissedIds:{}, initialized:true };
-  world.mailbox.byId = world.mailbox.byId || {};
-  world.mailbox.order = world.mailbox.order || [];
-  world.mailbox.dismissedIds = world.mailbox.dismissedIds || {};
-  world.mailbox.initialized = true;
-  var id = uid('mail_transfer');
-  world.mailbox.byId[id] = { id:id, sender:sender || 'Transferabteilung', subject:subject || 'Transfermeldung', body:body || '', createdAtLabel:formatWeekLabel(currentCalendarSlot(world)) || 'Heute', createdSlotKey:((world.calendar||{}).currentSlotKey||''), createdSlotIndex:currentNegotiationAbsoluteSlotIndex(world), read:false, requiresAction:!!options.requiresAction, actionRef:options.actionRef || null };
-  world.mailbox.order.unshift(id);
-  AppState.ui.selectedMailId = id;
-  return world.mailbox.byId[id];
+  if(!world)return null;
+  options=options||{};
+  var clubId=options.clubId||null;
+  if(!clubId&&AppState&&AppState.world===world){var current=activeClub();clubId=current&&current.id||null;}
+  if(!clubId){var record=worldRecordForGameState(world),members=record?activeMemberships(record).filter(function(row){return row&&row.clubId;}):[];if(members.length===1)clubId=members[0].clubId;}
+  if(!clubId)return null;
+  var mailbox=kf032ClubMailbox(world,clubId,true);
+  mailbox.initialized=true;
+  var id=uid('mail_transfer');
+  mailbox.byId[id]={id:id,sender:sender||'Transferabteilung',subject:subject||'Transfermeldung',body:body||'',createdAtLabel:formatWeekLabel(currentCalendarSlot(world))||'Heute',createdSlotKey:((world.calendar||{}).currentSlotKey||''),createdSlotIndex:currentNegotiationAbsoluteSlotIndex(world),read:false,requiresAction:!!options.requiresAction,actionRef:options.actionRef||null};
+  mailbox.order.unshift(id);
+  if(AppState&&AppState.world===world&&activeClub()&&String(activeClub().id)===String(clubId))AppState.ui.selectedMailId=id;
+  return mailbox.byId[id];
 }
 function removePlayerFromSquadCollections(squad, playerId){
   if (!squad) return;
@@ -17055,7 +17088,7 @@ function processDuePlayerContractNegotiations(world){
     if(Number(assessment.playerScore||0)>=78||(Number(assessment.playerScore||0)>=62&&seed%3===0))result=resolvePlayerContractOfferResponse(world,player,club,record.offerSnapshot||{},assessment,{type:'accepted',accepted:true,title:'Angebot angenommen',message:'Nach der Bedenkzeit nimmt der Spieler das Angebot an.'},playerContractNegotiationContextFromRecord(record));
     else if(Number(assessment.playerScore||0)>=48&&seed%2===0){var competition=seed%5===0,message=competition?'Dem Spieler liegen attraktivere Angebote anderer Vereine vor. Er regt bessere Konditionen an.':'Der Spieler hält das Angebot grundsätzlich für interessant, erwartet aber bessere Konditionen.';var reneg=createPlayerContractNegotiationSnapshot(world,player,club,record.offerSnapshot||{},assessment,'renegotiation_requested',{type:'renegotiation_requested',title:'Nachverhandlung angeregt',message:message},{type:record.negotiationType,targetClubId:club.id,threadId:threadId,processId:record.processId,processKey:record.processKey,transferNegotiationId:record.transferNegotiationId,fromClubId:record.fromClubId,agreedFee:record.agreedFee});result={status:'renegotiation_requested',negotiationId:reneg.id,title:'Nachverhandlung angeregt',message:message+'\n\nDu kannst das Angebot anpassen oder auf den bestehenden Konditionen bestehen.'};}
     else result=resolvePlayerContractOfferResponse(world,player,club,record.offerSnapshot||{},assessment,{type:'rejected',accepted:false,title:'Angebot abgelehnt',message:'Nach der Bedenkzeit lehnt der Spieler das Angebot ab.'},playerContractNegotiationContextFromRecord(record));
-    addTransferMailboxMessage(world,'Spielerberater',result.title,(player.fullName||'Der Spieler')+': '+result.message,{requiresAction:result.status==='renegotiation_requested',actionRef:result.status==='renegotiation_requested'?{type:'contract',id:result.negotiationId,processId:record.processId}:null});
+    addTransferMailboxMessage(world,'Spielerberater',result.title,(player.fullName||'Der Spieler')+': '+result.message,{requiresAction:result.status==='renegotiation_requested',clubId:club.id,actionRef:result.status==='renegotiation_requested'?{type:'contract',id:result.negotiationId,processId:record.processId}:null});
   });
 }
 function processDueClubTransferNegotiations(world){
@@ -17067,7 +17100,7 @@ function processDueClubTransferNegotiations(world){
     if(Number(assessment.score||0)>=76||(Number(assessment.score||0)>=60&&seed%3===0))result=resolveClubTransferResponse(world,player,target,record.type,record.offerSnapshot||{},assessment,{type:'accepted',accepted:true,title:'Verein stimmt zu',message:'Nach der Bedenkzeit akzeptiert der abgebende Verein die Konditionen.'},{threadId:threadId,processId:record.processId});
     else if(Number(assessment.score||0)>=45&&seed%2===0){var message=seed%5===0?'Dem abgebenden Verein liegt inzwischen ein höheres Konkurrenzangebot vor. Er regt eine Anpassung an.':'Der abgebende Verein erwartet für eine Einigung bessere Konditionen.';var reneg=createClubTransferNegotiationSnapshot(world,player,target,record.type,record.offerSnapshot||{},assessment,'renegotiation_requested',{type:'renegotiation_requested',message:message},{threadId:threadId,processId:record.processId});result={status:'renegotiation_requested',negotiationId:reneg.id,title:'Nachverhandlung angeregt',message:message+' Du kannst anpassen oder auf dem Angebot bestehen.'};}
     else result=resolveClubTransferResponse(world,player,target,record.type,record.offerSnapshot||{},assessment,{type:'rejected',accepted:false,title:'Angebot abgelehnt',message:'Der abgebende Verein lehnt nach der Bedenkzeit ab.'},{threadId:threadId,processId:record.processId});
-    addTransferMailboxMessage(world,'Transferabteilung',result.title,(player.fullName||'Spieler')+': '+result.message,{requiresAction:result.status==='renegotiation_requested'||result.status==='club_agreement',actionRef:(result.status==='renegotiation_requested'||result.status==='club_agreement')?{type:'transfer',id:result.negotiationId,processId:record.processId}:null});
+    addTransferMailboxMessage(world,'Transferabteilung',result.title,(player.fullName||'Spieler')+': '+result.message,{requiresAction:result.status==='renegotiation_requested'||result.status==='club_agreement',clubId:target.id,actionRef:(result.status==='renegotiation_requested'||result.status==='club_agreement')?{type:'transfer',id:result.negotiationId,processId:record.processId}:null});
   });
 }
 
@@ -21020,18 +21053,18 @@ function handleAction(action, actionEl){
     renderApp(); renderModal(); return;
   }
   if (action === 'delete-mail') {
-    var world = AppState.world;
-    if (world && world.mailbox && AppState.ui.selectedMailId) {
-      var deletingMail=world.mailbox.byId[AppState.ui.selectedMailId];if(mailRequiredActionActive(world,deletingMail)){openModal({title:'Mail kann nicht gelöscht werden',body:'Diese Nachricht enthält eine noch offene Pflichtaktion.',size:'medium'},{preserveCurrent:true});renderModal();return;}
-      world.mailbox.dismissedIds = world.mailbox.dismissedIds || {}; world.mailbox.dismissedIds[AppState.ui.selectedMailId] = true;
-      delete world.mailbox.byId[AppState.ui.selectedMailId];
-      world.mailbox.order = (world.mailbox.order || []).filter(function(id){ return id !== AppState.ui.selectedMailId; });
-      AppState.ui.selectedMailId = world.mailbox.order[0] || null;
+    var world=AppState.world,mailbox=kf032ActiveClubMailbox(false);
+    if(world&&mailbox&&AppState.ui.selectedMailId){
+      var deletingMail=mailbox.byId[AppState.ui.selectedMailId];if(mailRequiredActionActive(world,deletingMail)){openModal({title:'Mail kann nicht gelöscht werden',body:'Diese Nachricht enthält eine noch offene Pflichtaktion.',size:'medium'},{preserveCurrent:true});renderModal();return;}
+      mailbox.dismissedIds=mailbox.dismissedIds||{};mailbox.dismissedIds[AppState.ui.selectedMailId]=true;
+      delete mailbox.byId[AppState.ui.selectedMailId];
+      mailbox.order=(mailbox.order||[]).filter(function(id){return id!==AppState.ui.selectedMailId;});
+      AppState.ui.selectedMailId=mailbox.order[0]||null;
     }
-    renderApp(); renderModal(); return;
+    renderApp();renderModal();return;
   }
 
-  if (action === 'delete-all-mail') { var dmw=AppState.world;if(dmw&&dmw.mailbox){dmw.mailbox.dismissedIds=dmw.mailbox.dismissedIds||{};var keep=[];(dmw.mailbox.order||[]).forEach(function(id){var mail=dmw.mailbox.byId[id];if(mailRequiredActionActive(dmw,mail)){keep.push(id);return;}dmw.mailbox.dismissedIds[id]=true;delete dmw.mailbox.byId[id];});dmw.mailbox.order=keep;dmw.mailbox.initialized=true;AppState.ui.selectedMailId=keep[0]||null;}renderApp();renderModal();return; }
+  if(action==='delete-all-mail'){var dmw=AppState.world,dm=kf032ActiveClubMailbox(false);if(dmw&&dm){dm.dismissedIds=dm.dismissedIds||{};var keep=[];(dm.order||[]).forEach(function(id){var mail=dm.byId[id];if(mailRequiredActionActive(dmw,mail)){keep.push(id);return;}dm.dismissedIds[id]=true;delete dm.byId[id];});dm.order=keep;dm.initialized=true;AppState.ui.selectedMailId=keep[0]||null;}renderApp();renderModal();return;}
   if (action === 'mail-open-required-action') { closeModal();AppState.ui.squadPlanningTab='activities';goToView('squad-planning');renderModal();return; }
   if (action === 'office-advance') {
     var requiredBeforeAdvance=officeRequiredActionMail(AppState.world);if(requiredBeforeAdvance){setSelectedMailId(requiredBeforeAdvance.id);markMailRead(requiredBeforeAdvance.id);openModal({type:'mail-center'},{preserveCurrent:!!AppState.ui.modal});renderApp();renderModal();return;}
@@ -21186,7 +21219,7 @@ function ensureKF021CoreContainers(world){
   world.negotiations.playerContracts=world.negotiations.playerContracts||{byId:{},order:[],activeByPlayerId:{},activeByProcessKey:{},currentByThreadId:{}};
   world.scouting=world.scouting||{byClub:{}};
   world.squadPlanning=world.squadPlanning||{byClub:{}};
-  world.mailbox=world.mailbox||{byId:{},order:[],dismissedIds:{},initialized:false};
+  world.clubMailboxes=world.clubMailboxes||{byClub:{}};\n  world.clubMailboxes.byClub=world.clubMailboxes.byClub||{};
   world.seasonLifecycle=world.seasonLifecycle||{processedOptionDeadlineSeasons:{},transitions:[],pendingInsolvencies:{}};
   world.seasonLifecycle.processedOptionDeadlineSeasons=world.seasonLifecycle.processedOptionDeadlineSeasons||{};
   world.seasonLifecycle.transitions=world.seasonLifecycle.transitions||[];
@@ -24433,7 +24466,7 @@ WorldRepository.delete=function(worldId){CurrentSeasonFinanceRepository.deleteWo
 /* Migration 0.27.0 -> 0.27.1. */
 var kf0271BaseMigrateWorldDataTruthToCurrent=migrateWorldDataTruthToCurrent;
 migrateWorldDataTruthToCurrent=function(world){
-  if(!world)return {financeStoreMigration:{eventsMoved:0,clubsMigrated:0,repositoryEvents:0},legacyClubAssetFieldsRemoved:0};var result=kf0271BaseMigrateWorldDataTruthToCurrent(world)||{},migration=kf0271ArchiveExistingFinanceEvents(world),removed=0;Object.keys((((world||{}).clubs||{}).byId)||{}).forEach(function(clubId){var club=world.clubs.byId[clubId];if(!club)return;if(Object.prototype.hasOwnProperty.call(club,'homeKitAsset')){delete club.homeKitAsset;removed+=1;}if(Object.prototype.hasOwnProperty.call(club,'awayKitAsset')){delete club.awayKitAsset;removed+=1;}});world.meta=world.meta||{};world.meta.schemaVersion='kf-core-0.27.2';world.meta.version=KF_VERSION;var truth=Object.assign({},world.meta.dataTruth||{});truth.currentSeasonFinanceState='world.clubFinances.byClub[clubId] (compact current balance/state)';truth.currentSeasonFinanceLedger='CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]';truth.processedFinancialEvents='CurrentSeasonFinanceRepository financeEvents[].eventKey (current season only)';truth.clubKitDesign='world.clubs.byId[clubId] KitDesigner fields rendered from assets/kits';world.meta.dataTruth=truth;var record=worldRecordForGameState(world);if(record){record.schemaVersion='kf-world-record-0.27.2';record.gameVersion=KF_VERSION;}result.financeStoreMigration=migration;result.legacyClubAssetFieldsRemoved=removed;return result;
+  if(!world)return {financeStoreMigration:{eventsMoved:0,clubsMigrated:0,repositoryEvents:0},legacyClubAssetFieldsRemoved:0};var result=kf0271BaseMigrateWorldDataTruthToCurrent(world)||{},migration=kf0271ArchiveExistingFinanceEvents(world),removed=0;Object.keys((((world||{}).clubs||{}).byId)||{}).forEach(function(clubId){var club=world.clubs.byId[clubId];if(!club)return;if(Object.prototype.hasOwnProperty.call(club,'homeKitAsset')){delete club.homeKitAsset;removed+=1;}if(Object.prototype.hasOwnProperty.call(club,'awayKitAsset')){delete club.awayKitAsset;removed+=1;}});world.meta=world.meta||{};world.meta.schemaVersion='kf-core-0.27.2';world.meta.version=KF_VERSION;var truth=Object.assign({},world.meta.dataTruth||{});truth.currentSeasonFinanceState='world.clubFinances.byClub[clubId] (compact current balance/state)';truth.currentSeasonFinanceLedger='CurrentSeasonFinanceRepository[worldId][season][clubId][eventId]';truth.processedFinancialEvents='CurrentSeasonFinanceRepository financeEvents[].eventKey (current season only)';truth.clubKitDesign='world.clubs.byId[clubId] KitDesigner fields rendered from assets/kits';truth.clubMailbox='world.clubMailboxes.byClub[clubId]';world.meta.dataTruth=truth;var record=worldRecordForGameState(world);if(record){record.schemaVersion='kf-world-record-0.27.2';record.gameVersion=KF_VERSION;}result.financeStoreMigration=migration;result.legacyClubAssetFieldsRemoved=removed;return result;
 };
 
 
@@ -25056,15 +25089,18 @@ function kf029InstallLoadedWorld(data){
   resetState();
   registerWorldRecord(record);
   setWorldRecord(record);
+  kf032EnsureClubMailboxStore(record.gameState);
   kf029RestoreCurrentDetails(record.gameState, data.matches || [], data.financeEvents || []);
   kf029MarkCommittedDetails(data.matches || [], data.financeEvents || []);
-  KF029Remote.committedGameState = kf031CloneJson(record.gameState);
-  invalidateRuntimeDerivedIndex(record.gameState);
-  WorldRepository.save(record);
+  var committedServerGameState=kf031CloneJson(record.gameState);
 
   var profile = kf029TransientProfile(KF029Remote.user);
   var membership = data.membership || activeMemberships(record).find(function(row){ return row && String(row.userProfileId) === String(KF029Remote.user.userId); }) || null;
   if (!membership) throw new Error('Keine Trainerzuordnung fuer diese Welt gefunden.');
+  kf032MigrateLegacyMailboxForMembership(record,membership);
+  KF029Remote.committedGameState=committedServerGameState;
+  invalidateRuntimeDerivedIndex(record.gameState);
+  WorldRepository.save(record);
   var trainer = {
     id:membership.trainerId,
     userProfileId:KF029Remote.user.userId,

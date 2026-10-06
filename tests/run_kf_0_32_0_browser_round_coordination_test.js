@@ -41,8 +41,14 @@ check('Current multiplayer match action is explicit Schnellberechnung with irrev
 
 check('Lobby explains the existing manual two-account multiplayer test path',
   app.includes('Für einen Mehrspielertest wähle „Offene Welt“.')&&
-  app.includes('data-action="kf-join-world"')&&
+  app.includes("action === 'kf-join-world'")&&
   app.includes('function kf030JoinWorld(worldId)'));
+
+check('Multiplayer office mailbox is club-owned instead of mutating the old global mailbox',
+  app.includes('world.clubMailboxes.byClub')&&
+  app.includes('function kf032ClubMailbox(world,clubId,create)')&&
+  app.includes('var mailbox=kf032ClubMailbox(world,club.id,true)')&&
+  !app.includes('if(!world.mailbox)world.mailbox={byId:{},order:[],dismissedIds:{},initialized:false}'));
 
 check('Server merges round management overlays into the authoritative progression commit',
   server.includes('_mergeManagementOverlayDelta')&&

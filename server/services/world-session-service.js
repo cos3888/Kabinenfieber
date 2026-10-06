@@ -563,13 +563,13 @@ class WorldSessionService {
     if (!participation) throw new DomainRuleError('User is not a member of this world');
     const manifest = await this.worlds.getManifest(worldId);
     if (!manifest) throw new DomainRuleError('Active world not found');
-    if (Number(expectedRevision) !== Number(manifest.revision)) {
+    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    if (Number(expectedRevision) !== Number(manifest.revision) && (activeUserIds.length <= 1 || roundGeneration == null)) {
       const error = new Error('World revision mismatch');
       error.code = 'PERSISTENCE_CONFLICT';
       error.details = { worldId, expectedRevision, actualRevision:manifest.revision };
       throw error;
     }
-    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
     const meta = await this.metadata.getWorld(worldId);
     const config = this._roundConfig(meta);
     const ensured = await this._ensureRound(worldId, manifest.revision);
@@ -741,7 +741,8 @@ class WorldSessionService {
 
     const manifest = await this.worlds.getManifest(worldId);
     if (!manifest) throw new DomainRuleError('Active world not found');
-    if (Number(expectedRevision) !== Number(manifest.revision)) {
+    const revisionDrift = Number(expectedRevision) !== Number(manifest.revision);
+    if (revisionDrift && roundGeneration == null) {
       const error = new Error('World revision mismatch');
       error.code = 'PERSISTENCE_CONFLICT';
       error.details = { worldId, expectedRevision, actualRevision:manifest.revision };

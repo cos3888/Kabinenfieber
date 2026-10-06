@@ -105,6 +105,11 @@ function classifyOperation(worldRecord, membership, op) {
     return `CLUB:${clubId}`;
   }
 
+  if (root === 'clubMailboxes' && path[2] === 'byClub' && path[3]) {
+    const clubId = requireOwnedClub(membership, path[3]);
+    return `CLUB:${clubId}`;
+  }
+
   if (root === 'players' && path[2] === 'byId' && path[3]) {
     const playerId = path[3];
     const player = worldRecord && worldRecord.gameState && worldRecord.gameState.players &&
