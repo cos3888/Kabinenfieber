@@ -54,7 +54,8 @@ check('Leih-Prämie wird einmal und im 40/60-Gehaltsanteil gebucht',loanPaid1===
 
 const transferKey='transferAppearance|legacy-test|'+playerId+'|25';
 const record=T.worldRecordForGameState(w),assign=T.assignTrainerClub(record,T.AppState.session.activeTrainerId,club2);
-const humanMailbox=()=>((((w.clubMailboxes||{}).byClub||{})[club2]||{}).order||[]);\nconst pBefore=T.financeEventsForSeason(w,club2,season).length,bBefore=T.financeEventsForSeason(w,club3,season).length,mailBefore=humanMailbox().length;
+const humanMailbox=()=>((((w.clubMailboxes||{}).byClub||{})[club2]||{}).order||[]);
+const pBefore=T.financeEventsForSeason(w,club2,season).length,bBefore=T.financeEventsForSeason(w,club3,season).length,mailBefore=humanMailbox().length;
 const transfer1=T.kf021PayInterClubBonus(w,club2,club3,player,.4,'Transfer-Einsatzbonus Test',transferKey);
 const transfer2=T.kf021PayInterClubBonus(w,club2,club3,player,.4,'Transfer-Einsatzbonus Test',transferKey);
 const pAfter=T.financeEventsForSeason(w,club2,season).filter(ev=>ev.eventKey===transferKey),bAfter=T.financeEventsForSeason(w,club3,season).filter(ev=>ev.eventKey===transferKey),mailAfter=humanMailbox().length;
