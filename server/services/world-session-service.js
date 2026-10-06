@@ -72,11 +72,12 @@ function nextFixedScheduleAt(settings, afterMs = Date.now()) {
 }
 
 class WorldSessionService {
-  constructor({ metadataRepository, worldPersistence, runtimeManager }) {
+  constructor({ metadataRepository, worldPersistence, runtimeManager, progressionEngine = null }) {
     if (!metadataRepository || !worldPersistence || !runtimeManager) throw new Error('WorldSessionService dependencies are required');
     this.metadata = metadataRepository;
     this.worlds = worldPersistence;
     this.runtime = runtimeManager;
+    this.progressionEngine = progressionEngine;
   }
 
   _clubNamesById(record) {
@@ -219,9 +220,11 @@ class WorldSessionService {
   }
 
   async _effectiveRoundRecord(worldId, userId, revision, roundGeneration) {
-    const opened = await this.runtime.openWorld({ userId, worldId });
+    const baseRecord = userId
+      ? (await this.runtime.openWorld({ userId, worldId })).worldRecord
+      : await this.worlds.loadWorldRecord(worldId);
     const rows = await this.metadata.getManagementScopes({ worldId, roundGeneration });
-    return this._applyManagementOverlays(opened.worldRecord, rows);
+    return this._applyManagementOverlays(baseRecord, rows);
   }
 
   _assertLiveFixturesComplete(progressState) {
@@ -610,22 +613,117 @@ class WorldSessionService {
     return { deleted:true, worldId };
   }
 
+
+  async _executeClaimedProgression(worldId, revision, state) {
+    if (!state || !state.progressionRunId || !state.leaseId) return state;
+    if (state.status === ROUND_STATUS_MATCHDAY) {
+      const plan = state.matchdayPlan || {};
+      const liveFixtureIds = (plan.fixturePlans || []).filter(row => row && row.mode === 'LIVE').map(row => String(row.fixtureId));
+      const completed = new Set((plan.completedLiveFixtureIds || []).map(String));
+      if (liveFixtureIds.some(id => !completed.has(id))) return state;
+    }
+    if (state.status !== ROUND_STATUS_MATCHDAY && state.status !== ROUND_STATUS_FINALIZING) return state;
+    if (!this.progressionEngine) throw new Error('Server progression engine is not configured');
+
+    let finalizing = state;
+    if (state.status === ROUND_STATUS_MATCHDAY) {
+      finalizing = await this.metadata.beginFinalizing({
+        worldId,
+        expectedRevision:Number(revision),
+        roundGeneration:Number(state.roundGeneration),
+        leaseId:state.leaseId,
+        progressionRunId:state.progressionRunId
+      });
+    }
+
+    const effectiveRecord = await this._effectiveRoundRecord(
+      worldId,
+      null,
+      revision,
+      Number(finalizing.roundGeneration)
+    );
+    const committed = await this.runtime.runServerProgression({
+      worldId,
+      effectiveWorldRecord:effectiveRecord,
+      expectedRevision:Number(revision),
+      progressionRunId:finalizing.progressionRunId,
+      roundGeneration:Number(finalizing.roundGeneration),
+      progressionLeaseId:finalizing.leaseId,
+      engine:this.progressionEngine
+    });
+
+    await this.metadata.completeWorldProgress({
+      worldId,
+      expectedRevision:Number(revision),
+      nextRevision:Number(committed.revision),
+      leaseId:finalizing.leaseId,
+      roundGeneration:Number(finalizing.roundGeneration),
+      progressionRunId:finalizing.progressionRunId
+    });
+    await this._syncLobbyProjection(committed.worldRecord).catch(() => {});
+    const ensured = await this._ensureRound(worldId, committed.revision);
+    return {
+      ...ensured.state,
+      revision:Number(committed.revision),
+      advanceResult:committed.advanceResult || null,
+      shouldAdvance:false
+    };
+  }
+
+  async runDueProgression({ worldId }) {
+    const manifest = await this.worlds.getManifest(worldId);
+    if (!manifest) return null;
+    const activeUserIds = await this.metadata.listActiveAssignedUserIdsForWorld(worldId);
+    const ensured = await this._ensureRound(worldId, manifest.revision);
+    let state = ensured.state;
+    if (state.status === ROUND_STATUS_OPEN || state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) {
+      state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds, null) || state;
+    }
+    if (state && state.shouldAdvance && (state.status === ROUND_STATUS_MATCHDAY || state.status === ROUND_STATUS_FINALIZING)) {
+      return this._executeClaimedProgression(worldId, manifest.revision, state);
+    }
+    if (state && state.status === ROUND_STATUS_MATCHDAY) {
+      const plan = state.matchdayPlan || {};
+      const liveFixtureIds = (plan.fixturePlans || []).filter(row => row && row.mode === 'LIVE').map(row => String(row.fixtureId));
+      const completed = new Set((plan.completedLiveFixtureIds || []).map(String));
+      if (liveFixtureIds.length && liveFixtureIds.every(id => completed.has(id))) {
+        return this._executeClaimedProgression(worldId, manifest.revision, { ...state, shouldAdvance:true });
+      }
+    }
+    return state;
+  }
+
+  async sweepDueProgressions() {
+    const worldIds = typeof this.metadata.listActiveWorldIds === 'function'
+      ? await this.metadata.listActiveWorldIds()
+      : [];
+    const results = [];
+    for (const worldId of worldIds) {
+      try {
+        const state = await this.runDueProgression({ worldId });
+        results.push({ worldId, ok:true, state:state ? { status:state.status, revision:state.revision, roundGeneration:state.roundGeneration } : null });
+      } catch (error) {
+        results.push({ worldId, ok:false, error:String(error && (error.code || error.message) || error) });
+      }
+    }
+    return results;
+  }
+
   async getProgression({ userId, worldId }) {
     const participation = await this.metadata.getParticipation({ worldId, userId });
     if (!participation) throw new DomainRuleError('User is not a member of this world');
+    await this.runDueProgression({ worldId });
     const manifest = await this.worlds.getManifest(worldId);
     if (!manifest) throw new DomainRuleError('Active world not found');
     const activeUserIds = await this.metadata.listActiveAssignedUserIdsForWorld(worldId);
-    const { state:ensuredState } = await this._ensureRound(worldId, manifest.revision);
-    let state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds, userId);
-    if (!state) state = ensuredState;
+    const { state } = await this._ensureRound(worldId, manifest.revision);
     const rows = await this.metadata.getManagementScopes({ worldId, roundGeneration:state.roundGeneration });
     return {
       ...state,
       activeTrainerCount:activeUserIds.length,
       readyTrainerCount:(state.readyUserIds || []).map(String).filter(id => activeUserIds.map(String).includes(id)).length,
       scopeRevisions:scopeRevisionMap(rows),
-      shouldAdvance:Boolean(state.shouldAdvance)
+      shouldAdvance:false
     };
   }
 
@@ -687,6 +785,9 @@ class WorldSessionService {
         ...matchday,
         shouldAdvance:true
       };
+      if (!matchdayPlan.hasLiveFixtures) {
+        result = await this._executeClaimedProgression(worldId, manifest.revision, result);
+      }
     }
     return result;
   }
