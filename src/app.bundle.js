@@ -25486,12 +25486,14 @@ function kf032OpenRoundSettingsModal(forceSetup){
   var setupRequired=!!(forceSetup||state.roundSetupRequired||!kf032RoundSettingsConfigured(record.runtimeSettings));
   var admin=kf032IsWorldAdmin();
   if(setupRequired){
+    var exitSetupButton='<button class="ghost-btn" type="button" data-action="kf-exit-world-discard">Zur Weltliste</button>';
     var setupBody=admin
       ? '<div class="notice"><strong>Diese ältere Spielwelt hat noch keinen Spielrhythmus.</strong><br>Lege ihn einmalig fest. Dafür gibt es keine Abstimmung. Erst danach kann die Welt normal weiterlaufen.</div>'+
         kf032RoundEditorHtml('kf-round-setup',null)+
         '<div id="kf-round-settings-error" class="kf-world-create-error"></div>'+
-        '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-round-settings-initialize">Spielrhythmus festlegen</button></div>'
-      : '<div class="notice"><strong>Spielrhythmus wird eingerichtet.</strong><br>Der Weltadmin muss für diese ältere Spielwelt zuerst den Spielrhythmus festlegen. Bis dahin kannst du die Welt sehen, aber nicht normal weiterspielen.</div>';
+        '<div class="action-row">'+exitSetupButton+'<button class="primary-btn" type="button" data-action="kf-round-settings-initialize">Spielrhythmus festlegen</button></div>'
+      : '<div class="notice"><strong>Spielrhythmus wird eingerichtet.</strong><br>Der Weltadmin muss für diese ältere Spielwelt zuerst den Spielrhythmus festlegen. Bis dahin kannst du die Welt sehen, aber nicht normal weiterspielen.</div>'+
+        '<div class="action-row">'+exitSetupButton+'</div>';
     openModal({
       title:'Spielrhythmus festlegen',
       bodyHtml:'<div class="kf-round-settings-shell">'+setupBody+'</div>',
