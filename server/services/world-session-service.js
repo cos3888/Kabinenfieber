@@ -1112,6 +1112,12 @@ class WorldSessionService {
   }
 
   async saveSlot({ userId, worldId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches, financeEvents, progressLeaseId = null }) {
+    const setupManifest = await this.worlds.getManifest(worldId);
+    if (!setupManifest) throw new DomainRuleError('Active world not found');
+    const setupRound = await this._ensureRound(worldId, setupManifest.revision);
+    if (setupRound.state.roundSetupRequired) {
+      throw new DomainRuleError('World round settings require initial setup before slot progress');
+    }
     const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
     if (activeUserIds.length > 1 && !progressLeaseId) throw new DomainRuleError('Multiplayer slot progress requires a progress lease');
     let progressState = null;
