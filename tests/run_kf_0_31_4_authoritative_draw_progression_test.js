@@ -205,7 +205,8 @@ function makeServerWorld(worldId,userId){
     const sessions=new WorldSessionService({metadataRepository:metadata,worldPersistence:worlds,runtimeManager:runtime});
     const worldId='world-end-8-draw';
     await sessions.createWorld({userId:'uA',worldRecord:makeServerWorld(worldId,'uA'),worldName:'Ende 8 Draw',visibility:'PUBLIC',joinPolicy:'OPEN'});
-    await sessions.joinWorld({userId:'uB',displayName:'B',worldId});
+    const joinedB=await sessions.joinWorld({userId:'uB',displayName:'B',worldId});
+    await sessions.assignClub({userId:'uB',worldId,clubId:'club-b',expectedRevision:joinedB.revision});
     const manifest=await worlds.getManifest(worldId);
     const ready=await Promise.all([
       sessions.markReady({userId:'uA',worldId,expectedRevision:manifest.revision}),
