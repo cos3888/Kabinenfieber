@@ -384,18 +384,19 @@ class FirestoreMetadataRepository {
       if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
 
       const now = Date.now();
+      let reclaimedLease = false;
       if ((state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) &&
           state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
-        state.status = ROUND_STATUS_OPEN;
-        state.leaseId = null;
-        state.leaseExpiresAt = null;
+        state.leaseId = crypto.randomUUID();
+        state.leaseExpiresAt = new Date(now + Math.max(30000, Number(leaseMs || 120000))).toISOString();
+        reclaimedLease = true;
       }
 
       const ready = (state.readyUserIds || []).map(String);
       const allReady = active.length > 0 && active.every(id => ready.includes(id));
       const expired = Boolean(state.deadlineAt && new Date(state.deadlineAt).getTime() <= now);
       const due = state.timeModel === TIME_MODEL_FIXED_SCHEDULE ? expired : (allReady || expired);
-      let shouldAdvance = false;
+      let shouldAdvance = reclaimedLease;
       if (state.status === ROUND_STATUS_OPEN && due) {
         state.status = ROUND_STATUS_LOCKING;
         state.progressionRunId = state.progressionRunId || crypto.randomUUID();
@@ -450,11 +451,6 @@ class FirestoreMetadataRepository {
       if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
 
       const now = Date.now();
-      if (state.status === ROUND_STATUS_MATCHDAY && state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
-        state.status = ROUND_STATUS_OPEN;
-        state.leaseId = null;
-        state.leaseExpiresAt = null;
-      }
       if (state.status !== ROUND_STATUS_OPEN) {
         tx.set(ref, state);
         return { ...state, activeTrainerCount:active.length, readyTrainerCount:(state.readyUserIds || []).filter(id => active.includes(String(id))).length, shouldAdvance:false };
