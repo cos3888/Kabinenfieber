@@ -25430,12 +25430,13 @@ function kf032NextRoundText(state){
   return 'Noch nicht terminiert · Countdown startet mit dem ersten „Runde abschließen“';
 }
 function kf032RoundProposalHtml(state){
-  var proposal=state&&state.pendingRoundSettingsChange;
+  var proposal=state&&(state.pendingRoundSettingsChange||state.lastRoundSettingsDecision);
   if(!proposal)return '';
+  var isHistorical=!(state&&state.pendingRoundSettingsChange);
   var summary=proposal.voteSummary||proposal.decisionSummary||{};
   var currentUserId=String((((KF029Remote||{}).user||{}).userId)||'');
   var myVote=proposal.votesByUserId&&proposal.votesByUserId[currentUserId];
-  var voting=proposal.status==='VOTING';
+  var voting=!isHistorical&&proposal.status==='VOTING';
   var proposer=String(proposal.proposedByUserId||'')===currentUserId;
   var voteButtons='';
   if(voting&&!proposer){
@@ -25446,15 +25447,22 @@ function kf032RoundProposalHtml(state){
   }else if(voting&&proposer){
     voteButtons='<div class="kf-auth-hint">Deine Admin-Stimme zählt automatisch als Ja.</div>';
   }
-  var statusText=voting?'Abstimmung läuft':(proposal.status==='APPROVED'?'Angenommen · wartet auf Wirksamkeit':escapeHtml(String(proposal.status||'')));
+  var statusText='Abstimmung abgeschlossen';
+  if(voting)statusText='Abstimmung läuft';
+  else if(proposal.status==='APPROVED')statusText='Angenommen · wartet auf Wirksamkeit';
+  else if(proposal.status==='REJECTED')statusText='Abgelehnt';
+  else if(proposal.status==='APPLIED')statusText='Angenommen · wirksam';
+  var notVotedLabel=summary.notVoted!=null
+    ? ' · '+escapeHtml(String(Number(summary.notVoted||0)))+(voting?' noch ohne Stimme':' ohne Stimme')
+    : '';
   return '<section class="kf-round-proposal-card">'+
-    '<div class="kf-round-proposal-title">Änderung des Spielrhythmus</div>'+
+    '<div class="kf-round-proposal-title">'+(isHistorical?'Letzte Abstimmung':'Änderung des Spielrhythmus')+'</div>'+
     '<div class="kf-round-proposal-status">'+escapeHtml(statusText)+'</div>'+
-    kf032RoundSettingsCard('Vorgeschlagen',proposal.proposedSettings)+
+    kf032RoundSettingsCard(isHistorical?'Abgestimmt über':'Vorgeschlagen',proposal.proposedSettings)+
     '<dl class="kf-round-facts">'+
       '<div><dt>Abstimmung bis / früheste Auswertung</dt><dd>'+escapeHtml(kf032RoundTransitionLabel(proposal.evaluationRoundGeneration,state))+'</dd></div>'+
       '<div><dt>Bei Annahme gültig ab</dt><dd>'+escapeHtml(kf032RoundSlotLabel(proposal.effectiveRoundGeneration,state))+'</dd></div>'+
-      '<div><dt>Stimmen</dt><dd>'+escapeHtml(String(Number(summary.yes||0)))+' Ja · '+escapeHtml(String(Number(summary.no||0)))+' Nein'+(summary.notVoted!=null?' · '+escapeHtml(String(Number(summary.notVoted||0)))+' noch ohne Stimme':'')+'</dd></div>'+
+      '<div><dt>Stimmen</dt><dd>'+escapeHtml(String(Number(summary.yes||0)))+' Ja · '+escapeHtml(String(Number(summary.no||0)))+' Nein'+notVotedLabel+'</dd></div>'+
     '</dl>'+
     '<div class="kf-auth-hint">Nicht abgestimmte Spieler zählen nicht zur Mehrheitsberechnung. Entscheidend sind 2/3 der tatsächlich abgegebenen Stimmen.</div>'+
     voteButtons+
