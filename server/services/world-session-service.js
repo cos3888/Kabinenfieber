@@ -127,7 +127,16 @@ class WorldSessionService {
         progressionRunId:state.progressionRunId
       });
     }
-    return { state, config };
+    return {
+      state:{
+        ...state,
+        timeModel:config.timeModel,
+        timezone:config.timezone,
+        fixedScheduleWeekdays:config.fixedScheduleWeekdays,
+        fixedScheduleTime:config.fixedScheduleTime
+      },
+      config
+    };
   }
 
   async _managementOverlayContext(worldId, revision) {
