@@ -62,7 +62,8 @@
     "test:0314-draw": "node tests/run_kf_0_31_4_authoritative_draw_progression_test.js",
     "test:0314-memory": "node tests/run_kf_0_31_4_large_world_memory_test.js",
     "test:0320": "node tests/run_kf_0_32_0_round_scope_management_test.js",
-    "test:0320-browser": "node tests/run_kf_0_32_0_browser_round_coordination_test.js"
+    "test:0320-browser": "node tests/run_kf_0_32_0_browser_round_coordination_test.js",
+    "test:0320-server": "node tests/run_kf_0_32_0_server_progression_runner_test.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.2.0",
