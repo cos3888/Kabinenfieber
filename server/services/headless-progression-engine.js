@@ -26,7 +26,23 @@ class FakeElement {
   getBoundingClientRect() { return { width:1760, height:990 }; }
 }
 
-function createContext() {
+function seedFrom(value) {
+  const text = String(value || 'kabinenfieber');
+  let hash = 2166136261 >>> 0;
+  for (let i=0; i<text.length; i+=1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash || 1;
+}
+
+function createContext(seedValue) {
+  let seed = seedFrom(seedValue);
+  const seededMath = Object.create(Math);
+  seededMath.random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
   const elements = {
     'app-root':new FakeElement(),
     'modal-root':new FakeElement(),
@@ -68,7 +84,7 @@ function createContext() {
     Element:FakeElement,
     navigator:window.navigator,
     performance:window.performance,
-    Math,
+    Math:seededMath,
     Map,
     WeakMap,
     Set
@@ -120,14 +136,15 @@ class HeadlessProgressionEngine {
     if (!payload || !payload.worldRecord || !payload.worldRecord.gameState) {
       throw new Error('Headless progression requires a complete WorldRecord');
     }
-    const context = createContext();
+    const context = createContext(payload.progressionRunId);
     this.scripts.forEach(script => script.runInContext(context));
     const engine = context.window && context.window.KFServerProgressionEngine;
     if (!engine || typeof engine.run !== 'function') throw new Error('Headless progression engine was not initialized');
     const result = engine.run({
       worldRecord:clone(payload.worldRecord),
       matches:clone(payload.matches || []),
-      financeEvents:clone(payload.financeEvents || [])
+      financeEvents:clone(payload.financeEvents || []),
+      progressionRunId:String(payload.progressionRunId || '')
     });
     if (!result || !result.worldRecord || !result.advanceResult) {
       throw new Error('Headless progression returned an incomplete result');
