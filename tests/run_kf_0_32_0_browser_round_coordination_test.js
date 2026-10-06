@@ -102,6 +102,11 @@ check('Legacy worlds force initial rhythm setup without a vote and stay read-onl
   server.includes('initializeRoundSettings')&&
   server.includes('Only the world admin may configure the initial round settings'));
 
+check('Waiting trainers are explicitly shown the selected rhythm after initial setup resolves',
+  app.includes('roundSetupWasRequired')&&
+  app.includes("KF029Remote.message='Spielrhythmus festgelegt: '")&&
+  app.includes('kf032OpenRoundSettingsModal(false)'));
+
 check('Later rhythm changes expose proposal timing, 2/3 vote information and delayed activation',
   app.includes('data-action="kf-round-settings-propose"')&&
   app.includes('data-action="kf-round-settings-vote"')&&
