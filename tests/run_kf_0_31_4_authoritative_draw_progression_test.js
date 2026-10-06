@@ -187,12 +187,11 @@ function makeServerWorld(worldId,userId){
     advanceSource.indexOf('ensureDueNationalCupDraws')>=0&&advanceSource.indexOf('ensureDueFieberCupDraws')>=0&&
     advanceSource.indexOf('ensureDueFieberCupDraws')<advanceSource.indexOf('if (dueVisibleDraws.length)')&&advanceSource.includes('cupDraws: dueVisibleDraws'),
     {});
-  check('Same-slot progression delta is checkpointed before any queued draw is presented',
-    claimedSource.includes('kf031DeltaTouchesProgression(postAdvanceDelta)')&&
-    claimedSource.indexOf("await kf029CommitHardCheckpoint('calendar-slot')")>=0&&
-    claimedSource.indexOf("await kf029CommitHardCheckpoint('calendar-slot')")<claimedSource.indexOf('presentNextQueuedCupDraw()')&&
-    claimedSource.includes('deferCupDrawPresentation=true')&&
-    readySource.includes('kf032AdvanceClaimedRound(state,actionEl)'),
+  check('Queued draw presentation is no longer coupled to browser-owned round progression',
+    claimedSource.includes('Der Browser ist nur Anzeige')&&
+    !claimedSource.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
+    !claimedSource.includes('kf029BaseHandleAction')&&
+    !readySource.includes('kf032AdvanceClaimedRound(state,actionEl)'),
     {});
   check('Presentation status no longer writes presentedClubIds into authoritative calendar state',
     !markSource.includes('presentedClubIds.push')&&!markSource.includes('draw.presentedClubIds ='),
@@ -266,7 +265,7 @@ function makeServerWorld(worldId,userId){
 
     report.metrics={drawCountAfterFirst,drawCountAfterSecond,cupFixtureCount:fixtureIdsAfterFirst.length,fieberGroupFixtureCount:fieberFixtureIds.length,serverRevision:saved.revision};
   }finally{
-    await fsp.rm(temp,{recursive:true,force:true});
+    await fsp.rm(temp,{recursive:true,force:true,maxRetries:5,retryDelay:100});
   }
 
   console.log(JSON.stringify(report,null,2));
