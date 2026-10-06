@@ -21,7 +21,7 @@ function makeWorldRecord(worldId,userId){
     createdAt:new Date().toISOString(),
     createdByUserId:userId,
     creationRules:{startVariant:'classic',leagueConfiguration:'default',clubSelection:'manual'},
-    runtimeSettings:{roundDurationHours:null},
+    runtimeSettings:{roundTimeModel:'COUNTDOWN',roundDurationSeconds:600,timezone:'Europe/Berlin'},
     memberships:{byTrainerId:{'trainer-a':{
       trainerId:'trainer-a',userProfileId:userId,clubId:null,status:'active',
       joinedAt:new Date().toISOString(),lastActivityAt:new Date().toISOString(),
