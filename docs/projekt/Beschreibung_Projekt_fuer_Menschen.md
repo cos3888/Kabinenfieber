@@ -44,6 +44,31 @@ KF_0.32.0 fuehrt den gemeinsamen Rundentakt fuer Mehrspielerwelten ein und verla
 - In den letzten fuenf Minuten wird zusaetzlich ein Countdown angezeigt.
 - Zum Termin wird der Slot serverseitig geschlossen und verarbeitet.
 
+### Spielrhythmus verwalten
+
+Neue Welten waehlen den Spielrhythmus bereits bei der Erstellung in einer mobilen, modusabhaengigen Oberflaeche. Bei COUNTDOWN wird nur die Wartezeit gezeigt; bei „Feste Rundenzeiten“ nur Wochentage, Uhrzeit und Zeitzone. Die Wochentage sind als grosse Touch-Chips ausgefuehrt.
+
+Jede geladene Welt besitzt dauerhaft den Pfad **Weltdetails -> Spielrhythmus**. Dort sehen alle Trainer die aktuelle Einstellung, den naechsten Rundenwechsel und gegebenenfalls einen laufenden Aenderungsvorschlag.
+
+Alte Spielstaende ohne gueltige KF_0.32.0-Rundeneinstellung werden nicht stillschweigend auf einen Default umgestellt:
+- `roundSetupRequired` haelt die Welt bis zur einmaligen Ersteinrichtung in einem sicheren, lesbaren Zustand;
+- nur der `WORLD_ADMIN` darf die Ersteinrichtung vornehmen;
+- dabei gibt es bewusst keine Abstimmung;
+- andere Trainer koennen die Welt betreten und ansehen, aber weder einen Verein uebernehmen noch Management/Ready/Slotfortschritt ausloesen;
+- nach der Einrichtung wird der gewaehlte Rhythmus automatisch geladen und angezeigt;
+- ein neu eingerichteter COUNTDOWN startet erst mit dem ersten „Runde abschliessen“, nicht durch die Einrichtung selbst.
+
+Spaetere Aenderungen sind immer Vorschlaege. Der bisherige Spielrhythmus bleibt waehrend Abstimmung und Wartezeit vollstaendig aktiv. Der Vorschlag liegt als `pendingRoundSettingsChange` im operativen Round-State und ist **keine zweite aktive Konfigurationswahrheit**.
+
+Abstimmungsregeln:
+- Admin-Stimme beim Erstellen automatisch `YES`;
+- Mehrheit = `ceil(abgegebene Stimmen * 2 / 3)`;
+- nicht abgegebene Stimmen erhoehen den Nenner nicht;
+- Vorschlag in Generation/Slot S darf fruehestens beim Fortschritt S+1 -> S+2 ausgewertet werden;
+- der Wirksamkeits-Slot muss mindestens der danach erreichte Slot S+2 sein, darf aber spaeter liegen;
+- eine angenommene Aenderung wird erst beim vorgesehenen Slotfortschritt atomar in `WorldRecord.runtimeSettings` uebernommen;
+- bis zu diesem Commit verwendet die Progression ausschliesslich die alte Konfiguration.
+
 ### Serverautoritativer Fortschritt
 
 Der Browser ist nur Client und Anzeige. Er pollt den Progression-State moderat und berechnet sichtbare Countdowns lokal aus dem serverseitigen `deadlineAt`.
@@ -80,7 +105,7 @@ Keine doppelte fachliche Wahrheit:
 - Welt-Rundenkonfiguration: `WorldRecord.runtimeSettings`
 - Texte/Regeln: `StaticData`
 
-Der Progression-State mit `roundGeneration`, Status, Ready-Usern, `deadlineAt`, `progressionRunId` und Scope-Revisions ist operativer Laufzustand/Projektion, keine zweite Konfigurationswahrheit.
+Der Progression-State mit `roundGeneration`, Status, Ready-Usern, `deadlineAt`, `progressionRunId`, Lease, Matchplan, Scope-Revisions und einem gegebenenfalls zukuenftigen `pendingRoundSettingsChange` ist operativer Lauf-/Governancezustand, keine zweite aktive Konfigurationswahrheit. Lobby-/Metadata-Rundenfelder sind nur Projektionen fuer Anzeige und Suche. Die serverseitige Rundenberechnung liest ihre aktive Konfiguration aus `WorldRecord.runtimeSettings`.
 
 ### Regressionen
 
@@ -88,6 +113,7 @@ Neue/erweiterte Tests:
 - `tests/run_kf_0_32_0_round_scope_management_test.js`
 - `tests/run_kf_0_32_0_browser_round_coordination_test.js`
 - `tests/run_kf_0_32_0_server_progression_runner_test.js`
+- `tests/run_kf_0_32_0_round_settings_governance_test.js`
 
 Abgedeckt sind unter anderem:
 - zwei und 18 menschliche Manager;
@@ -101,6 +127,12 @@ Abgedeckt sind unter anderem:
 - keine doppelten Matches, Finanzen oder Kalenderfortschritte;
 - serverseitige Ownership/Scope-Isolation;
 - direkte Aufstellungs-Drag&Drop-Sperre nach Ready;
+- Altwelt-Ersteinrichtung mit Admin-Recht und ohne Abstimmung;
+- 2/3-Mehrheit fuer 1/2/3/4/5/6/10 abgegebene Stimmen sowie Nicht-Abstimmer;
+- Mindestfrist und spaetere Wirksamkeit von Rhythmus-Aenderungen;
+- alte Einstellung bleibt bis zum Wirksamkeits-Slot autoritativ;
+- atomare/einmalige Uebernahme in `WorldRecord.runtimeSettings`;
+- Lobby-Rundenfelder bleiben reine Projektion;
 - Regressionen KF_0.31.2 bis KF_0.31.4 und aktuelle Core-Suite.
 
 Der Testdienst bleibt bei 1 GiB. Das Produktivbackend wird im Rahmen dieses Arbeits-PRs nicht veraendert. PR #11 bleibt bis zur ausdruecklichen Freigabe ungemergt.
