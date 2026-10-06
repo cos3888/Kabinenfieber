@@ -116,7 +116,9 @@ function slotDelta(worldId){
     const mpWorld='world-ready';
     const mpRecord=makeWorldRecord(mpWorld,'uA');
     const mpCreated=await sessions.createWorld({userId:'uA',worldRecord:mpRecord,worldName:'Ready Welt',visibility:'PUBLIC',joinPolicy:'OPEN'});
-    await sessions.joinWorld({userId:'uB',displayName:'B',worldId:mpWorld});
+    const mpAAssigned=await sessions.assignClub({userId:'uA',worldId:mpWorld,clubId:'club-a',expectedRevision:mpCreated.revision});
+    const mpJoined=await sessions.joinWorld({userId:'uB',displayName:'B',worldId:mpWorld});
+    await sessions.assignClub({userId:'uB',worldId:mpWorld,clubId:'club-b',expectedRevision:mpJoined.revision});
     const mpManifest=await worlds.getManifest(mpWorld);
     const readyResults=await Promise.all([
       sessions.markReady({userId:'uA',worldId:mpWorld,expectedRevision:mpManifest.revision}),
