@@ -37,7 +37,7 @@ function makeWorldRecord(worldId,userId,playerCount=5000,gameVersion='0.31.2'){
     id:worldId,schemaVersion:'kf-world-record-0.27.2',gameVersion,
     createdAt:new Date().toISOString(),createdByUserId:userId,
     creationRules:{startVariant:'classic',leagueConfiguration:'default',clubSelection:'manual'},
-    runtimeSettings:{roundDurationHours:null},
+    runtimeSettings:{roundTimeModel:'COUNTDOWN',roundDurationSeconds:600,timezone:'Europe/Berlin'},
     progression:{status:'waiting',deadlineAt:null,readyTrainerIds:[],lastHumanActivityAt:new Date().toISOString()},
     memberships:{byTrainerId:{'trainer-1':{
       trainerId:'trainer-1',userProfileId:userId,clubId:'club-a',status:'active',
