@@ -49,6 +49,16 @@ class FirestoreMetadataRepository {
     return snap.docs.map(doc => doc.data().userId);
   }
 
+  async listActiveAssignedUserIdsForWorld(worldId) {
+    const snap = await this.db.collection(this.names.participation).where('worldId', '==', worldId).where('status', '==', STATUS_ACTIVE).get();
+    return snap.docs.map(doc => doc.data()).filter(row => row.clubId).map(row => row.userId);
+  }
+
+  async listActiveWorldIds() {
+    const snap = await this.db.collection(this.names.worlds).where('status', '==', 'ACTIVE').get();
+    return snap.docs.map(doc => doc.data().worldId).filter(Boolean);
+  }
+
   async getWorld(worldId) {
     const doc = await this._world(worldId).get();
     return doc.exists ? doc.data() : null;
