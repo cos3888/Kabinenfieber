@@ -17,7 +17,9 @@ function loadConfig(env = process.env) {
     allowedOrigins: String(env.KF_ALLOWED_ORIGINS || 'https://cos3888.github.io,http://localhost:8000,http://127.0.0.1:8000')
       .split(',').map(value => value.trim()).filter(Boolean),
     maxRequestBytes: Math.max(1024 * 1024, Number(env.KF_MAX_REQUEST_BYTES || 30 * 1024 * 1024)),
-    runtimeIdleMs: Math.max(60 * 1000, Number(env.KF_RUNTIME_IDLE_MS || 15 * 60 * 1000))
+    runtimeIdleMs: Math.max(60 * 1000, Number(env.KF_RUNTIME_IDLE_MS || 15 * 60 * 1000)),
+    progressionSweepMs: Math.max(5000, Number(env.KF_PROGRESSION_SWEEP_MS || 15000)),
+    progressionWakeToken: String(env.KF_PROGRESSION_WAKE_TOKEN || '')
   };
 }
 
