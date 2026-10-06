@@ -17980,7 +17980,7 @@ function renderOfficeView(){
       officeRoundStatusHtml='<div class="office-save-status is-pending" role="status">'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>';
     }
   }
-  var officeQuickSimHintHtml = (KF029Remote && KF029Remote.user && officeAdvanceStartsMatch && !officeRoundReadOnly)
+  var officeQuickSimHintHtml = (KF029Remote && KF029Remote.user && !officeFixedSchedule && officeAdvanceStartsMatch && !officeRoundReadOnly)
     ? '<div class="office-save-status" role="note">Schnellberechnung: Der Co-Trainer übernimmt dein gesamtes Spiel. Ein späterer Live-Einstieg ist für dieses Match nicht möglich.</div>'
     : '';
   if (officeSaveState === 'failed') {
