@@ -3197,6 +3197,11 @@ function locatePlayerInSquad(squad, playerId){
 }
 
 function handleLineupDrop(playerId, targetType, targetValue){
+  if (typeof kf032RoundReadOnlyForMe === 'function' && kf032RoundReadOnlyForMe()) {
+    KF029Remote.message='Du bist für diese Runde bereits bereit. Du kannst dich weiter umsehen, aber bis zum Rundenwechsel nichts mehr verändern.';
+    renderApp();
+    return;
+  }
   var club = activeClub();
   var squad = activeSquad();
   var world = AppState.world;
