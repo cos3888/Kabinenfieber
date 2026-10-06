@@ -2878,6 +2878,7 @@ function displayedTrainerLabel(world, club){
     var selectedFinanceSnap = selectedClub && world.clubFinances ? buildFinanceSnapshot(world, selectedClub, 'current') : null;
     var takeoverBusy = typeof KF029Remote !== 'undefined' && KF029Remote &&
       KF029Remote.checkpointPending && KF029Remote.checkpointReason === 'take-over-club';
+    var roundSetupPending=!!(typeof KF029Remote!=='undefined'&&KF029Remote&&KF029Remote.progression&&KF029Remote.progression.roundSetupRequired);
 
     var countryTabs = uniqueCountries(world).map(function(country){
       var active = country === countryName ? ' is-active' : '';
@@ -2949,9 +2950,10 @@ function displayedTrainerLabel(world, club){
       '    <div class="action-row selection-footer-actions">' +
       '      <div class="selection-footer-left">' +
       '        <button class="ghost-btn" type="button" data-action="return-start">Zurück zum Startmenü</button>' +
+      '        <button class="ghost-btn" type="button" data-action="kf-world-details">Weltdetails</button>' +
       '      </div>' +
       '      <div class="selection-footer-right">' +
-      '        <button class="primary-btn" type="button" data-action="take-over-club"' + ((takeoverBusy || !selectedClub) ? ' disabled aria-disabled="true"' : '') + '>' + (takeoverBusy ? 'Verein wird übernommen ...' : (selectedClub ? 'Verein übernehmen' : 'Kein Verein frei')) + '</button>' +
+      '        <button class="primary-btn" type="button" data-action="take-over-club"' + ((roundSetupPending || takeoverBusy || !selectedClub) ? ' disabled aria-disabled="true"' : '') + '>' + (roundSetupPending ? 'Spielrhythmus wird eingerichtet' : (takeoverBusy ? 'Verein wird übernommen ...' : (selectedClub ? 'Verein übernehmen' : 'Kein Verein frei'))) + '</button>' +
       '      </div>' +
       '    </div>' +
       '  </div>' +
@@ -3198,7 +3200,9 @@ function locatePlayerInSquad(squad, playerId){
 
 function handleLineupDrop(playerId, targetType, targetValue){
   if (typeof kf032RoundReadOnlyForMe === 'function' && kf032RoundReadOnlyForMe()) {
-    KF029Remote.message='Du bist für diese Runde bereits bereit. Du kannst dich weiter umsehen, aber bis zum Rundenwechsel nichts mehr verändern.';
+    KF029Remote.message=(KF029Remote.progression&&KF029Remote.progression.roundSetupRequired)
+      ? 'Der Spielrhythmus muss zuerst vom Weltadmin festgelegt werden.'
+      : 'Du bist für diese Runde bereits bereit. Du kannst dich weiter umsehen, aber bis zum Rundenwechsel nichts mehr verändern.';
     renderApp();
     return;
   }
@@ -17973,10 +17977,13 @@ function renderOfficeView(){
       (officeSaveState === 'confirming' ? 'Server bestätigt …' :
         (officeSaveState === 'confirmed' ? 'Gespeichert' : '')));
   var officeSaveStatusHtml = '';
+  var officeRoundSetupRequired=!!(officeRoundState&&officeRoundState.roundSetupRequired);
   var officeFixedSchedule=!!(officeRoundState&&officeRoundState.timeModel==='FIXED_SCHEDULE');
   var officeRoundStatusHtml='';
   if(officeRoundState){
-    if(officeFixedSchedule){
+    if(officeRoundSetupRequired){
+      officeRoundStatusHtml='<div class="office-save-status is-pending" role="status"><strong>Spielrhythmus noch nicht festgelegt</strong><br>'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>';
+    }else if(officeFixedSchedule){
       var fixedRemaining=kf032RemainingSeconds(officeRoundState);
       officeRoundStatusHtml='<div class="office-save-status is-pending" role="status"><strong>Nächster Rundenwechsel</strong><br>'+escapeHtml(kf032FixedDeadlineLabel(officeRoundState))+((fixedRemaining!=null&&fixedRemaining<=300)?'<br>Rundenwechsel in '+escapeHtml(kf032FormatCountdown(fixedRemaining)):'')+'</div>';
     }else if(kf032CurrentUserReady(officeRoundState)&&officeRoundState.status==='OPEN'){
@@ -17985,7 +17992,7 @@ function renderOfficeView(){
       officeRoundStatusHtml='<div class="office-save-status is-pending" role="status">'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>';
     }
   }
-  var officeQuickSimHintHtml = (KF029Remote && KF029Remote.user && !officeFixedSchedule && officeAdvanceStartsMatch && !officeRoundReadOnly)
+  var officeQuickSimHintHtml = (KF029Remote && KF029Remote.user && !officeRoundSetupRequired && !officeFixedSchedule && officeAdvanceStartsMatch && !officeRoundReadOnly)
     ? '<div class="office-save-status" role="note">Schnellberechnung: Der Co-Trainer übernimmt dein gesamtes Spiel. Ein späterer Live-Einstieg ist für dieses Match nicht möglich.</div>'
     : '';
   if (officeSaveState === 'failed') {
@@ -18000,7 +18007,9 @@ function renderOfficeView(){
     officeSaveStatusHtml = '<div class="office-save-status is-confirmed" role="status">Speichern abgeschlossen.</div>';
   }
   var officeRoundControlHtml='';
-  if(requiredMail){
+  if(officeRoundSetupRequired){
+    officeRoundControlHtml='';
+  }else if(requiredMail){
     officeRoundControlHtml='<button class="primary-btn office-advance-btn is-mail-required" type="button" data-action="office-advance"><span class="office-advance-label">Mail</span></button>';
   }else if(!officeFixedSchedule){
     officeRoundControlHtml='<button class="primary-btn office-advance-btn'+(officeAdvanceStartsMatch?' is-start-match':'')+officeSaveButtonClass+'" type="button" data-action="office-advance"'+officeSaveButtonAttrs+'><span class="office-advance-label">'+(officeRoundReadOnly?((officeRoundState&&officeRoundState.status==='OPEN')?'Runde abgeschlossen ✓':'Runde läuft'):'Runde abschließen')+'</span>'+(officeSavePhaseLabel?'<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>':'')+'</button>';
@@ -18267,7 +18276,7 @@ function renderModal(){
         '  <section class="modal-card' + popupClass + (modal.size ? ' modal-size-' + escapeHtml(modal.size) : '') + (modal.surfaceClass ? ' ' + escapeHtml(modal.surfaceClass) : '') + '" role="dialog" aria-modal="true" aria-label="' + escapeHtml(modal.title) + '">' +
         '    <div class="modal-header">' +
         '      <h2 class="modal-title">' + escapeHtml(modal.title) + '</h2>' +
-        '      <button class="modal-close" type="button" id="modalCloseBtn" aria-label="Schließen">✕</button>' +
+        (modal.lockClose ? '' : '      <button class="modal-close" type="button" id="modalCloseBtn" aria-label="Schließen">✕</button>') +
         '    </div>' +
         '    <div class="modal-body">' + (modal.bodyHtml ? modal.bodyHtml : escapeHtml(modal.body || '').split('\n').join('<br>')) + '</div>' +
         '  </section>' +
@@ -25165,6 +25174,9 @@ function kf029InstallLoadedWorld(data){
     setCurrentView('club-selection');
   }
   renderApp(); renderModal();
+  if (KF029Remote.progression && KF029Remote.progression.roundSetupRequired) {
+    kf032OpenRoundSettingsModal(true);
+  }
   if (KF029Remote.user && AppState.worldRecord) {
     kf032ScheduleProgressPoll(null,250);
   }
@@ -25204,6 +25216,11 @@ function kf032ProcessingIsMatchSlot(state){
 }
 function kf031ProgressMessage(state){
   if (!state) return '';
+  if(state.roundSetupRequired){
+    return kf032IsWorldAdmin()
+      ? 'Spielrhythmus muss zuerst festgelegt werden.'
+      : 'Der Weltadmin legt den Spielrhythmus noch fest.';
+  }
   var ready=Number(state.readyTrainerCount || ((state.readyUserIds||[]).length) || 0);
   var total=Number(state.activeTrainerCount || 0);
   var remaining=kf032RemainingSeconds(state);
@@ -25230,8 +25247,334 @@ function kf032CurrentUserReady(state){
 function kf032RoundReadOnlyForMe(){
   var state=KF029Remote && KF029Remote.progression;
   if (!state) return false;
+  if (state.roundSetupRequired) return true;
   if (state.status && state.status!=='OPEN') return true;
   return kf032CurrentUserReady(state);
+}
+
+function kf032IsWorldAdmin(){
+  return String((((KF029Remote||{}).membership||{}).role)||'').toUpperCase()==='WORLD_ADMIN';
+}
+function kf032RoundSettingsConfigured(settings){
+  settings=settings||{};
+  var mode=String(settings.roundTimeModel||'').toUpperCase();
+  if(mode==='COUNTDOWN'){
+    return [600,1800,3600,7200,14400,28800,43200,86400,172800,259200].indexOf(Number(settings.roundDurationSeconds))>=0;
+  }
+  if(mode==='FIXED_SCHEDULE'){
+    return Array.isArray(settings.fixedScheduleWeekdays)&&settings.fixedScheduleWeekdays.length>0&&/^\d{2}:\d{2}$/.test(String(settings.fixedScheduleTime||''));
+  }
+  return false;
+}
+function kf032DetectedTimezone(){
+  try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch(error){return 'UTC';}
+}
+function kf032RoundDurationLabel(seconds){
+  var labels={600:'10 Minuten',1800:'30 Minuten',3600:'1 Stunde',7200:'2 Stunden',14400:'4 Stunden',28800:'8 Stunden',43200:'12 Stunden',86400:'24 Stunden',172800:'48 Stunden',259200:'72 Stunden'};
+  return labels[Number(seconds)]||String(Math.max(0,Number(seconds||0)))+' Sekunden';
+}
+function kf032RoundWeekdaysLabel(days){
+  var labels={0:'So',1:'Mo',2:'Di',3:'Mi',4:'Do',5:'Fr',6:'Sa'};
+  return (Array.isArray(days)?days:[]).map(function(day){return labels[Number(day)]||String(day);}).join(' / ');
+}
+function kf032RoundSettingsText(settings){
+  settings=settings||{};
+  if(String(settings.roundTimeModel||'').toUpperCase()==='FIXED_SCHEDULE'){
+    return 'Feste Rundenzeiten · '+kf032RoundWeekdaysLabel(settings.fixedScheduleWeekdays)+' · '+String(settings.fixedScheduleTime||'--:--')+' Uhr · '+String(settings.timezone||'UTC');
+  }
+  if(String(settings.roundTimeModel||'').toUpperCase()==='COUNTDOWN'){
+    return 'Countdown · '+kf032RoundDurationLabel(settings.roundDurationSeconds)+' · '+String(settings.timezone||'UTC');
+  }
+  return 'Noch nicht festgelegt';
+}
+function kf032RoundSettingsCard(title,settings){
+  return '<section class="kf-round-summary-card"><div class="kf-round-summary-kicker">'+escapeHtml(title)+'</div><strong>'+escapeHtml(kf032RoundSettingsText(settings))+'</strong></section>';
+}
+function kf032CountdownOptions(selected){
+  var values=[
+    [600,'10 Minuten'],[1800,'30 Minuten'],[3600,'1 Stunde'],[7200,'2 Stunden'],[14400,'4 Stunden'],
+    [28800,'8 Stunden'],[43200,'12 Stunden'],[86400,'24 Stunden'],[172800,'48 Stunden'],[259200,'72 Stunden']
+  ];
+  return values.map(function(row){return '<option value="'+row[0]+'"'+(Number(selected)===row[0]?' selected':'')+'>'+row[1]+'</option>';}).join('');
+}
+function kf032RoundEditorHtml(prefix,settings){
+  settings=settings||{};
+  var configured=kf032RoundSettingsConfigured(settings);
+  var mode=configured?String(settings.roundTimeModel).toUpperCase():'COUNTDOWN';
+  var timezone=String(settings.timezone||kf032DetectedTimezone());
+  var countdown=Number(settings.roundDurationSeconds||86400);
+  var selectedDays=Array.isArray(settings.fixedScheduleWeekdays)?settings.fixedScheduleWeekdays.map(Number):[1,3,5];
+  var dayLabels=[[1,'Mo'],[2,'Di'],[3,'Mi'],[4,'Do'],[5,'Fr'],[6,'Sa'],[0,'So']];
+  var chips=dayLabels.map(function(row){
+    return '<label class="kf-round-day-chip"><input id="'+prefix+'-fixed-day-'+row[0]+'" type="checkbox"'+(selectedDays.indexOf(row[0])>=0?' checked':'')+'><span>'+row[1]+'</span></label>';
+  }).join('');
+  return ''+
+    '<div class="kf-round-editor" data-round-prefix="'+escapeHtml(prefix)+'">'+
+      '<input id="'+prefix+'-time-model" type="hidden" value="'+escapeHtml(mode)+'">'+
+      '<div class="kf-round-mode-grid" data-prefix="'+escapeHtml(prefix)+'">'+
+        '<button class="kf-round-mode-card'+(mode==='COUNTDOWN'?' is-active':'')+'" type="button" data-action="kf-round-mode-select" data-prefix="'+escapeHtml(prefix)+'" data-mode="COUNTDOWN">'+
+          '<strong>Countdown</strong><span>Sobald der erste Trainer seine Runde abschließt, startet die gewählte Wartezeit. Sind vorher alle Trainer fertig, geht es sofort weiter.</span>'+
+        '</button>'+
+        '<button class="kf-round-mode-card'+(mode==='FIXED_SCHEDULE'?' is-active':'')+'" type="button" data-action="kf-round-mode-select" data-prefix="'+escapeHtml(prefix)+'" data-mode="FIXED_SCHEDULE">'+
+          '<strong>Feste Rundenzeiten</strong><span>Die Welt wechselt ausschließlich an festgelegten Tagen und Uhrzeiten. Es gibt keinen Runde-abschließen-Button und kein vorzeitiges Weiterschalten.</span>'+
+        '</button>'+
+      '</div>'+
+      '<div id="'+prefix+'-countdown-section" class="kf-round-mode-fields"'+(mode==='COUNTDOWN'?'':' hidden')+'>'+
+        '<label class="kf-world-create-label">Countdown-Dauer<select id="'+prefix+'-countdown" class="kf-auth-input">'+kf032CountdownOptions(countdown)+'</select></label>'+
+      '</div>'+
+      '<div id="'+prefix+'-fixed-section" class="kf-round-mode-fields"'+(mode==='FIXED_SCHEDULE'?'':' hidden')+'>'+
+        '<div class="kf-world-create-label">Wochentage<div class="kf-round-day-grid">'+chips+'</div></div>'+
+        '<label class="kf-world-create-label">Uhrzeit<input id="'+prefix+'-fixed-time" class="kf-auth-input" type="time" value="'+escapeHtml(String(settings.fixedScheduleTime||'20:00'))+'"></label>'+
+      '</div>'+
+      '<label class="kf-world-create-label">Zeitzone<input id="'+prefix+'-timezone" class="kf-auth-input" value="'+escapeHtml(timezone)+'" readonly></label>'+
+    '</div>';
+}
+function kf032SetRoundFormMode(prefix,mode){
+  mode=String(mode||'COUNTDOWN').toUpperCase()==='FIXED_SCHEDULE'?'FIXED_SCHEDULE':'COUNTDOWN';
+  var input=document.getElementById(prefix+'-time-model');
+  if(input)input.value=mode;
+  var countdown=document.getElementById(prefix+'-countdown-section');
+  var fixed=document.getElementById(prefix+'-fixed-section');
+  if(countdown)countdown.hidden=mode!=='COUNTDOWN';
+  if(fixed)fixed.hidden=mode!=='FIXED_SCHEDULE';
+  document.querySelectorAll('.kf-round-mode-grid[data-prefix="'+prefix+'"] .kf-round-mode-card').forEach(function(button){
+    button.classList.toggle('is-active',button.getAttribute('data-mode')===mode);
+  });
+}
+function kf032ReadRoundSettingsForm(prefix){
+  var modeNode=document.getElementById(prefix+'-time-model');
+  var mode=String(modeNode&&modeNode.value||'COUNTDOWN').toUpperCase()==='FIXED_SCHEDULE'?'FIXED_SCHEDULE':'COUNTDOWN';
+  var timezoneNode=document.getElementById(prefix+'-timezone');
+  var timezone=String(timezoneNode&&timezoneNode.value||kf032DetectedTimezone());
+  if(mode==='COUNTDOWN'){
+    var countdownNode=document.getElementById(prefix+'-countdown');
+    return {roundTimeModel:'COUNTDOWN',roundDurationSeconds:Number(countdownNode&&countdownNode.value||86400),timezone:timezone};
+  }
+  var days=[];
+  [0,1,2,3,4,5,6].forEach(function(day){var node=document.getElementById(prefix+'-fixed-day-'+day);if(node&&node.checked)days.push(day);});
+  var timeNode=document.getElementById(prefix+'-fixed-time');
+  if(!days.length)throw new Error('Wähle mindestens einen Wochentag.');
+  return {roundTimeModel:'FIXED_SCHEDULE',fixedScheduleWeekdays:days,fixedScheduleTime:String(timeNode&&timeNode.value||'20:00'),timezone:timezone};
+}
+function kf032RoundSlotLabel(targetGeneration,state){
+  state=state||((KF029Remote||{}).progression)||{};
+  var currentGeneration=Number(state.roundGeneration||1);
+  var world=AppState.world;
+  var slots=world&&world.calendar&&Array.isArray(world.calendar.slots)?world.calendar.slots:[];
+  var currentKey=world&&world.calendar&&world.calendar.currentSlotKey;
+  var currentIndex=slots.findIndex(function(slot){return slot&&slot.key===currentKey;});
+  var targetIndex=currentIndex+(Number(targetGeneration)-currentGeneration);
+  var slot=targetIndex>=0&&targetIndex<slots.length?slots[targetIndex]:null;
+  if(slot){
+    try{return formatWeekLabel(slot);}catch(error){return slot.label||slot.key||('Runde '+targetGeneration);}
+  }
+  var delta=Number(targetGeneration)-currentGeneration;
+  return delta===0?'Aktueller Slot':('in '+Math.max(0,delta)+' Slot'+(Math.abs(delta)===1?'':'s'));
+}
+function kf032RoundTransitionLabel(generation,state){
+  return 'Wechsel '+kf032RoundSlotLabel(generation,state)+' → '+kf032RoundSlotLabel(Number(generation)+1,state);
+}
+function kf032RoundTimingHtml(prefix,state){
+  state=state||{};
+  var current=Number(state.roundGeneration||1);
+  var world=AppState.world;
+  var slots=world&&world.calendar&&Array.isArray(world.calendar.slots)?world.calendar.slots:[];
+  var currentKey=world&&world.calendar&&world.calendar.currentSlotKey;
+  var currentIndex=slots.findIndex(function(slot){return slot&&slot.key===currentKey;});
+  var remaining=currentIndex>=0?Math.max(2,slots.length-currentIndex-1):12;
+  var maxAhead=Math.max(2,remaining);
+  var evalOptions='';
+  var effectiveOptions='';
+  for(var delta=1;delta<maxAhead;delta+=1){
+    var evaluation=current+delta;
+    evalOptions+='<option value="'+evaluation+'">'+escapeHtml(kf032RoundTransitionLabel(evaluation,state))+(delta===1?' · frühestmöglich':'')+'</option>';
+  }
+  for(var effectDelta=2;effectDelta<=maxAhead;effectDelta+=1){
+    var effective=current+effectDelta;
+    effectiveOptions+='<option value="'+effective+'">'+escapeHtml(kf032RoundSlotLabel(effective,state))+'</option>';
+  }
+  return '<div class="kf-round-timing-grid">'+
+    '<label class="kf-world-create-label">Abstimmung frühestens auswerten<select id="'+prefix+'-evaluation" class="kf-auth-input" data-action="kf-round-evaluation-change" data-prefix="'+prefix+'">'+evalOptions+'</select></label>'+
+    '<label class="kf-world-create-label">Bei Annahme gültig ab<select id="'+prefix+'-effective" class="kf-auth-input">'+effectiveOptions+'</select></label>'+
+    '<div class="kf-auth-hint">Zwischen Vorschlag und Auswertung liegt immer mindestens ein vollständiger weiterer Slot. Die Änderung kann niemals vor dem Abstimmungsende wirksam werden.</div>'+
+  '</div>';
+}
+function kf032UpdateRoundTiming(prefix){
+  var evaluationNode=document.getElementById(prefix+'-evaluation');
+  var effectiveNode=document.getElementById(prefix+'-effective');
+  if(!evaluationNode||!effectiveNode)return;
+  var minEffective=Number(evaluationNode.value)+1;
+  var firstValid=null;
+  Array.prototype.forEach.call(effectiveNode.options||[],function(option){
+    var valid=Number(option.value)>=minEffective;
+    option.disabled=!valid;
+    if(valid&&firstValid==null)firstValid=option.value;
+  });
+  if(Number(effectiveNode.value)<minEffective&&firstValid!=null)effectiveNode.value=firstValid;
+}
+function kf032NextRoundText(state){
+  if(!state)return 'Noch nicht verfügbar';
+  if(state.roundSetupRequired)return 'Noch nicht terminiert · Spielrhythmus wird eingerichtet';
+  if(state.timeModel==='FIXED_SCHEDULE')return kf032FixedDeadlineLabel(state);
+  var remaining=kf032RemainingSeconds(state);
+  if(state.deadlineAt&&remaining!=null)return 'Countdown läuft · '+kf032FormatCountdown(remaining)+' verbleibend';
+  return 'Noch nicht terminiert · Countdown startet mit dem ersten „Runde abschließen“';
+}
+function kf032RoundProposalHtml(state){
+  var proposal=state&&state.pendingRoundSettingsChange;
+  if(!proposal)return '';
+  var summary=proposal.voteSummary||proposal.decisionSummary||{};
+  var currentUserId=String((((KF029Remote||{}).user||{}).userId)||'');
+  var myVote=proposal.votesByUserId&&proposal.votesByUserId[currentUserId];
+  var voting=proposal.status==='VOTING';
+  var proposer=String(proposal.proposedByUserId||'')===currentUserId;
+  var voteButtons='';
+  if(voting&&!proposer){
+    voteButtons='<div class="kf-round-vote-actions">'+
+      '<button class="secondary-btn'+(myVote==='YES'?' is-selected':'')+'" type="button" data-action="kf-round-settings-vote" data-vote="YES">Ja</button>'+
+      '<button class="secondary-btn'+(myVote==='NO'?' is-selected':'')+'" type="button" data-action="kf-round-settings-vote" data-vote="NO">Nein</button>'+
+    '</div>';
+  }else if(voting&&proposer){
+    voteButtons='<div class="kf-auth-hint">Deine Admin-Stimme zählt automatisch als Ja.</div>';
+  }
+  var statusText=voting?'Abstimmung läuft':(proposal.status==='APPROVED'?'Angenommen · wartet auf Wirksamkeit':escapeHtml(String(proposal.status||'')));
+  return '<section class="kf-round-proposal-card">'+
+    '<div class="kf-round-proposal-title">Änderung des Spielrhythmus</div>'+
+    '<div class="kf-round-proposal-status">'+escapeHtml(statusText)+'</div>'+
+    kf032RoundSettingsCard('Vorgeschlagen',proposal.proposedSettings)+
+    '<dl class="kf-round-facts">'+
+      '<div><dt>Abstimmung bis / früheste Auswertung</dt><dd>'+escapeHtml(kf032RoundTransitionLabel(proposal.evaluationRoundGeneration,state))+'</dd></div>'+
+      '<div><dt>Bei Annahme gültig ab</dt><dd>'+escapeHtml(kf032RoundSlotLabel(proposal.effectiveRoundGeneration,state))+'</dd></div>'+
+      '<div><dt>Stimmen</dt><dd>'+escapeHtml(String(Number(summary.yes||0)))+' Ja · '+escapeHtml(String(Number(summary.no||0)))+' Nein'+(summary.notVoted!=null?' · '+escapeHtml(String(Number(summary.notVoted||0)))+' noch ohne Stimme':'')+'</dd></div>'+
+    '</dl>'+
+    '<div class="kf-auth-hint">Nicht abgestimmte Spieler zählen nicht zur Mehrheitsberechnung. Entscheidend sind 2/3 der tatsächlich abgegebenen Stimmen.</div>'+
+    voteButtons+
+  '</section>';
+}
+function kf032OpenWorldDetailsModal(){
+  var record=AppState.worldRecord||{};
+  var membership=(KF029Remote||{}).membership||{};
+  openModal({
+    title:'Weltdetails',
+    bodyHtml:'<div class="kf-world-details">'+
+      '<section class="kf-round-summary-card"><div class="kf-round-summary-kicker">Spielwelt</div><strong>'+escapeHtml(record.worldName||record.name||record.id||'Spielwelt')+'</strong><div class="kf-auth-hint">'+escapeHtml(String(membership.role||'PLAYER')==='WORLD_ADMIN'?'Weltadmin':'Trainer')+'</div></section>'+
+      '<button class="kf-world-detail-link" type="button" data-action="kf-world-round-settings"><span><strong>Spielrhythmus</strong><small>'+escapeHtml(kf032RoundSettingsText(record.runtimeSettings||{}))+'</small></span><span aria-hidden="true">›</span></button>'+
+    '</div>'
+  });
+  renderModal();
+}
+function kf032OpenRoundSettingsModal(forceSetup){
+  var record=AppState.worldRecord||{};
+  var state=(KF029Remote||{}).progression||{};
+  var setupRequired=!!(forceSetup||state.roundSetupRequired||!kf032RoundSettingsConfigured(record.runtimeSettings));
+  var admin=kf032IsWorldAdmin();
+  if(setupRequired){
+    var setupBody=admin
+      ? '<div class="notice"><strong>Diese ältere Spielwelt hat noch keinen Spielrhythmus.</strong><br>Lege ihn einmalig fest. Dafür gibt es keine Abstimmung. Erst danach kann die Welt normal weiterlaufen.</div>'+
+        kf032RoundEditorHtml('kf-round-setup',null)+
+        '<div id="kf-round-settings-error" class="kf-world-create-error"></div>'+
+        '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-round-settings-initialize">Spielrhythmus festlegen</button></div>'
+      : '<div class="notice"><strong>Spielrhythmus wird eingerichtet.</strong><br>Der Weltadmin muss für diese ältere Spielwelt zuerst den Spielrhythmus festlegen. Bis dahin kannst du die Welt sehen, aber nicht normal weiterspielen.</div>';
+    openModal({
+      title:'Spielrhythmus festlegen',
+      bodyHtml:'<div class="kf-round-settings-shell">'+setupBody+'</div>',
+      popupType:'interaction',
+      surfaceClass:'kf-round-settings-modal',
+      lockBackdrop:true,
+      lockClose:true
+    });
+    renderModal();
+    return;
+  }
+  var pending=state.pendingRoundSettingsChange||null;
+  var controls=admin&&!pending
+    ? '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-round-settings-propose">Änderung vorschlagen</button></div>'
+    : '';
+  openModal({
+    title:'Spielrhythmus',
+    bodyHtml:'<div class="kf-round-settings-shell">'+
+      kf032RoundSettingsCard('Aktuell',record.runtimeSettings||{})+
+      '<section class="kf-round-summary-card"><div class="kf-round-summary-kicker">Nächster Rundenwechsel</div><strong>'+escapeHtml(kf032NextRoundText(state))+'</strong></section>'+
+      kf032RoundProposalHtml(state)+
+      controls+
+    '</div>',
+    surfaceClass:'kf-round-settings-modal'
+  });
+  renderModal();
+}
+function kf032OpenRoundProposalEditor(){
+  var record=AppState.worldRecord||{};
+  var state=(KF029Remote||{}).progression||{};
+  if(!kf032IsWorldAdmin()||state.pendingRoundSettingsChange)return;
+  openModal({
+    title:'Spielrhythmus ändern',
+    bodyHtml:'<div class="kf-round-settings-shell">'+
+      kf032RoundSettingsCard('Aktuell',record.runtimeSettings||{})+
+      kf032RoundEditorHtml('kf-round-change',record.runtimeSettings||{})+
+      kf032RoundTimingHtml('kf-round-change',state)+
+      '<div id="kf-round-settings-error" class="kf-world-create-error"></div>'+
+      '<div class="action-row"><button class="secondary-btn" type="button" data-action="kf-world-round-settings">Abbrechen</button><button class="primary-btn" type="button" data-action="kf-round-settings-submit-proposal">Zur Abstimmung stellen</button></div>'+
+    '</div>',
+    popupType:'interaction',
+    surfaceClass:'kf-round-settings-modal'
+  });
+  renderModal();
+  kf032UpdateRoundTiming('kf-round-change');
+}
+async function kf032InitializeRoundSettings(){
+  if(!AppState.worldRecord||!kf032IsWorldAdmin())return;
+  var errorNode=document.getElementById('kf-round-settings-error');
+  try{
+    var settings=kf032ReadRoundSettingsForm('kf-round-setup');
+    var worldId=AppState.worldRecord.id;
+    await kf029Request('/api/v1/worlds/'+encodeURIComponent(worldId)+'/round-settings/initialize',{
+      method:'POST',
+      body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION,expectedRevision:KF029Remote.revision,settings:settings}
+    });
+    AppState.ui.modalStack=[];
+    closeModal();renderModal();
+    await kf029LoadWorld(worldId);
+  }catch(error){
+    if(errorNode)errorNode.textContent='Spielrhythmus konnte nicht gespeichert werden: '+(error.message||'Unbekannter Fehler');
+  }
+}
+async function kf032SubmitRoundSettingsProposal(){
+  if(!AppState.worldRecord||!kf032IsWorldAdmin())return;
+  var errorNode=document.getElementById('kf-round-settings-error');
+  try{
+    var settings=kf032ReadRoundSettingsForm('kf-round-change');
+    var evaluationNode=document.getElementById('kf-round-change-evaluation');
+    var effectiveNode=document.getElementById('kf-round-change-effective');
+    var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(AppState.worldRecord.id)+'/round-settings/proposal',{
+      method:'POST',
+      body:{
+        clientVersion:KF029_REMOTE_CONTRACT_VERSION,
+        settings:settings,
+        evaluationRoundGeneration:Number(evaluationNode&&evaluationNode.value),
+        effectiveRoundGeneration:Number(effectiveNode&&effectiveNode.value)
+      }
+    });
+    KF029Remote.progression=data&&data.progression||KF029Remote.progression;
+    KF029Remote.roundGeneration=Number((KF029Remote.progression||{}).roundGeneration||KF029Remote.roundGeneration||1);
+    AppState.ui.modalStack=[];
+    kf032OpenRoundSettingsModal(false);
+  }catch(error){
+    if(errorNode)errorNode.textContent='Vorschlag konnte nicht erstellt werden: '+(error.message||'Unbekannter Fehler');
+  }
+}
+async function kf032CastRoundSettingsVote(vote){
+  if(!AppState.worldRecord)return;
+  try{
+    var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(AppState.worldRecord.id)+'/round-settings/vote',{
+      method:'POST',
+      body:{clientVersion:KF029_REMOTE_CONTRACT_VERSION,vote:vote}
+    });
+    KF029Remote.progression=data&&data.progression||KF029Remote.progression;
+    kf032OpenRoundSettingsModal(false);
+  }catch(error){
+    KF029Remote.error='Stimme konnte nicht gespeichert werden: '+(error.message||'Unbekannter Fehler');
+    renderApp();
+  }
 }
 function kf032ActionMutatesWorld(action,actionEl){
   if (KF031_IMMEDIATE_MANAGEMENT_ACTIONS && KF031_IMMEDIATE_MANAGEMENT_ACTIONS[action]) return true;
@@ -25291,7 +25634,7 @@ async function kf032PollProgressAndMaybeAdvance(actionEl){
     }
     KF029Remote.message=kf031ProgressMessage(state);
     renderApp();
-    var active=state.status!=='OPEN' || !!state.deadlineAt || kf032CurrentUserReady(state);
+    var active=!!state.roundSetupRequired || state.status!=='OPEN' || !!state.deadlineAt || kf032CurrentUserReady(state);
     kf032ScheduleProgressPoll(actionEl,active?1000:4500);
     return state;
   } catch(error) {
@@ -25439,8 +25782,6 @@ function kf029WorldPolicyLabel(world){
 }
 function kf029OpenWorldCreateModal(){
   KF029Remote.error='';
-  var detectedTimezone='UTC';
-  try{detectedTimezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch(error){}
   openModal({
     title:'Neue Spielwelt',
     bodyHtml:
@@ -25448,12 +25789,9 @@ function kf029OpenWorldCreateModal(){
       '<label class="kf-world-create-label">Name der Spielwelt<input id="kf-world-name" class="kf-auth-input" maxlength="40" placeholder="z. B. Nordlicht Karriere"></label>' +
       '<label class="kf-world-create-label">Beschreibung<textarea id="kf-world-description" class="kf-auth-input" maxlength="200" rows="3" placeholder="z. B. Langzeitwelt für aktive Manager"></textarea></label>' +
       '<label class="kf-world-create-label">Beitritt zur Spielwelt<select id="kf-world-access" class="kf-auth-input"><option value="PRIVATE:INVITE_ONLY">Private Welt · nur Einladungen</option><option value="PUBLIC:APPLICATION">Bewerbungswelt · Beitritt nach Freigabe</option><option value="PUBLIC:OPEN">Offene Welt · freie Vereine direkt wählbar</option></select></label>' +
-      '<label class="kf-world-create-label">Rundentakt<select id="kf-world-time-model" class="kf-auth-input"><option value="COUNTDOWN">Countdown · früher weiter, sobald alle fertig sind</option><option value="FIXED_SCHEDULE">Fester Spielplan · nur zu festen Terminen</option></select></label>' +
-      '<label class="kf-world-create-label">Countdown-Dauer<select id="kf-world-countdown" class="kf-auth-input"><option value="600">10 Minuten</option><option value="1800">30 Minuten</option><option value="3600">1 Stunde</option><option value="7200">2 Stunden</option><option value="14400">4 Stunden</option><option value="28800">8 Stunden</option><option value="43200">12 Stunden</option><option value="86400" selected>24 Stunden</option><option value="172800">48 Stunden</option><option value="259200">72 Stunden</option></select></label>' +
-      '<div class="kf-world-create-label">Feste Wochentage<div class="kf-auth-hint"><label><input id="kf-world-fixed-day-1" type="checkbox" checked> Mo</label> · <label><input id="kf-world-fixed-day-2" type="checkbox"> Di</label> · <label><input id="kf-world-fixed-day-3" type="checkbox" checked> Mi</label> · <label><input id="kf-world-fixed-day-4" type="checkbox"> Do</label> · <label><input id="kf-world-fixed-day-5" type="checkbox" checked> Fr</label> · <label><input id="kf-world-fixed-day-6" type="checkbox"> Sa</label> · <label><input id="kf-world-fixed-day-0" type="checkbox"> So</label></div></div>' +
-      '<label class="kf-world-create-label">Feste Uhrzeit<input id="kf-world-fixed-time" class="kf-auth-input" type="time" value="20:00"></label>' +
-      '<label class="kf-world-create-label">Welt-Zeitzone<input id="kf-world-timezone" class="kf-auth-input" value="'+escapeHtml(detectedTimezone)+'" readonly></label>' +
-      '<div class="kf-auth-hint">Countdown: „Runde abschließen“ sperrt nur dich; sobald alle Trainer fertig sind, geht es sofort weiter. Fester Spielplan: kein Weiter-Button und kein vorzeitiges Weiterschalten.</div>' +
+      '<div class="kf-world-create-label"><strong>Spielrhythmus</strong></div>' +
+      kf032RoundEditorHtml('kf-world',{roundTimeModel:'COUNTDOWN',roundDurationSeconds:86400,timezone:kf032DetectedTimezone()}) +
+      '<div class="kf-auth-hint">Der gewählte Spielrhythmus kann später vom Weltadmin nur über einen Änderungsvorschlag mit Abstimmung geändert werden.</div>' +
       '<div class="kf-auth-hint">Für einen Mehrspielertest wähle „Offene Welt“. Ein zweites Benutzerkonto findet die Welt unter „Alle Welten“, kann auf „Beitreten“ klicken und anschließend einen freien Verein wählen. Private Welten bleiben ohne Einladung geschlossen.</div>' +
       '<div id="kf-world-create-error" class="kf-world-create-error"></div>' +
       '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-create-world-confirm">Spielwelt erstellen</button></div></div>'
@@ -25484,7 +25822,7 @@ function kf029ConfirmWorldCreate(){
   [0,1,2,3,4,5,6].forEach(function(day){var node=document.getElementById('kf-world-fixed-day-'+day);if(node&&node.checked)fixedWeekdays.push(day);});
   var fixedTime=String(fixedTimeInput&&fixedTimeInput.value||'20:00');
   var timezone=String(timezoneInput&&timezoneInput.value||'UTC');
-  if(timeModel==='FIXED_SCHEDULE'&&!fixedWeekdays.length){if(errorNode)errorNode.textContent='Wähle für den festen Spielplan mindestens einen Wochentag.';return;}
+  if(timeModel==='FIXED_SCHEDULE'&&!fixedWeekdays.length){if(errorNode)errorNode.textContent='Wähle für feste Rundenzeiten mindestens einen Wochentag.';return;}
   KF029Remote.pendingWorldConfig={
     worldName:worldName,description:description,visibility:access.visibility,joinPolicy:access.joinPolicy,
     runtimeSettings:timeModel==='FIXED_SCHEDULE'
@@ -26048,7 +26386,19 @@ handleAction = function(action, actionEl){
     });
     return;
   }
-  if (action === 'kf-retry-checkpoint') { void kf029RetryCheckpoint().catch(function(){}); return; }
+  if (action === 'kf-round-mode-select') { kf032SetRoundFormMode(actionEl.getAttribute('data-prefix')||'kf-world',actionEl.getAttribute('data-mode')||'COUNTDOWN'); return; }
+  if (action === 'kf-round-evaluation-change') { kf032UpdateRoundTiming(actionEl.getAttribute('data-prefix')||'kf-round-change'); return; }
+  if (action === 'kf-world-details') { kf032OpenWorldDetailsModal(); return; }
+  if (action === 'kf-world-round-settings') { kf032OpenRoundSettingsModal(false); return; }
+  if (action === 'kf-round-settings-propose') { kf032OpenRoundProposalEditor(); return; }
+  if (action === 'kf-round-settings-initialize') { void kf032InitializeRoundSettings(); return; }
+  if (action === 'kf-round-settings-submit-proposal') { void kf032SubmitRoundSettingsProposal(); return; }
+  if (action === 'kf-round-settings-vote') { void kf032CastRoundSettingsVote(actionEl.getAttribute('data-vote')||''); return; }
+  if (action === 'take-over-club' && KF029Remote.user && KF029Remote.progression && KF029Remote.progression.roundSetupRequired) {
+    kf032OpenRoundSettingsModal(true);
+    return;
+  }
+    if (action === 'kf-retry-checkpoint') { void kf029RetryCheckpoint().catch(function(){}); return; }
   if (action === 'kf-retry-management-save') {
     KF029Remote.managementFailed=false;
     KF029Remote.managementError='';
@@ -26119,7 +26469,8 @@ handleAction = function(action, actionEl){
     var saved = KF029Remote.lastSavedAt ? new Date(KF029Remote.lastSavedAt).toLocaleString('de-DE') : 'Noch keine Serverbestätigung';
     var saveLabel=KF029Remote.managementFailed ? 'Fehler – Änderungen bleiben vorgemerkt' : (kf031ManagementBlocksProgress() ? 'Speicherung läuft / steht aus' : 'Aktueller Stand bestätigt');
     openModal({ title:'Welt & Optionen', bodyHtml:
-      '<div class="notice"><strong>Delta-Autosave aktiv</strong><br>Managementänderungen werden gebündelt als kleine Deltas gespeichert. Beim Verlassen eines Managementmenüs wird sofort geflusht; endgültige Entscheidungen gehen direkt in die Save Queue. Der Kalender darf erst weiterlaufen, wenn der aktuelle Stand bestätigt ist.<br><br><strong>Serverwelt:</strong> Revision ' + escapeHtml(KF029Remote.revision == null ? '-' : KF029Remote.revision) + '<br><strong>Speicherstatus:</strong> ' + escapeHtml(saveLabel) + '<br><strong>Letzte Bestätigung:</strong> ' + escapeHtml(saved) + '</div>' +
+      '<button class="kf-world-detail-link" type="button" data-action="kf-world-details"><span><strong>Weltdetails</strong><small>Spielrhythmus und weitere Weltinformationen</small></span><span aria-hidden="true">›</span></button>'+
+      '<div class="notice"><strong>Delta-Autosave aktiv</strong><br><strong>Serverwelt:</strong> Revision ' + escapeHtml(KF029Remote.revision == null ? '-' : KF029Remote.revision) + '<br><strong>Speicherstatus:</strong> ' + escapeHtml(saveLabel) + '<br><strong>Letzte Bestätigung:</strong> ' + escapeHtml(saved) + '</div>' +
       '<div class="action-row">'+(KF029Remote.managementFailed?'<button class="secondary-btn" type="button" data-action="kf-retry-management-save">Speichern erneut versuchen</button>':'')+'<button class="primary-btn" type="button" data-action="kf-exit-world">Zur Weltliste</button></div>'
     });
     renderModal(); return;
