@@ -259,9 +259,10 @@ function makeWorldRecord(worldId,userId){
     const claimedStart=app.indexOf('async function kf032AdvanceClaimedRound(');
     const claimedEnd=app.indexOf('function kf032ScheduleProgressPoll(',claimedStart);
     const claimedSource=app.slice(claimedStart,claimedEnd);
-    check('Ready path detects local management mutations when no calendar slot advanced',
-      claimedSource.includes("kf031MarkManagementDirty('office-advance-local-management',false)")&&
-      readySource.includes('kf032AdvanceClaimedRound(state,actionEl)'),
+    check('Ready path is status-only in KF_0.32.0 and no longer mutates calendar state in the browser',
+      claimedSource.includes('Der Browser ist nur Anzeige')&&
+      !claimedSource.includes("kf029BaseHandleAction('office-advance'")&&
+      !readySource.includes('kf032AdvanceClaimedRound(state,actionEl)'),
       {});
 
     report.metrics={
