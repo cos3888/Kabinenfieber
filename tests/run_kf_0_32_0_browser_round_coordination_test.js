@@ -77,7 +77,16 @@ check('FIXED_SCHEDULE office has no Ready or Weiter control and only shows the f
   app.includes('<strong>Nächster Rundenwechsel</strong>'));
 
 check('Countdown exposes only coarse supported duration choices',
-  ['600','1800','3600','7200','14400','28800','43200','86400','172800','259200'].every(value=>app.includes('<option value="'+value+'"')));
+  app.includes("[600,'10 Minuten']")&&
+  app.includes("[1800,'30 Minuten']")&&
+  app.includes("[3600,'1 Stunde']")&&
+  app.includes("[7200,'2 Stunden']")&&
+  app.includes("[14400,'4 Stunden']")&&
+  app.includes("[28800,'8 Stunden']")&&
+  app.includes("[43200,'12 Stunden']")&&
+  app.includes("[86400,'24 Stunden']")&&
+  app.includes("[172800,'48 Stunden']")&&
+  app.includes("[259200,'72 Stunden']"));
 
 check('World details keeps Spielrhythmus permanently reachable for assigned and unassigned trainers',
   app.includes("title:'Weltdetails'")&&
