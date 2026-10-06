@@ -440,6 +440,7 @@ class FirestoreMetadataRepository {
       const state = progressDoc.data();
       if (Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Round generation mismatch');
       if (Number(state.revision) !== Number(expectedWorldRevision)) throw new DomainRuleError('Round world revision mismatch');
+      if (state.roundSetupRequired) throw new DomainRuleError('World round settings require initial setup');
       if (state.status !== ROUND_STATUS_OPEN) throw new DomainRuleError('Round is locked for management changes', { status:state.status });
       if ((state.readyUserIds || []).map(String).includes(String(userId))) throw new DomainRuleError('Trainer is already ready for this round');
 
