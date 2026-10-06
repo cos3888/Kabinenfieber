@@ -14,6 +14,63 @@ const {
 
 function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
 
+function normalizeScheduleWeekdays(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : []).map(Number)
+    .filter(value => Number.isInteger(value) && value >= 0 && value <= 6))).sort((a,b) => a-b);
+}
+
+function zonedParts(date, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone, year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'
+  }).formatToParts(date);
+  const out = {};
+  parts.forEach(part => { if (part.type !== 'literal') out[part.type] = part.value; });
+  return {
+    year:Number(out.year), month:Number(out.month), day:Number(out.day),
+    hour:Number(out.hour), minute:Number(out.minute), second:Number(out.second)
+  };
+}
+
+function zonedLocalToUtc({ year, month, day, hour, minute }, timeZone) {
+  let guess = Date.UTC(year, month - 1, day, hour, minute, 0);
+  for (let i=0; i<4; i+=1) {
+    const shown = zonedParts(new Date(guess), timeZone);
+    const shownAsUtc = Date.UTC(shown.year, shown.month - 1, shown.day, shown.hour, shown.minute, shown.second);
+    const targetAsUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+    const delta = targetAsUtc - shownAsUtc;
+    if (!delta) break;
+    guess += delta;
+  }
+  return new Date(guess);
+}
+
+function nextFixedScheduleAt(settings, afterMs = Date.now()) {
+  const weekdays = normalizeScheduleWeekdays(settings && settings.fixedScheduleWeekdays);
+  const time = String(settings && settings.fixedScheduleTime || '');
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!weekdays.length || !match) return null;
+  const hour = Number(match[1]), minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  const timeZone = String(settings && settings.timezone || 'UTC');
+  try { new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date(afterMs)); }
+  catch (_) { return null; }
+
+  const localNow = zonedParts(new Date(afterMs), timeZone);
+  const localBaseUtc = Date.UTC(localNow.year, localNow.month - 1, localNow.day);
+  for (let offset=0; offset<8; offset+=1) {
+    const dayDate = new Date(localBaseUtc + offset * 86400000);
+    const weekday = dayDate.getUTCDay();
+    if (!weekdays.includes(weekday)) continue;
+    const candidate = zonedLocalToUtc({
+      year:dayDate.getUTCFullYear(), month:dayDate.getUTCMonth()+1, day:dayDate.getUTCDate(),
+      hour, minute
+    }, timeZone);
+    if (candidate.getTime() > Number(afterMs) + 999) return candidate.toISOString();
+  }
+  return null;
+}
+
 class WorldSessionService {
   constructor({ metadataRepository, worldPersistence, runtimeManager }) {
     if (!metadataRepository || !worldPersistence || !runtimeManager) throw new Error('WorldSessionService dependencies are required');
@@ -41,7 +98,10 @@ class WorldSessionService {
       durationSeconds:Math.max(15, Number(meta && meta.roundDurationSeconds || 120)),
       fixedDeadlineAt:timeModel === TIME_MODEL_FIXED_SCHEDULE
         ? (meta && (meta.nextRoundAt || meta.fixedDeadlineAt) || null)
-        : null
+        : null,
+      fixedScheduleWeekdays:normalizeScheduleWeekdays(meta && meta.fixedScheduleWeekdays),
+      fixedScheduleTime:meta && meta.fixedScheduleTime || null,
+      timezone:String(meta && meta.timezone || 'UTC')
     };
   }
 
@@ -239,6 +299,14 @@ class WorldSessionService {
       : (settings.roundDurationMinutes != null
         ? Number(settings.roundDurationMinutes) * 60
         : (settings.roundDurationHours != null ? Number(settings.roundDurationHours) * 3600 : 120));
+    const fixedScheduleWeekdays = normalizeScheduleWeekdays(settings.fixedScheduleWeekdays);
+    const fixedScheduleTime = settings.fixedScheduleTime || null;
+    const timezone = String(settings.timezone || 'UTC');
+    const derivedNextRoundAt = roundTimeModel === TIME_MODEL_FIXED_SCHEDULE
+      ? (fixedScheduleWeekdays.length && fixedScheduleTime
+        ? nextFixedScheduleAt({ fixedScheduleWeekdays, fixedScheduleTime, timezone })
+        : (settings.nextRoundAt || null))
+      : null;
     return this.metadata.setWorldLobbyProjection({
       worldId: record.id,
       currentSeason: Number(record.gameState.meta && record.gameState.meta.seasonNumber || 1),
@@ -246,7 +314,10 @@ class WorldSessionService {
       clubNamesById: this._clubNamesById(record),
       roundTimeModel,
       roundDurationSeconds:Math.max(15, Number.isFinite(configuredSeconds) && configuredSeconds > 0 ? configuredSeconds : 120),
-      nextRoundAt:settings.nextRoundAt || null
+      nextRoundAt:derivedNextRoundAt,
+      fixedScheduleWeekdays,
+      fixedScheduleTime,
+      timezone
     });
   }
 
@@ -544,7 +615,7 @@ class WorldSessionService {
     if (!participation) throw new DomainRuleError('User is not a member of this world');
     const manifest = await this.worlds.getManifest(worldId);
     if (!manifest) throw new DomainRuleError('Active world not found');
-    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    const activeUserIds = await this.metadata.listActiveAssignedUserIdsForWorld(worldId);
     const { state:ensuredState } = await this._ensureRound(worldId, manifest.revision);
     let state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds, userId);
     if (!state) state = ensuredState;
@@ -563,7 +634,8 @@ class WorldSessionService {
     if (!participation) throw new DomainRuleError('User is not a member of this world');
     const manifest = await this.worlds.getManifest(worldId);
     if (!manifest) throw new DomainRuleError('Active world not found');
-    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    if (!participation.clubId) throw new DomainRuleError('Trainer must control a club before completing a round');
+    const activeUserIds = await this.metadata.listActiveAssignedUserIdsForWorld(worldId);
     if (Number(expectedRevision) !== Number(manifest.revision) && (activeUserIds.length <= 1 || roundGeneration == null)) {
       const error = new Error('World revision mismatch');
       error.code = 'PERSISTENCE_CONFLICT';
@@ -572,6 +644,9 @@ class WorldSessionService {
     }
     const meta = await this.metadata.getWorld(worldId);
     const config = this._roundConfig(meta);
+    if (config.timeModel === TIME_MODEL_FIXED_SCHEDULE) {
+      throw new DomainRuleError('Fixed-schedule worlds do not use a Ready action');
+    }
     const ensured = await this._ensureRound(worldId, manifest.revision);
     if (roundGeneration != null && Number(roundGeneration) !== Number(ensured.state.roundGeneration)) {
       const error = new Error('Round generation mismatch');
@@ -579,9 +654,7 @@ class WorldSessionService {
       error.details = { worldId, expectedRoundGeneration:roundGeneration, actualRoundGeneration:ensured.state.roundGeneration };
       throw error;
     }
-    const deadlineAt = config.timeModel === TIME_MODEL_FIXED_SCHEDULE
-      ? config.fixedDeadlineAt
-      : new Date(Date.now() + config.durationSeconds * 1000).toISOString();
+    const deadlineAt = new Date(Date.now() + config.durationSeconds * 1000).toISOString();
     let result = await this.metadata.markTrainerReady({
       worldId,
       userId,
