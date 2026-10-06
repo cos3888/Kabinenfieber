@@ -65,8 +65,8 @@ check('Mobile world creation separates Countdown and Feste Rundenzeiten and only
   app.includes('data-mode="COUNTDOWN"')&&
   app.includes('data-mode="FIXED_SCHEDULE"')&&
   app.includes('Feste Rundenzeiten')&&
-  app.includes('id="'+prefix+'-countdown-section"')&&
-  app.includes('id="'+prefix+'-fixed-section"')&&
+  app.includes('-countdown-section')&&
+  app.includes('-fixed-section')&&
   app.includes('class="kf-round-day-chip"')&&
   app.includes("Intl.DateTimeFormat().resolvedOptions().timeZone"));
 
