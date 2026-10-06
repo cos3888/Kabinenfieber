@@ -94,10 +94,11 @@ check('World details keeps Spielrhythmus permanently reachable for assigned and 
   app.includes('data-action="kf-world-details">Weltdetails</button>')&&
   app.includes("if (action === 'office-options' && KF029Remote.user)"));
 
-check('Legacy worlds force initial rhythm setup without a vote and stay read-only until the admin completes it',
+check('Legacy worlds force initial rhythm setup without a vote, stay read-only, and still allow a safe exit',
   app.includes('roundSetupRequired')&&
   app.includes('Diese ältere Spielwelt hat noch keinen Spielrhythmus.')&&
   app.includes('data-action="kf-round-settings-initialize"')&&
+  app.includes('data-action="kf-exit-world-discard">Zur Weltliste</button>')&&
   app.includes('lockClose:true')&&
   server.includes('initializeRoundSettings')&&
   server.includes('Only the world admin may configure the initial round settings'));
