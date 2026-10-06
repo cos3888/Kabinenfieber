@@ -60,11 +60,14 @@ check('Browser is no longer the authoritative round progression engine',
   !claimedSource.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
   !readySource.includes('kf032AdvanceClaimedRound(state,actionEl)'));
 
-check('FIXED_SCHEDULE creation exposes weekdays, time and browser-derived world timezone',
-  app.includes('id="kf-world-time-model"')&&
-  app.includes('value="FIXED_SCHEDULE"')&&
-  app.includes('id="kf-world-fixed-time"')&&
-  app.includes('fixedScheduleWeekdays:fixedWeekdays')&&
+check('Mobile world creation separates Countdown and Feste Rundenzeiten and only shows mode-specific fields',
+  app.includes('class="kf-round-mode-card')&&
+  app.includes('data-mode="COUNTDOWN"')&&
+  app.includes('data-mode="FIXED_SCHEDULE"')&&
+  app.includes('Feste Rundenzeiten')&&
+  app.includes('id="'+prefix+'-countdown-section"')&&
+  app.includes('id="'+prefix+'-fixed-section"')&&
+  app.includes('class="kf-round-day-chip"')&&
   app.includes("Intl.DateTimeFormat().resolvedOptions().timeZone"));
 
 check('FIXED_SCHEDULE office has no Ready or Weiter control and only shows the final five-minute countdown',
@@ -75,6 +78,34 @@ check('FIXED_SCHEDULE office has no Ready or Weiter control and only shows the f
 
 check('Countdown exposes only coarse supported duration choices',
   ['600','1800','3600','7200','14400','28800','43200','86400','172800','259200'].every(value=>app.includes('<option value="'+value+'"')));
+
+check('World details keeps Spielrhythmus permanently reachable for assigned and unassigned trainers',
+  app.includes("title:'Weltdetails'")&&
+  app.includes('data-action="kf-world-round-settings"')&&
+  app.includes('data-action="kf-world-details">Weltdetails</button>')&&
+  app.includes("if (action === 'office-options' && KF029Remote.user)"));
+
+check('Legacy worlds force initial rhythm setup without a vote and stay read-only until the admin completes it',
+  app.includes('roundSetupRequired')&&
+  app.includes('Diese ältere Spielwelt hat noch keinen Spielrhythmus.')&&
+  app.includes('data-action="kf-round-settings-initialize"')&&
+  app.includes('lockClose:true')&&
+  server.includes('initializeRoundSettings')&&
+  server.includes('Only the world admin may configure the initial round settings'));
+
+check('Later rhythm changes expose proposal timing, 2/3 vote information and delayed activation',
+  app.includes('data-action="kf-round-settings-propose"')&&
+  app.includes('data-action="kf-round-settings-vote"')&&
+  app.includes('2/3 der tatsächlich abgegebenen Stimmen')&&
+  app.includes('Abstimmung frühestens auswerten')&&
+  app.includes('Bei Annahme gültig ab')&&
+  server.includes('proposeRoundSettingsChange')&&
+  server.includes('evaluateRoundSettingsChangeForProgression'));
+
+check('Server round configuration is sourced from WorldRecord.runtimeSettings, not lobby metadata',
+  server.includes('_roundConfig(record)')&&
+  server.includes('record && record.runtimeSettings')&&
+  !server.includes('_roundConfig(meta)'));
 
 check('Multiplayer cannot skip coordinated calendar slots with sim-until',
   app.includes('In einer Mehrspielerwelt wird jeder Kalenderslot gemeinsam über den Rundentakt verarbeitet.'));
