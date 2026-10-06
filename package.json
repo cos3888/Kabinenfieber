@@ -1,6 +1,6 @@
 {
   "name": "kabinenfieber",
-  "version": "0.31.4",
+  "version": "0.32.0",
   "private": true,
   "description": "Kabinenfieber Fussballmanager",
   "scripts": {
@@ -60,7 +60,11 @@
     "test:0313": "node tests/run_kf_0_31_3_cold_load_compaction_test.js",
     "test:0314": "node tests/run_kf_0_31_4_save_object_isolation_test.js",
     "test:0314-draw": "node tests/run_kf_0_31_4_authoritative_draw_progression_test.js",
-    "test:0314-memory": "node tests/run_kf_0_31_4_large_world_memory_test.js"
+    "test:0314-memory": "node tests/run_kf_0_31_4_large_world_memory_test.js",
+    "test:0320": "node tests/run_kf_0_32_0_round_scope_management_test.js",
+    "test:0320-browser": "node tests/run_kf_0_32_0_browser_round_coordination_test.js",
+    "test:0320-server": "node tests/run_kf_0_32_0_server_progression_runner_test.js",
+    "test:0320-rhythm": "node tests/run_kf_0_32_0_round_settings_governance_test.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.2.0",

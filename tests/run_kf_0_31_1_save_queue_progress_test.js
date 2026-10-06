@@ -23,7 +23,7 @@ function makeWorldRecord(worldId,userId){
     id:worldId,schemaVersion:'kf-world-record-0.27.2',gameVersion:'0.31.1',
     createdAt:new Date().toISOString(),createdByUserId:userId,
     creationRules:{startVariant:'classic',leagueConfiguration:'default',clubSelection:'manual'},
-    runtimeSettings:{roundDurationHours:null},
+    runtimeSettings:{roundTimeModel:'COUNTDOWN',roundDurationSeconds:600,timezone:'Europe/Berlin'},
     progression:{status:'waiting',deadlineAt:null,readyTrainerIds:[],lastHumanActivityAt:new Date().toISOString()},
     memberships:{byTrainerId:{'trainer-1':{trainerId:'trainer-1',userProfileId:userId,clubId:null,status:'active',joinedAt:new Date().toISOString(),lastActivityAt:new Date().toISOString(),trainerDisplayName:'Tester',role:'WORLD_ADMIN'}},order:['trainer-1']},
     gameState:{
@@ -125,17 +125,26 @@ function makeWorldRecord(worldId,userId){
     const mpWorld='world-multiplayer-delta';
     const mpRecord=makeWorldRecord(mpWorld,'uA');
     const mpCreated=await sessions.createWorld({userId:'uA',worldRecord:mpRecord,worldName:'MP Delta',visibility:'PUBLIC',joinPolicy:'OPEN'});
-    await sessions.joinWorld({userId:'uB',displayName:'Trainer B',worldId:mpWorld});
+    const mpAAssigned=await sessions.assignClub({userId:'uA',worldId:mpWorld,clubId:'club-a',expectedRevision:mpCreated.revision});
+    const mpJoined=await sessions.joinWorld({userId:'uB',displayName:'Trainer B',worldId:mpWorld});
+    const mpBAssigned=await sessions.assignClub({userId:'uB',worldId:mpWorld,clubId:'club-b',expectedRevision:mpJoined.revision});
     const mpBase=await worlds.getManifest(mpWorld);
+    const mpOpen=await sessions.openWorld({userId:'uA',worldId:mpWorld});
+
     const mpA=delta(mpWorld,[{path:['gameState','squads','club-a','tactics','pressing'],value:'high'}]);
-    const mpASaved=await sessions.saveManagementDelta({userId:'uA',worldId:mpWorld,worldDelta:mpA,expectedRevision:mpBase.revision});
-    check('Management delta in a multiplayer world does not require a progression lease',
-      Number(mpASaved.revision)===Number(mpBase.revision)+1,{before:mpBase.revision,after:mpASaved.revision});
+    const mpASaved=await sessions.saveManagementDelta({
+      userId:'uA',worldId:mpWorld,worldDelta:mpA,expectedRevision:mpBase.revision,
+      roundGeneration:mpOpen.roundGeneration,expectedScopeRevisions:{'SQUAD:club-a':0}
+    });
+    check('Management delta in a multiplayer world uses a scoped overlay without consuming world revision',
+      Number(mpASaved.revision)===Number(mpBase.revision)&&mpASaved.scopeRevisions['SQUAD:club-a']===1,
+      {before:mpBase.revision,after:mpASaved.revision,scopeRevisions:mpASaved.scopeRevisions});
 
     let progressionPathError=null;
     try{
       await sessions.saveManagementDelta({
-        userId:'uA',worldId:mpWorld,expectedRevision:mpASaved.revision,
+        userId:'uA',worldId:mpWorld,expectedRevision:mpBase.revision,roundGeneration:mpOpen.roundGeneration,
+        expectedScopeRevisions:mpASaved.scopeRevisions,
         worldDelta:delta(mpWorld,[{path:['gameState','calendar','currentSlotKey'],value:'illegal-management-slot'}])
       });
     }catch(error){progressionPathError=error;}
@@ -143,24 +152,22 @@ function makeWorldRecord(worldId,userId){
       !!progressionPathError&&/progression-owned/i.test(String(progressionPathError.message||'')),
       {error:progressionPathError&&progressionPathError.message});
 
-    let staleReadyError=null;
-    try{await sessions.markReady({userId:'uA',worldId:mpWorld,expectedRevision:mpBase.revision});}catch(error){staleReadyError=error;}
-    check('Ready rejects a revision that predates a confirmed management save',
-      !!staleReadyError&&/revision mismatch/i.test(String(staleReadyError.message||'')),{error:staleReadyError&&staleReadyError.message});
-
-    let staleBError=null;
     const mpB=delta(mpWorld,[{path:['gameState','squads','club-b','tactics','tempo'],value:'slow'}]);
-    try{await sessions.saveManagementDelta({userId:'uB',worldId:mpWorld,worldDelta:mpB,expectedRevision:mpBase.revision});}catch(error){staleBError=error;}
-    check('Stale trainer delta cannot overwrite the authoritative newer revision',
-      !!staleBError&&/revision mismatch/i.test(String(staleBError.message||'')),{error:staleBError&&staleBError.message});
-    const mpBSaved=await sessions.saveManagementDelta({userId:'uB',worldId:mpWorld,worldDelta:mpB,expectedRevision:mpASaved.revision});
+    const mpBSaved=await sessions.saveManagementDelta({
+      userId:'uB',worldId:mpWorld,worldDelta:mpB,expectedRevision:mpBase.revision,
+      roundGeneration:mpOpen.roundGeneration,expectedScopeRevisions:{'SQUAD:club-b':0}
+    });
+    check('Disjoint trainer scopes save against the same base world revision without conflict',
+      Number(mpBSaved.revision)===Number(mpBase.revision)&&mpBSaved.scopeRevisions['SQUAD:club-b']===1,
+      {revision:mpBSaved.revision,scopeRevisions:mpBSaved.scopeRevisions});
+
     await runtime.unloadWorld(mpWorld);
     const mpReload=await sessions.openWorld({userId:'uA',worldId:mpWorld});
-    check('Disjoint trainer changes persist after rebasing on the latest revision',
+    check('Disjoint trainer changes materialize together while the authoritative base revision stays stable',
       mpReload.worldRecord.gameState.squads['club-a'].tactics.pressing==='high'&&
       mpReload.worldRecord.gameState.squads['club-b'].tactics.tempo==='slow'&&
-      Number(mpReload.revision)===Number(mpBSaved.revision),
-      {revision:mpReload.revision});
+      Number(mpReload.revision)===Number(mpBase.revision),
+      {revision:mpReload.revision,scopeRevisions:mpReload.scopeRevisions});
 
     const perfWorld='world-delta-chain';
     const perfRecord=makeWorldRecord(perfWorld,'perf');
@@ -249,8 +256,13 @@ function makeWorldRecord(worldId,userId){
       app.includes("kf031FlushManagementSave('close-modal')")&&
       app.includes("var KF031_MANAGEMENT_VIEWS={office:1,squad:1,lineup:1,contracts:1,'squad-planning':1,finance:1,sponsoring:1};"),
       {});
-    check('Ready path detects local management mutations when no calendar slot advanced',
-      readySource.includes("kf031MarkManagementDirty('office-advance-local-management',false)"),
+    const claimedStart=app.indexOf('async function kf032AdvanceClaimedRound(');
+    const claimedEnd=app.indexOf('function kf032ScheduleProgressPoll(',claimedStart);
+    const claimedSource=app.slice(claimedStart,claimedEnd);
+    check('Ready path is status-only in KF_0.32.0 and no longer mutates calendar state in the browser',
+      claimedSource.includes('Der Browser ist nur Anzeige')&&
+      !claimedSource.includes("kf029BaseHandleAction('office-advance'")&&
+      !readySource.includes('kf032AdvanceClaimedRound(state,actionEl)'),
       {});
 
     report.metrics={

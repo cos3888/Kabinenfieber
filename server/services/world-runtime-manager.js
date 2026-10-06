@@ -2,6 +2,7 @@
 
 const { DomainRuleError, PersistenceConflictError } = require('../persistence/errors');
 const { applyWorldDelta } = require('../domain/world-delta');
+const { applyRoundSettings } = require('../domain/round-settings');
 const {
   activeMemberships,
   membershipForUser,
@@ -189,7 +190,7 @@ class WorldRuntimeManager {
     return next;
   }
 
-  async saveSnapshot({ worldId, userId, worldRecord, expectedRevision, matches = [], financeEvents = [] , allowMultiplayerProgress = false }) {
+  async saveSnapshot({ worldId, userId, worldRecord, expectedRevision, matches = [], financeEvents = [], allowMultiplayerProgress = false, progressionRunId = null, roundGeneration = null, progressionLeaseId = null }) {
     return this._enqueue(worldId, async () => {
       const runtime = await this._load(worldId);
       if (Number(expectedRevision) !== Number(runtime.revision)) {
@@ -208,7 +209,10 @@ class WorldRuntimeManager {
         season,
         matches,
         financeEvents,
-        expectedRevision: runtime.revision
+        expectedRevision: runtime.revision,
+        progressionRunId,
+        roundGeneration,
+        progressionLeaseId
       });
       runtime.worldRecord = nextRecord;
       runtime.revision = Number(manifest.revision);
@@ -220,6 +224,40 @@ class WorldRuntimeManager {
         revision: runtime.revision,
         currentSeason: runtime.currentSeason,
         committedAt: manifest.committedAt
+      };
+    });
+  }
+
+  async updateRoundSettings({ worldId, userId, expectedRevision, roundSettings }) {
+    return this._enqueue(worldId, async () => {
+      const runtime = await this._load(worldId);
+      if (Number(expectedRevision) !== Number(runtime.revision)) {
+        throw new PersistenceConflictError('World revision mismatch', {
+          worldId, expectedRevision, actualRevision:runtime.revision
+        });
+      }
+      const membership = membershipForUser(runtime.worldRecord, userId);
+      if (!membership) throw new DomainRuleError('User is not a member of this world');
+
+      const previousSettings = clone(runtime.worldRecord.runtimeSettings || {});
+      runtime.worldRecord.runtimeSettings = applyRoundSettings(previousSettings, roundSettings);
+      let manifest;
+      try {
+        manifest = await this.worldPersistence.commitWorldRecord({
+          worldRecord:runtime.worldRecord,
+          expectedRevision:runtime.revision
+        });
+      } catch (error) {
+        runtime.worldRecord.runtimeSettings = previousSettings;
+        throw error;
+      }
+      runtime.revision = Number(manifest.revision);
+      this._touch(runtime);
+      return {
+        revision:runtime.revision,
+        currentSeason:runtime.currentSeason,
+        committedAt:manifest.committedAt,
+        worldRecord:clone(runtime.worldRecord)
       };
     });
   }
@@ -289,7 +327,64 @@ class WorldRuntimeManager {
     });
   }
 
-  async saveSlot({ worldId, userId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches = [], financeEvents = [] }) {
+
+  async runServerProgression({
+    worldId, effectiveWorldRecord, expectedRevision,
+    progressionRunId, roundGeneration, progressionLeaseId, engine
+  }) {
+    if (!engine || typeof engine.run !== 'function') throw new Error('Server progression engine is required');
+    return this._enqueue(worldId, async () => {
+      const runtime = await this._load(worldId);
+      if (Number(expectedRevision) !== Number(runtime.revision)) {
+        throw new PersistenceConflictError('World revision mismatch', {
+          worldId, expectedRevision, actualRevision:runtime.revision
+        });
+      }
+      const record = clone(effectiveWorldRecord || runtime.worldRecord);
+      if (!record || String(record.id || '') !== String(worldId)) {
+        throw new DomainRuleError('Server progression record does not match worldId');
+      }
+      const details = await this.worldPersistence.loadCurrentSeasonDetails(worldId);
+      const executed = engine.run({
+        worldRecord:record,
+        matches:details.matches || [],
+        financeEvents:details.financeEvents || [],
+        progressionRunId
+      });
+      if (!executed || !executed.advanceResult || !executed.advanceResult.advanced) {
+        throw new DomainRuleError('Server progression did not advance the calendar', {
+          reason:executed && executed.advanceResult && executed.advanceResult.reason || 'unknown'
+        });
+      }
+      const nextRecord = executed.worldRecord;
+      const season = Number(nextRecord.gameState && nextRecord.gameState.meta && nextRecord.gameState.meta.seasonNumber || runtime.currentSeason || 1);
+      const manifest = await this.worldPersistence.commitRuntimeSnapshot({
+        worldRecord:nextRecord,
+        season,
+        matches:executed.matches || [],
+        financeEvents:executed.financeEvents || [],
+        expectedRevision:runtime.revision,
+        progressionRunId,
+        roundGeneration,
+        progressionLeaseId
+      });
+      runtime.worldRecord = nextRecord;
+      runtime.revision = Number(manifest.revision);
+      runtime.currentSeason = Number(manifest.currentSeason || season);
+      runtime.matches = executed.matches || [];
+      runtime.financeEvents = executed.financeEvents || [];
+      this._touch(runtime);
+      return {
+        revision:runtime.revision,
+        currentSeason:runtime.currentSeason,
+        committedAt:manifest.committedAt,
+        advanceResult:clone(executed.advanceResult),
+        worldRecord:clone(nextRecord)
+      };
+    });
+  }
+
+  async saveSlot({ worldId, userId, worldRecord = null, worldDelta = null, expectedRevision, season, slotKey, matches = [], financeEvents = [], progressionRunId = null, roundGeneration = null, progressionLeaseId = null }) {
     return this._enqueue(worldId, async () => {
       const runtime = await this._load(worldId);
       if (Number(expectedRevision) !== Number(runtime.revision)) {
@@ -318,7 +413,10 @@ class WorldRuntimeManager {
           slotKey,
           matches,
           financeEvents,
-          expectedRevision: runtime.revision
+          expectedRevision: runtime.revision,
+          progressionRunId,
+          roundGeneration,
+          progressionLeaseId
         });
       } catch (error) {
         if (undoDelta) applyWorldDelta(runtime.worldRecord, undoDelta);

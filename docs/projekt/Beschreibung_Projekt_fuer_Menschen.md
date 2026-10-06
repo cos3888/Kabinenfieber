@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.31.4
+# Kabinenfieber - Stand KF_0.32.0
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.31.4`
+App-Version: `KF_0.32.0`
 
 Persistierte Schemas:
 
@@ -18,6 +18,125 @@ Persistierte Schemas:
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
 
+
+## KF_0.32.0 – Multiplayer Round Progression
+
+KF_0.32.0 fuehrt den gemeinsamen Rundentakt fuer Mehrspielerwelten ein und verlagert den autoritativen Kalenderfortschritt vom Browser auf den Server.
+
+### Rundenmodelle
+
+**COUNTDOWN**
+- Im Buero gibt es „Runde abschliessen“.
+- Vor Ready werden offene Managementaenderungen serverseitig bestaetigt.
+- Das erste Ready startet den gemeinsamen, serverseitigen `deadlineAt`.
+- Der fertige Trainer ist fuer den aktuellen Slot sofort read-only, darf aber weiter navigieren und Informationen ansehen.
+- Direkte Nebenpfade wie Aufstellungs-Drag&Drop sind ebenfalls gesperrt.
+- Nur aktive Trainer mit zugewiesenem Verein zaehlen.
+- Sobald alle aktiven Trainer Ready sind, wird sofort fortgeschritten.
+- Andernfalls ist der Countdown die maximale Wartezeit.
+- Unterstuetzte Stufen: 10/30 Minuten, 1/2/4/8/12/24/48/72 Stunden.
+
+**FIXED_SCHEDULE**
+- Feste Wochentage und Uhrzeit werden als Weltregel gespeichert.
+- Die Welt speichert eine eindeutige Zeitzone.
+- Es gibt keinen Ready-/Weiter-Button und kein vorzeitiges Fortschreiten.
+- Bis zum Termin bleibt Management moeglich.
+- In den letzten fuenf Minuten wird zusaetzlich ein Countdown angezeigt.
+- Zum Termin wird der Slot serverseitig geschlossen und verarbeitet.
+
+### Spielrhythmus verwalten
+
+Neue Welten waehlen den Spielrhythmus bereits bei der Erstellung in einer mobilen, modusabhaengigen Oberflaeche. Bei COUNTDOWN wird nur die Wartezeit gezeigt; bei „Feste Rundenzeiten“ nur Wochentage, Uhrzeit und Zeitzone. Die Wochentage sind als grosse Touch-Chips ausgefuehrt.
+
+Jede geladene Welt besitzt dauerhaft den Pfad **Weltdetails -> Spielrhythmus**. Dort sehen alle Trainer die aktuelle Einstellung, den naechsten Rundenwechsel und gegebenenfalls einen laufenden Aenderungsvorschlag.
+
+Alte Spielstaende ohne gueltige KF_0.32.0-Rundeneinstellung werden nicht stillschweigend auf einen Default umgestellt:
+- `roundSetupRequired` haelt die Welt bis zur einmaligen Ersteinrichtung in einem sicheren, lesbaren Zustand;
+- nur der `WORLD_ADMIN` darf die Ersteinrichtung vornehmen;
+- dabei gibt es bewusst keine Abstimmung;
+- andere Trainer koennen die Welt betreten und ansehen, aber weder einen Verein uebernehmen noch Management/Ready/Slotfortschritt ausloesen;
+- der Pflichtdialog kann nicht per X oder Hintergrund umgangen werden, bietet aber fuer Admin und Mitspieler einen sicheren Weg „Zur Weltliste“, damit niemand in einer Altwelt festhaengt;
+- nach der Einrichtung wird der gewaehlte Rhythmus automatisch geladen und angezeigt;
+- ein neu eingerichteter COUNTDOWN startet erst mit dem ersten „Runde abschliessen“, nicht durch die Einrichtung selbst.
+
+Spaetere Aenderungen sind immer Vorschlaege. Der bisherige Spielrhythmus bleibt waehrend Abstimmung und Wartezeit vollstaendig aktiv. Der Vorschlag liegt als `pendingRoundSettingsChange` im operativen Round-State und ist **keine zweite aktive Konfigurationswahrheit**.
+
+Abstimmungsregeln:
+- Admin-Stimme beim Erstellen automatisch `YES`;
+- Mehrheit = `ceil(abgegebene Stimmen * 2 / 3)`;
+- nicht abgegebene Stimmen erhoehen den Nenner nicht;
+- Vorschlag in Generation/Slot S darf fruehestens beim Fortschritt S+1 -> S+2 ausgewertet werden;
+- der Wirksamkeits-Slot muss mindestens der danach erreichte Slot S+2 sein, darf aber spaeter liegen;
+- eine angenommene Aenderung wird erst beim vorgesehenen Slotfortschritt atomar in `WorldRecord.runtimeSettings` uebernommen;
+- bis zu diesem Commit verwendet die Progression ausschliesslich die alte Konfiguration.
+
+### Serverautoritativer Fortschritt
+
+Der Browser ist nur Client und Anzeige. Er pollt den Progression-State moderat und berechnet sichtbare Countdowns lokal aus dem serverseitigen `deadlineAt`.
+
+Der eigentliche Fortschritt laeuft ueber:
+- stabilen `roundGeneration`;
+- `progressionRunId` und Lease;
+- Statusfolge `OPEN -> LOCKING -> MATCHDAY -> FINALIZING -> OPEN`;
+- `HeadlessProgressionEngine`, die den vorhandenen Kalender-/Simulationskern serverseitig ausfuehrt;
+- `runDueProgression()` / `sweepDueProgressions()`;
+- geschuetzten Recovery-/Wake-Endpunkt `POST /api/v1/internal/progression/sweep`.
+
+`MATCHDAY` bleibt vorerst als interne historische Statusbezeichnung bestehen, wird aber nicht pauschal in die UI uebersetzt. Ohne nachgewiesenen Match-Slot zeigt die UI neutral „Naechster Kalenderslot wird verarbeitet …“.
+
+Exactly-once wird fachlich ueber stabile Run-ID, Lease, World-Revision und FINALIZING-Recovery abgesichert. Ein Crash nach World-Commit, aber vor Metadata-Finalisierung, wird repariert, ohne Match, Finanzen, Auslosung oder Kalenderfortschritt erneut anzuwenden.
+
+### Multiplayer-Regeln
+
+- Mehrere Kalenderslots duerfen in Multiplayerwelten nicht per „bis Datum X simulieren“ uebersprungen werden.
+- Die Schnellberechnung eines einzelnen Matches bleibt bestehen.
+- Bei Schnellberechnung uebernimmt der Co-Trainer das gesamte Match; ein spaeterer Live-Einstieg ist ausgeschlossen.
+- Bei Mensch-gegen-Mensch reicht spaeter ein Live-Wunsch eines Beteiligten fuer ein Live-Match.
+- Ein bereits als QUICK bestaetigter Spieler kann seinen Wunsch fuer dieses Match nicht nachtraeglich auf LIVE aendern.
+
+### Zentrale Datenquellen
+
+Keine doppelte fachliche Wahrheit:
+- aktuelle Spieler: `world.players.byId`
+- Kader/Aufstellung/Taktik: `world.squads`
+- Kalender/Fixture-Status: `world.calendar.fixtures`
+- historische Matchwahrheit: `world.history.matches` plus bestehende ausgelagerte Matchdetails
+- Mailbox: `world.clubMailboxes.byClub[clubId]`
+- Membership/Ownership: serverseitiges `WorldRecord.memberships`
+- Welt-Rundenkonfiguration: `WorldRecord.runtimeSettings`
+- Texte/Regeln: `StaticData`
+
+Der Progression-State mit `roundGeneration`, Status, Ready-Usern, `deadlineAt`, `progressionRunId`, Lease, Matchplan, Scope-Revisions und einem gegebenenfalls zukuenftigen `pendingRoundSettingsChange` ist operativer Lauf-/Governancezustand, keine zweite aktive Konfigurationswahrheit. Lobby-/Metadata-Rundenfelder sind nur Projektionen fuer Anzeige und Suche. Die serverseitige Rundenberechnung liest ihre aktive Konfiguration aus `WorldRecord.runtimeSettings`.
+
+### Regressionen
+
+Neue/erweiterte Tests:
+- `tests/run_kf_0_32_0_round_scope_management_test.js`
+- `tests/run_kf_0_32_0_browser_round_coordination_test.js`
+- `tests/run_kf_0_32_0_server_progression_runner_test.js`
+- `tests/run_kf_0_32_0_round_settings_governance_test.js`
+
+Abgedeckt sind unter anderem:
+- zwei und 18 menschliche Manager;
+- Ready-Lock und weiterhin moegliche Navigation;
+- Countdown-Synchronisation ohne F5;
+- Benutzer ohne Verein blockieren nicht;
+- Fixed Schedule ohne Early-Advance;
+- Offline-/Wake-Progression;
+- parallele/doppelte Wakes;
+- Retry und Crash-Recovery nach World-Commit;
+- keine doppelten Matches, Finanzen oder Kalenderfortschritte;
+- serverseitige Ownership/Scope-Isolation;
+- direkte Aufstellungs-Drag&Drop-Sperre nach Ready;
+- Altwelt-Ersteinrichtung mit Admin-Recht und ohne Abstimmung;
+- 2/3-Mehrheit fuer 1/2/3/4/5/6/10 abgegebene Stimmen sowie Nicht-Abstimmer;
+- Mindestfrist und spaetere Wirksamkeit von Rhythmus-Aenderungen;
+- alte Einstellung bleibt bis zum Wirksamkeits-Slot autoritativ;
+- atomare/einmalige Uebernahme in `WorldRecord.runtimeSettings`;
+- Lobby-Rundenfelder bleiben reine Projektion;
+- Regressionen KF_0.31.2 bis KF_0.31.4 und aktuelle Core-Suite.
+
+Der Testdienst bleibt bei 1 GiB. Das Produktivbackend wird im Rahmen dieses Arbeits-PRs nicht veraendert. PR #11 bleibt bis zur ausdruecklichen Freigabe ungemergt.
 
 ## KF_0.31.4 – Save Object Isolation & Existing World Integrity
 

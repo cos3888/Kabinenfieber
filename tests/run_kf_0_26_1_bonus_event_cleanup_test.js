@@ -54,10 +54,11 @@ check('Leih-Prämie wird einmal und im 40/60-Gehaltsanteil gebucht',loanPaid1===
 
 const transferKey='transferAppearance|legacy-test|'+playerId+'|25';
 const record=T.worldRecordForGameState(w),assign=T.assignTrainerClub(record,T.AppState.session.activeTrainerId,club2);
-const pBefore=T.financeEventsForSeason(w,club2,season).length,bBefore=T.financeEventsForSeason(w,club3,season).length,mailBefore=((w.mailbox||{}).order||[]).length;
+const humanMailbox=()=>((((w.clubMailboxes||{}).byClub||{})[club2]||{}).order||[]);
+const pBefore=T.financeEventsForSeason(w,club2,season).length,bBefore=T.financeEventsForSeason(w,club3,season).length,mailBefore=humanMailbox().length;
 const transfer1=T.kf021PayInterClubBonus(w,club2,club3,player,.4,'Transfer-Einsatzbonus Test',transferKey);
 const transfer2=T.kf021PayInterClubBonus(w,club2,club3,player,.4,'Transfer-Einsatzbonus Test',transferKey);
-const pAfter=T.financeEventsForSeason(w,club2,season).filter(ev=>ev.eventKey===transferKey),bAfter=T.financeEventsForSeason(w,club3,season).filter(ev=>ev.eventKey===transferKey),mailAfter=((w.mailbox||{}).order||[]).length;
+const pAfter=T.financeEventsForSeason(w,club2,season).filter(ev=>ev.eventKey===transferKey),bAfter=T.financeEventsForSeason(w,club3,season).filter(ev=>ev.eventKey===transferKey),mailAfter=humanMailbox().length;
 check('Transferklausel schreibt einen gemeinsamen eventKey auf Ausgabe und Einnahme',transfer1===true&&transfer2===true&&pAfter.length===1&&bAfter.length===1&&pAfter[0].amount===-.4&&bAfter[0].amount===.4,{payer:pAfter,beneficiary:bAfter,pBefore,bBefore});
 check('Transferklausel-Mail bleibt bei menschlicher Beteiligung erhalten und wird nicht dupliziert',assign&&assign.ok===true&&mailAfter===mailBefore+1,{mailBefore,mailAfter,assignedClub:club2});
 

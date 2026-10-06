@@ -323,7 +323,7 @@ class WorldPersistenceService {
     };
   }
 
-  async commitRuntimeSnapshot({ worldRecord, season, matches = [], financeEvents = [], expectedRevision }) {
+  async commitRuntimeSnapshot({ worldRecord, season, matches = [], financeEvents = [], expectedRevision, progressionRunId = null, roundGeneration = null, progressionLeaseId = null }) {
     const worldId = safeKey(worldRecord && worldRecord.id, 'worldId');
     const envelope = await this._readManifestEnvelope(worldId);
     if (!envelope) throw new PersistenceNotFoundError('World manifest not found', { worldId: worldId });
@@ -361,7 +361,16 @@ class WorldPersistenceService {
         matchSegments: { __runtime__: matchPath },
         financeSegments: { __runtime__: financePath },
         matchIndex: Object.fromEntries((matches || []).filter(row => row && row.id).map(row => [String(row.id), matchPath])),
-        worldDeltaPaths: []
+        worldDeltaPaths: [],
+        lastProgressionCommit: progressionRunId ? {
+          progressionRunId:String(progressionRunId),
+          roundGeneration:Number(roundGeneration || 0),
+          leaseId:progressionLeaseId ? String(progressionLeaseId) : null,
+          fromRevision:Number(current.revision),
+          toRevision:revision,
+          slotKey:null,
+          committedAt:new Date().toISOString()
+        } : (current.lastProgressionCommit || null)
       };
       await this.store.write(this.manifestKey(worldId), encodeJson(next), {
         ifGenerationMatch: envelope.generation,
@@ -503,7 +512,7 @@ class WorldPersistenceService {
     }
   }
 
-  async commitSlot({ worldId = null, worldRecord = null, worldDelta = null, season, slotKey, matches = [], financeEvents = [], expectedRevision }) {
+  async commitSlot({ worldId = null, worldRecord = null, worldDelta = null, season, slotKey, matches = [], financeEvents = [], expectedRevision, progressionRunId = null, roundGeneration = null, progressionLeaseId = null }) {
     const resolvedWorldId = safeKey(worldId || (worldRecord && worldRecord.id) || (worldDelta && worldDelta.worldId), 'worldId');
     slotKey = safeKey(slotKey, 'slotKey');
     const envelope = await this._readManifestEnvelope(resolvedWorldId);
@@ -557,7 +566,16 @@ class WorldPersistenceService {
         },
         worldDeltaPaths: worldDelta
           ? [...(Array.isArray(current.worldDeltaPaths) ? current.worldDeltaPaths : []), deltaPath]
-          : []
+          : [],
+        lastProgressionCommit: progressionRunId ? {
+          progressionRunId:String(progressionRunId),
+          roundGeneration:Number(roundGeneration || 0),
+          leaseId:progressionLeaseId ? String(progressionLeaseId) : null,
+          fromRevision:Number(current.revision),
+          toRevision:revision,
+          slotKey:String(slotKey),
+          committedAt:new Date().toISOString()
+        } : (current.lastProgressionCommit || null)
       };
       await this.store.write(this.manifestKey(resolvedWorldId), encodeJson(next), {
         ifGenerationMatch: envelope.generation,

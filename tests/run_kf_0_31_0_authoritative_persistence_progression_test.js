@@ -26,7 +26,7 @@ function makeWorldRecord(worldId,userId){
     createdAt:new Date().toISOString(),
     createdByUserId:userId,
     creationRules:{startVariant:'classic',leagueConfiguration:'default',clubSelection:'manual'},
-    runtimeSettings:{roundDurationHours:null},
+    runtimeSettings:{roundTimeModel:'COUNTDOWN',roundDurationSeconds:600,timezone:'Europe/Berlin'},
     progression:{status:'waiting',deadlineAt:null,readyTrainerIds:[],lastHumanActivityAt:new Date().toISOString()},
     memberships:{byTrainerId:{'trainer-1':{
       trainerId:'trainer-1',userProfileId:userId,clubId:null,status:'active',
@@ -116,7 +116,9 @@ function slotDelta(worldId){
     const mpWorld='world-ready';
     const mpRecord=makeWorldRecord(mpWorld,'uA');
     const mpCreated=await sessions.createWorld({userId:'uA',worldRecord:mpRecord,worldName:'Ready Welt',visibility:'PUBLIC',joinPolicy:'OPEN'});
-    await sessions.joinWorld({userId:'uB',displayName:'B',worldId:mpWorld});
+    const mpAAssigned=await sessions.assignClub({userId:'uA',worldId:mpWorld,clubId:'club-a',expectedRevision:mpCreated.revision});
+    const mpJoined=await sessions.joinWorld({userId:'uB',displayName:'B',worldId:mpWorld});
+    await sessions.assignClub({userId:'uB',worldId:mpWorld,clubId:'club-b',expectedRevision:mpJoined.revision});
     const mpManifest=await worlds.getManifest(mpWorld);
     const readyResults=await Promise.all([
       sessions.markReady({userId:'uA',worldId:mpWorld,expectedRevision:mpManifest.revision}),
@@ -124,7 +126,7 @@ function slotDelta(worldId){
     ]);
     const winners=readyResults.filter(row=>row.shouldAdvance);
     check('Concurrent ready requests grant exactly one progress lease',
-      winners.length===1&&winners[0].status==='PROCESSING'&&!!winners[0].leaseId,
+      winners.length===1&&winners[0].status==='MATCHDAY'&&!!winners[0].leaseId&&!!winners[0].progressionRunId,
       {readyResults});
 
     const winner=winners[0];
@@ -136,7 +138,7 @@ function slotDelta(worldId){
     });
     const progression=await sessions.getProgression({userId:'uA',worldId:mpWorld});
     check('Successful leased slot commit advances revision and resets ready state',
-      Number(progression.revision)===Number(mpSaved.revision)&&progression.status==='WAITING'&&(progression.readyUserIds||[]).length===0,
+      Number(progression.revision)===Number(mpSaved.revision)&&progression.status==='OPEN'&&Number(progression.roundGeneration)===2&&(progression.readyUserIds||[]).length===0,
       {progression,mpSaved});
 
     const nextReadyResults=await Promise.all([
@@ -174,7 +176,7 @@ function slotDelta(worldId){
       afterSeason.worldRecord.gameState.meta.seasonNumber===2&&
       afterSeason.worldRecord.memberships.order.length===2&&
       Number(seasonProgression.revision)===Number(seasonSaved.revision)&&
-      seasonProgression.status==='WAITING',
+      seasonProgression.status==='OPEN'&&Number(seasonProgression.roundGeneration)===3,
       {seasonSaved,seasonProgression,memberships:afterSeason.worldRecord.memberships.order});
 
     report.metrics={fullBytes,deltaBytes,deltaRatio:deltaBytes/fullBytes,revision:saved.revision};

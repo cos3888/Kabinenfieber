@@ -95,12 +95,13 @@ function makeWorldRecord(worldId,userId){
     reopened.financeEvents[0].id==='finance-checkpoint');
 
   const app=await fs.readFile(path.join(__dirname,'..','src','app.bundle.js'),'utf8');
-  check('Browser uses confirmed progress checkpoints without decision autosaves',
-    app.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
-    app.includes("kf029CommitHardCheckpoint('calendar-simulation-checkpoint')")&&
-    app.includes('function kf029SaveProgressCheckpoint(reason)')&&
+  const headlessProgression=await fs.readFile(path.join(__dirname,'..','server','services','headless-progression-engine.js'),'utf8');
+  const worldSessions=await fs.readFile(path.join(__dirname,'..','server','services','world-session-service.js'),'utf8');
+  check('Progression stays checkpointed without decision autosaves; remote rounds are server-owned',
     !app.includes("kf029ScheduleAutosave('form-change', false)")&&
-    !app.includes("kf029ScheduleAutosave('lineup-drop', false)"));
+    !app.includes("kf029ScheduleAutosave('lineup-drop', false)")&&
+    headlessProgression.includes('progressionRunId')&&
+    worldSessions.includes('sweepDueProgressions'));
 
   check('Manual save control was removed from the browser UI',
     !app.includes('data-action="kf-save-world"')&&!app.includes("kf029SaveRemoteWorld('manual')"));

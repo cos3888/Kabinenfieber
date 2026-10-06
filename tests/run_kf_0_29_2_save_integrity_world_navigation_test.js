@@ -89,9 +89,10 @@ function makeWorldRecord(worldId,userId){
     app.includes("KF029Remote.membership=data.membership || assignResult.membership || KF029Remote.membership")&&
     !app.includes("kf029SaveRemoteWorld('take-over-club')"));
 
-  check('Calendar advance uses a blocking hard checkpoint instead of fire-and-forget autosave',
-    app.includes("kf029CommitHardCheckpoint('calendar-slot')")&&
-    app.includes("kf029CommitHardCheckpoint('calendar-simulation-checkpoint')")&&
+  check('Calendar advance stays blocking and remote rounds are server-owned instead of fire-and-forget autosaves',
+    app.includes('async function kf031RequestReadyAndMaybeAdvance(actionEl)')&&
+    app.includes("+'/ready'")&&
+    app.includes('async function kf032PollProgressAndMaybeAdvance(actionEl)')&&
     !app.includes("if (action === 'office-advance') kf029ScheduleAutosave('calendar-slot', true)")&&
     app.includes('KF029Remote.checkpointPending || KF029Remote.checkpointFailed'));
 

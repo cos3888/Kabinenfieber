@@ -12,6 +12,7 @@ const { FirestoreAuthRepository } = require('../auth/firestore-auth-repository')
 const { AuthService } = require('../services/auth-service');
 const { WorldRuntimeManager } = require('../services/world-runtime-manager');
 const { WorldSessionService } = require('../services/world-session-service');
+const { HeadlessProgressionEngine } = require('../services/headless-progression-engine');
 
 function createPersistence(config) {
   const objectStore = config.objectStoreDriver === 'gcs'
@@ -31,10 +32,12 @@ function createPersistence(config) {
     metadataRepository: metadata,
     idleMs: config.runtimeIdleMs
   });
+  const progressionEngine = new HeadlessProgressionEngine();
   const worldSessions = new WorldSessionService({
     metadataRepository: metadata,
     worldPersistence: worlds,
-    runtimeManager: runtime
+    runtimeManager: runtime,
+    progressionEngine
   });
   return { objectStore, metadata, worlds, administration, authRepository, auth, runtime, worldSessions };
 }

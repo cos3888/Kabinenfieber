@@ -11,7 +11,7 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const config = loadConfig();
 const persistence = createPersistence(config);
-const SERVICE_VERSION = '0.31.4';
+const SERVICE_VERSION = '0.32.0';
 const API_VERSION = '0.30.0';
 
 let persistenceVerificationState = {
@@ -216,6 +216,22 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/api/v1/internal/progression/sweep') {
+      const supplied = String(req.headers['x-kf-progression-token'] || '');
+      if (!config.progressionWakeToken || supplied !== config.progressionWakeToken) {
+        await sendJson(req, res, 403, { ok:false, error:'progression_wake_forbidden' });
+        return;
+      }
+      const results = await persistence.worldSessions.sweepDueProgressions();
+      await sendJson(req, res, 200, {
+        ok:true,
+        checked:results.length,
+        failed:results.filter(row => !row.ok).length,
+        results
+      });
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/v1/persistence/status') {
       const verification = getPersistenceVerificationState();
       await sendJson(req, res, 200, {
@@ -379,6 +395,51 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const initializeRoundSettingsWorldId = worldIdFromPath(pathname, '/round-settings/initialize');
+    if (req.method === 'POST' && initializeRoundSettingsWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.initializeRoundSettings({
+        userId:auth.user.userId,
+        worldId:initializeRoundSettingsWorldId,
+        expectedRevision:body.expectedRevision,
+        settings:body.settings
+      });
+      await sendJson(req, res, 200, { ok:true, ...result });
+      return;
+    }
+
+    const proposeRoundSettingsWorldId = worldIdFromPath(pathname, '/round-settings/proposal');
+    if (req.method === 'POST' && proposeRoundSettingsWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const progression = await persistence.worldSessions.proposeRoundSettingsChange({
+        userId:auth.user.userId,
+        worldId:proposeRoundSettingsWorldId,
+        settings:body.settings,
+        evaluationRoundGeneration:body.evaluationRoundGeneration,
+        effectiveRoundGeneration:body.effectiveRoundGeneration
+      });
+      await sendJson(req, res, 200, { ok:true, progression });
+      return;
+    }
+
+    const voteRoundSettingsWorldId = worldIdFromPath(pathname, '/round-settings/vote');
+    if (req.method === 'POST' && voteRoundSettingsWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const progression = await persistence.worldSessions.castRoundSettingsVote({
+        userId:auth.user.userId,
+        worldId:voteRoundSettingsWorldId,
+        vote:body.vote
+      });
+      await sendJson(req, res, 200, { ok:true, progression });
+      return;
+    }
+
     const readyWorldId = worldIdFromPath(pathname, '/ready');
     if (req.method === 'POST' && readyWorldId) {
       const auth = await requireAuth(req);
@@ -387,7 +448,9 @@ const server = http.createServer(async (req, res) => {
       const progression = await persistence.worldSessions.markReady({
         userId:auth.user.userId,
         worldId:readyWorldId,
-        expectedRevision:body.expectedRevision
+        expectedRevision:body.expectedRevision,
+        roundGeneration:body.roundGeneration == null ? null : body.roundGeneration,
+        matchIntent:String(body.matchIntent || 'QUICK').toUpperCase() === 'LIVE' ? 'LIVE' : 'QUICK'
       });
       await sendJson(req, res, 200, { ok:true, progression });
       return;
@@ -457,7 +520,9 @@ const server = http.createServer(async (req, res) => {
         userId: auth.user.userId,
         worldId: managementWorldId,
         worldDelta: body.worldDelta,
-        expectedRevision: body.expectedRevision
+        expectedRevision: body.expectedRevision,
+        roundGeneration: body.roundGeneration == null ? null : body.roundGeneration,
+        expectedScopeRevisions: body.expectedScopeRevisions || {}
       });
       await sendJson(req, res, 200, { ok:true, ...result });
       return;
@@ -535,6 +600,16 @@ const idleSweep = setInterval(() => {
   }
 }, Math.min(60 * 1000, Math.max(10 * 1000, Math.floor(config.runtimeIdleMs / 3))));
 if (idleSweep.unref) idleSweep.unref();
+
+let progressionSweepRunning = false;
+const progressionSweep = setInterval(() => {
+  if (progressionSweepRunning) return;
+  progressionSweepRunning = true;
+  Promise.resolve(persistence.worldSessions.sweepDueProgressions())
+    .catch(error => console.error('World progression sweep failed', error))
+    .finally(() => { progressionSweepRunning = false; });
+}, config.progressionSweepMs);
+if (progressionSweep.unref) progressionSweep.unref();
 
 if (require.main === module) {
   server.listen(config.port, () => {
