@@ -10076,7 +10076,7 @@ function targetSlotForSimulation(world, requestedSlotKey){
 }
 
 function runCalendarSimulationUntil(requestedSlotKey){
-  if (KF029Remote && KF029Remote.user && AppState.worldRecord && activeMemberships(AppState.worldRecord).length > 1) {
+  if (KF029Remote && KF029Remote.user && AppState.worldRecord) {
     closeActiveModal();
     openModal({ title:'Simulation nicht verfügbar', body:'In einer Mehrspielerwelt wird jeder Kalenderslot gemeinsam über den Rundentakt verarbeitet.' });
     renderModal();
