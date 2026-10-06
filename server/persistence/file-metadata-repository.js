@@ -461,6 +461,9 @@ class FileMetadataRepository {
           actualRevision:state.revision
         });
       }
+      if (state.roundSetupRequired) {
+        throw new DomainRuleError('World round settings require initial setup');
+      }
       if (state.status !== ROUND_STATUS_OPEN) {
         throw new DomainRuleError('Round is locked for management changes', { status:state.status });
       }
