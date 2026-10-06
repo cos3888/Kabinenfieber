@@ -66,7 +66,8 @@ class FirestoreMetadataRepository {
 
   async setWorldLobbyProjection({
     worldId, currentSeason = 1, maxPlayers = 0, clubNamesById = {},
-    roundTimeModel = TIME_MODEL_COUNTDOWN, roundDurationSeconds = 120, nextRoundAt = null
+    roundTimeModel = TIME_MODEL_COUNTDOWN, roundDurationSeconds = 120, nextRoundAt = null,
+    fixedScheduleWeekdays = [], fixedScheduleTime = null, timezone = 'UTC'
   }) {
     const ref = this._world(worldId);
     const doc = await ref.get();
@@ -78,6 +79,9 @@ class FirestoreMetadataRepository {
       roundTimeModel:roundTimeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN,
       roundDurationSeconds:Math.max(15, Number(roundDurationSeconds || 120)),
       nextRoundAt:nextRoundAt || null,
+      fixedScheduleWeekdays:Array.isArray(fixedScheduleWeekdays) ? fixedScheduleWeekdays.map(Number).filter(Number.isInteger) : [],
+      fixedScheduleTime:fixedScheduleTime || null,
+      timezone:String(timezone || 'UTC'),
       projectionUpdatedAt: nowIso()
     };
     await ref.set(patch, { merge:true });
