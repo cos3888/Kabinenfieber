@@ -356,11 +356,14 @@ function makeWorldRecord(worldId,userId){
     const countdownWorld='world-countdown-offline';
     const countdownRecord=makeWorldRecord(countdownWorld,'cA');
     countdownRecord.runtimeSettings={roundTimeModel:'COUNTDOWN',roundDurationSeconds:120};
-    await sessions.createWorld({
+    const countdownCreated=await sessions.createWorld({
       userId:'cA',worldRecord:countdownRecord,worldName:'Countdown Offline',
       visibility:'PUBLIC',joinPolicy:'OPEN'
     });
-    await sessions.joinWorld({userId:'cB',displayName:'CB',worldId:countdownWorld});
+    await sessions.assignClub({userId:'cA',worldId:countdownWorld,clubId:'club-a',expectedRevision:countdownCreated.revision});
+    const countdownJoined=await sessions.joinWorld({userId:'cB',displayName:'CB',worldId:countdownWorld});
+    await sessions.assignClub({userId:'cB',worldId:countdownWorld,clubId:'club-b',expectedRevision:countdownJoined.revision});
+    await sessions.joinWorld({userId:'cWaiting',displayName:'Noch ohne Verein',worldId:countdownWorld});
     const countdownManifest=await worlds.getManifest(countdownWorld);
     const countdownReady=await sessions.markReady({
       userId:'cA',worldId:countdownWorld,expectedRevision:countdownManifest.revision,roundGeneration:1
@@ -373,8 +376,8 @@ function makeWorldRecord(worldId,userId){
       return data.progression[countdownWorld];
     });
     const countdownClaims=await Promise.all([
-      sessions.getProgression({userId:'cA',worldId:countdownWorld}),
-      sessions.getProgression({userId:'cB',worldId:countdownWorld})
+      sessions.runDueProgression({worldId:countdownWorld}),
+      sessions.runDueProgression({worldId:countdownWorld})
     ]);
     check('Expired countdown can be claimed after offline time and creates exactly one progression owner',
       countdownClaims.filter(row=>row.shouldAdvance).length===1&&
@@ -382,27 +385,36 @@ function makeWorldRecord(worldId,userId){
       countdownClaims.some(row=>row.status==='MATCHDAY')&&
       new Set(countdownClaims.map(row=>row.progressionRunId)).size===1,
       {countdownClaims});
+    check('A joined user without a club never counts toward Ready or blocks the round',
+      countdownReady.activeTrainerCount===2&&countdownReady.readyTrainerCount===1,
+      {activeTrainerCount:countdownReady.activeTrainerCount,readyTrainerCount:countdownReady.readyTrainerCount});
 
     const fixedWorld='world-fixed-schedule';
     const fixedRecord=makeWorldRecord(fixedWorld,'fA');
     fixedRecord.runtimeSettings={
       roundTimeModel:'FIXED_SCHEDULE',
-      roundDurationSeconds:120,
-      nextRoundAt:new Date(Date.now()+60*60*1000).toISOString()
+      fixedScheduleWeekdays:[1,3,5],
+      fixedScheduleTime:'20:00',
+      timezone:'Europe/Berlin'
     };
-    await sessions.createWorld({
+    const fixedCreated=await sessions.createWorld({
       userId:'fA',worldRecord:fixedRecord,worldName:'Fixed Schedule',
       visibility:'PUBLIC',joinPolicy:'OPEN'
     });
-    await sessions.joinWorld({userId:'fB',displayName:'FB',worldId:fixedWorld});
+    await sessions.assignClub({userId:'fA',worldId:fixedWorld,clubId:'club-a',expectedRevision:fixedCreated.revision});
+    const fixedJoined=await sessions.joinWorld({userId:'fB',displayName:'FB',worldId:fixedWorld});
+    await sessions.assignClub({userId:'fB',worldId:fixedWorld,clubId:'club-b',expectedRevision:fixedJoined.revision});
     const fixedManifest=await worlds.getManifest(fixedWorld);
-    const fixedReadyA=await sessions.markReady({userId:'fA',worldId:fixedWorld,expectedRevision:fixedManifest.revision,roundGeneration:1});
-    const fixedReadyB=await sessions.markReady({userId:'fB',worldId:fixedWorld,expectedRevision:fixedManifest.revision,roundGeneration:1});
-    check('FIXED_SCHEDULE never advances early merely because all trainers are ready',
-      fixedReadyA.status==='OPEN'&&!fixedReadyA.shouldAdvance&&
-      fixedReadyB.status==='OPEN'&&!fixedReadyB.shouldAdvance&&
-      fixedReadyB.readyTrainerCount===2,
-      {fixedReadyA,fixedReadyB});
+    const fixedBefore=await sessions.getProgression({userId:'fA',worldId:fixedWorld});
+    let fixedReadyAError=null,fixedReadyBError=null;
+    try{await sessions.markReady({userId:'fA',worldId:fixedWorld,expectedRevision:fixedManifest.revision,roundGeneration:1});}catch(error){fixedReadyAError=error;}
+    try{await sessions.markReady({userId:'fB',worldId:fixedWorld,expectedRevision:fixedManifest.revision,roundGeneration:1});}catch(error){fixedReadyBError=error;}
+    const fixedAfterReadyAttempts=await sessions.getProgression({userId:'fA',worldId:fixedWorld});
+    check('FIXED_SCHEDULE has no Ready action and cannot advance early',
+      !!fixedReadyAError&&!!fixedReadyBError&&/do not use a Ready action/i.test(String(fixedReadyAError.message||''))&&
+      fixedAfterReadyAttempts.status==='OPEN'&&fixedAfterReadyAttempts.readyTrainerCount===0&&
+      fixedAfterReadyAttempts.deadlineAt===fixedBefore.deadlineAt,
+      {fixedReadyAError:fixedReadyAError&&fixedReadyAError.message,fixedReadyBError:fixedReadyBError&&fixedReadyBError.message,fixedBefore,fixedAfterReadyAttempts});
     const expiredFixedAt=new Date(Date.now()-1000).toISOString();
     await metadata._mutate(data=>{
       data.worlds[fixedWorld].nextRoundAt=expiredFixedAt;
@@ -410,8 +422,8 @@ function makeWorldRecord(worldId,userId){
       return data.progression[fixedWorld];
     });
     const fixedClaims=await Promise.all([
-      sessions.getProgression({userId:'fA',worldId:fixedWorld}),
-      sessions.getProgression({userId:'fB',worldId:fixedWorld})
+      sessions.runDueProgression({worldId:fixedWorld}),
+      sessions.runDueProgression({worldId:fixedWorld})
     ]);
     check('FIXED_SCHEDULE becomes due only at its authoritative server deadline and is claimed once',
       fixedClaims.filter(row=>row.shouldAdvance).length===1&&
@@ -601,7 +613,7 @@ function makeWorldRecord(worldId,userId){
       maxParallelReadyMs:maxReadyMs
     };
   }finally{
-    await fs.rm(root,{recursive:true,force:true});
+    await fs.rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});
   }
 
   console.log(JSON.stringify(report,null,2));
