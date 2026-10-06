@@ -13,7 +13,10 @@ const toolFiles=fs.existsSync(path.join(root,'tools'))?fs.readdirSync(path.join(
 check('Historical bundle build chain is removed from active tools',!toolFiles.some(n=>/^build_\d+_bundle\.js$/.test(n)||n==='build_current_bundle.js'),{toolFiles});
 check('Browser loads the canonical runtime source directly',index.includes('src/app.bundle.js')&&!index.includes('app.bundle.generated.js'),{});
 check('Unused world.tactics duplicate store is removed',!app.includes('world.tactics[')&&!app.includes('tactics: {},\n      calendar:'),{});
-check('Root contains only the production HTML entry',fs.readdirSync(root).filter(n=>/\.html$/i.test(n)).join(',')==='index.html',{htmlFiles:fs.readdirSync(root).filter(n=>/\.html$/i.test(n))});
+const rootHtmlFiles=fs.readdirSync(root).filter(n=>/\.html$/i.test(n)).sort();
+check('Root contains only the production entry and the intentional isolated KF_0.32.0 test entry',
+  rootHtmlFiles.join(',')==='index.html,kf-0.32.0-test.html',
+  {htmlFiles:rootHtmlFiles});
 check('Legacy standalone kit designer prototype is removed',!fs.existsSync(path.join(root,'assets','kit_designer')),{});
 check('World schema remains KF_0.27.2 while app version advances independently',app.includes("world.meta.schemaVersion='kf-core-0.27.2'"),{});
 check('Parallel suspensions have one canonical current container',app.includes('Canonical current truth: player.suspensions[]')&&app.includes('player.suspensions = entries'),{});
