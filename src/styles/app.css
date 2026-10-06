@@ -6503,3 +6503,113 @@ button,.filter-chip,.lineup-subtab,.ghost-btn,.primary-btn,.secondary-btn,.small
   .office-advance-btn.is-save-pending::before,.office-advance-btn.is-save-confirmed::before{transition:none}
 }
 /* END KF_0.31.3 SAVE QUEUE & PHASE PROGRESS UX */
+
+
+/* BEGIN KF_0.32.0 MULTIPLAYER ROUND RHYTHM UX */
+.kf-round-settings-modal{
+  width:min(780px,calc(100vw - 24px));
+  max-width:780px;
+  max-height:calc(100vh - 24px)
+}
+.kf-round-settings-modal .modal-body,
+.kf-world-create-form{
+  overflow-y:auto;
+  overscroll-behavior:contain
+}
+.kf-round-settings-modal .modal-body{max-height:calc(100vh - 110px)}
+.kf-round-settings-shell,.kf-round-editor{display:grid;gap:14px}
+.kf-round-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kf-round-mode-card{
+  min-height:132px;
+  padding:16px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:14px;
+  background:rgba(255,255,255,.035);
+  color:inherit;
+  text-align:left;
+  cursor:pointer;
+  display:flex;
+  flex-direction:column;
+  gap:9px
+}
+.kf-round-mode-card strong{font-size:16px}
+.kf-round-mode-card span{color:var(--muted);font-size:12px;line-height:1.45}
+.kf-round-mode-card.is-active{
+  border-color:rgba(255,255,255,.55);
+  background:rgba(255,255,255,.09);
+  box-shadow:0 0 0 2px rgba(255,255,255,.06) inset
+}
+.kf-round-mode-fields[hidden]{display:none!important}
+.kf-round-day-grid{display:grid;grid-template-columns:repeat(7,minmax(52px,1fr));gap:8px;margin-top:8px}
+.kf-round-day-chip{position:relative;cursor:pointer}
+.kf-round-day-chip input{position:absolute;opacity:0;pointer-events:none}
+.kf-round-day-chip span{
+  min-height:46px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  background:rgba(255,255,255,.035);
+  user-select:none
+}
+.kf-round-day-chip input:checked+span{
+  border-color:rgba(255,255,255,.62);
+  background:rgba(255,255,255,.14);
+  box-shadow:0 0 0 2px rgba(255,255,255,.05) inset
+}
+.kf-round-summary-card,.kf-round-proposal-card{
+  padding:14px;
+  border:1px solid rgba(255,255,255,.11);
+  border-radius:14px;
+  background:rgba(255,255,255,.035)
+}
+.kf-round-summary-kicker,.kf-round-proposal-status{
+  margin-bottom:5px;
+  color:var(--muted);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.04em;
+  text-transform:uppercase
+}
+.kf-round-proposal-card{display:grid;gap:11px}
+.kf-round-proposal-title{font-size:17px;font-weight:800}
+.kf-round-facts{display:grid;gap:8px;margin:0}
+.kf-round-facts>div{display:grid;grid-template-columns:minmax(180px,.9fr) 1.1fr;gap:10px}
+.kf-round-facts dt{color:var(--muted);font-size:12px}
+.kf-round-facts dd{margin:0;font-weight:700}
+.kf-round-vote-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kf-round-vote-actions .is-selected{box-shadow:0 0 0 2px rgba(255,255,255,.4) inset}
+.kf-round-timing-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.kf-round-timing-grid .kf-auth-hint{grid-column:1/-1}
+.kf-world-details{display:grid;gap:12px}
+.kf-world-detail-link{
+  width:100%;
+  min-height:68px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;
+  background:rgba(255,255,255,.04);
+  color:inherit;
+  padding:12px 14px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  text-align:left;
+  cursor:pointer
+}
+.kf-world-detail-link span:first-child{display:grid;gap:4px}
+.kf-world-detail-link small{color:var(--muted);line-height:1.35}
+@media(max-width:680px){
+  .kf-round-settings-modal{width:calc(100vw - 12px);max-height:calc(100vh - 12px)}
+  .kf-round-settings-modal .modal-body{max-height:calc(100vh - 92px);padding:12px}
+  .kf-world-create-form{max-height:calc(100vh - 100px)}
+  .kf-round-mode-grid,.kf-round-timing-grid{grid-template-columns:1fr}
+  .kf-round-mode-card{min-height:0;padding:14px}
+  .kf-round-day-grid{grid-template-columns:repeat(4,minmax(58px,1fr))}
+  .kf-round-day-chip span{min-height:48px}
+  .kf-round-facts>div{grid-template-columns:1fr;gap:2px}
+  .kf-round-timing-grid .kf-auth-hint{grid-column:auto}
+}
+/* END KF_0.32.0 MULTIPLAYER ROUND RHYTHM UX */
