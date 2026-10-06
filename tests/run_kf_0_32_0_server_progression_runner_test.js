@@ -29,9 +29,9 @@ function minimalWorld(worldId,userId,runtimeSettings){
     }},order:['trainer-a']},
     gameState:{
       meta:{id:worldId,seasonNumber:1,schemaVersion:'kf-core-0.27.2',createdAt:new Date().toISOString()},
-      clubs:{byId:{'club-a':{id:'club-a',name:'Club A',leagueKey:'test'}},order:['club-a']},
+      clubs:{byId:{'club-a':{id:'club-a',name:'Club A',leagueKey:'test'},'club-b':{id:'club-b',name:'Club B',leagueKey:'test'}},order:['club-a','club-b']},
       players:{byId:{},order:[]},
-      squads:{'club-a':{playerIds:[],tactics:{}}},
+      squads:{'club-a':{playerIds:[],tactics:{}},'club-b':{playerIds:[],tactics:{}}},
       calendar:{
         currentSlotKey:'s0',
         slots:[
@@ -44,7 +44,7 @@ function minimalWorld(worldId,userId,runtimeSettings){
         fieberCupDraws:{byKey:{},byId:{},order:[]}
       },
       history:{matches:[],seasonResults:{},seasonStandings:{},playerSeasons:{},playerMarketValues:{}},
-      clubFinances:{byClub:{'club-a':{cash:0}}},
+      clubFinances:{byClub:{'club-a':{cash:0},'club-b':{cash:0}}},
       clubMailboxes:{byClub:{}},
       transfers:{},
       scouting:{},
@@ -164,7 +164,12 @@ function minimalWorld(worldId,userId,runtimeSettings){
       userId:'uO',worldRecord:minimalWorld(offlineWorld,'uO'),worldName:'Server Offline',
       visibility:'PUBLIC',joinPolicy:'OPEN'
     });
-    const offlineAssigned=await sessions.assignClub({userId:'uO',worldId:offlineWorld,clubId:'club-a',expectedRevision:offlineCreated.revision});
+    await sessions.assignClub({userId:'uO',worldId:offlineWorld,clubId:'club-a',expectedRevision:offlineCreated.revision});
+    const offlineJoined=await sessions.joinWorld({userId:'uO2',displayName:'Offline 2',worldId:offlineWorld});
+    const offlineAssigned=await sessions.assignClub({userId:'uO2',worldId:offlineWorld,clubId:'club-b',expectedRevision:offlineJoined.revision});
+    const offlineReady=await sessions.markReady({
+      userId:'uO',worldId:offlineWorld,expectedRevision:offlineAssigned.revision,roundGeneration:1,matchIntent:'QUICK'
+    });
     await metadata._mutate(data=>{
       const state=data.progression[offlineWorld];
       state.deadlineAt=new Date(Date.now()-1000).toISOString();
