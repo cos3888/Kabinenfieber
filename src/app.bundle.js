@@ -10076,6 +10076,12 @@ function targetSlotForSimulation(world, requestedSlotKey){
 }
 
 function runCalendarSimulationUntil(requestedSlotKey){
+  if (KF029Remote && KF029Remote.user && AppState.worldRecord && activeMemberships(AppState.worldRecord).length > 1) {
+    closeActiveModal();
+    openModal({ title:'Simulation nicht verfügbar', body:'In einer Mehrspielerwelt wird jeder Kalenderslot gemeinsam über den Rundentakt verarbeitet.' });
+    renderModal();
+    return;
+  }
   var world = AppState.world;
   var effectiveTarget = targetSlotForSimulation(world, requestedSlotKey);
   if (!effectiveTarget) {
@@ -17962,9 +17968,18 @@ function renderOfficeView(){
       (officeSaveState === 'confirming' ? 'Server bestätigt …' :
         (officeSaveState === 'confirmed' ? 'Gespeichert' : '')));
   var officeSaveStatusHtml = '';
-  var officeRoundStatusHtml = officeRoundState
-    ? '<div class="office-save-status is-pending" role="status">'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>'
-    : '';
+  var officeFixedSchedule=!!(officeRoundState&&officeRoundState.timeModel==='FIXED_SCHEDULE');
+  var officeRoundStatusHtml='';
+  if(officeRoundState){
+    if(officeFixedSchedule){
+      var fixedRemaining=kf032RemainingSeconds(officeRoundState);
+      officeRoundStatusHtml='<div class="office-save-status is-pending" role="status"><strong>Nächster Rundenwechsel</strong><br>'+escapeHtml(kf032FixedDeadlineLabel(officeRoundState))+((fixedRemaining!=null&&fixedRemaining<=300)?'<br>Rundenwechsel in '+escapeHtml(kf032FormatCountdown(fixedRemaining)):'')+'</div>';
+    }else if(kf032CurrentUserReady(officeRoundState)&&officeRoundState.status==='OPEN'){
+      officeRoundStatusHtml='<div class="office-save-status is-confirmed" role="status"><strong>🔒 Runde abgeschlossen</strong><br>Du wartest auf die anderen Trainer.<br>Änderungen sind erst im nächsten Slot wieder möglich.<br>'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>';
+    }else{
+      officeRoundStatusHtml='<div class="office-save-status is-pending" role="status">'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>';
+    }
+  }
   var officeQuickSimHintHtml = (KF029Remote && KF029Remote.user && officeAdvanceStartsMatch && !officeRoundReadOnly)
     ? '<div class="office-save-status" role="note">Schnellberechnung: Der Co-Trainer übernimmt dein gesamtes Spiel. Ein späterer Live-Einstieg ist für dieses Match nicht möglich.</div>'
     : '';
@@ -17978,6 +17993,12 @@ function renderOfficeView(){
     officeSaveStatusHtml = '<div class="office-save-status is-pending" role="status">Fortschritt wird serverseitig bestätigt …</div>';
   } else if (officeSaveState === 'confirmed') {
     officeSaveStatusHtml = '<div class="office-save-status is-confirmed" role="status">Speichern abgeschlossen.</div>';
+  }
+  var officeRoundControlHtml='';
+  if(requiredMail){
+    officeRoundControlHtml='<button class="primary-btn office-advance-btn is-mail-required" type="button" data-action="office-advance"><span class="office-advance-label">Mail</span></button>';
+  }else if(!officeFixedSchedule){
+    officeRoundControlHtml='<button class="primary-btn office-advance-btn'+(officeAdvanceStartsMatch?' is-start-match':'')+officeSaveButtonClass+'" type="button" data-action="office-advance"'+officeSaveButtonAttrs+'><span class="office-advance-label">'+(officeRoundReadOnly?((officeRoundState&&officeRoundState.status==='OPEN')?'Runde abgeschlossen ✓':'Runde läuft'):'Runde abschließen')+'</span>'+(officeSavePhaseLabel?'<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>':'')+'</button>';
   }
   var officeShowTableTab = officeHasStandingsTabForContext(officeNextCtxForTabs);
   var officeActiveInfoTab = AppState.ui.officeInfoTab || 'next-match';
@@ -18009,7 +18030,7 @@ function renderOfficeView(){
     '        <section class="office-side-card office-mail-card">' +
     '          <div class="office-mail-header"><h3>Mail-Center</h3><button class="ghost-btn office-mail-open-btn" type="button" data-action="open-mail-center">Öffnen</button></div>' +
     '          <div class="office-mail-list">' + (mailPreview || '<div class="empty-state office-empty">Keine Nachrichten.</div>') + '</div>' +
-    '          <button class="primary-btn office-advance-btn' + (requiredMail ? ' is-mail-required' : (officeAdvanceStartsMatch ? ' is-start-match' : '')) + officeSaveButtonClass + '" type="button" data-action="office-advance"' + officeSaveButtonAttrs + '><span class="office-advance-label">' + (officeRoundReadOnly ? ((officeRoundState&&officeRoundState.status==='OPEN')?'Bereit ✓':'Spieltag läuft') : (requiredMail ? 'Mail' : (officeAdvanceStartsMatch && KF029Remote && KF029Remote.user ? 'Schnellberechnen' : (officeAdvanceStartsMatch ? 'Spiel starten' : 'Weiter')))) + '</span>' + (officeSavePhaseLabel ? '<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>' : '') + '</button>' +
+    '          '+officeRoundControlHtml +
     officeQuickSimHintHtml +
     officeRoundStatusHtml +
     officeSaveStatusHtml +
@@ -25139,7 +25160,7 @@ function kf029InstallLoadedWorld(data){
     setCurrentView('club-selection');
   }
   renderApp(); renderModal();
-  if (KF029Remote.progression && (KF029Remote.progression.deadlineAt || KF029Remote.progression.status !== 'OPEN' || kf032CurrentUserReady(KF029Remote.progression))) {
+  if (KF029Remote.user && AppState.worldRecord) {
     kf032ScheduleProgressPoll(null,250);
   }
 }
@@ -25149,23 +25170,53 @@ function kf031ClearProgressTimer(){
     KF029Remote.progressTimer=null;
   }
 }
+function kf032RemainingSeconds(state){
+  if (!state || !state.deadlineAt) return null;
+  var ms=new Date(state.deadlineAt).getTime()-Date.now();
+  return isFinite(ms)?Math.max(0,Math.ceil(ms/1000)):null;
+}
+function kf032FormatCountdown(seconds){
+  seconds=Math.max(0,Number(seconds||0));
+  var hours=Math.floor(seconds/3600),minutes=Math.floor((seconds%3600)/60),secs=Math.floor(seconds%60);
+  if(hours>0)return String(hours).padStart(2,'0')+':'+String(minutes).padStart(2,'0')+':'+String(secs).padStart(2,'0');
+  return String(minutes).padStart(2,'0')+':'+String(secs).padStart(2,'0');
+}
+function kf032FixedDeadlineLabel(state){
+  if(!state||!state.deadlineAt)return 'Termin wird vorbereitet';
+  var date=new Date(state.deadlineAt);
+  if(!isFinite(date.getTime()))return 'Termin wird vorbereitet';
+  try{
+    return new Intl.DateTimeFormat('de-DE',{
+      timeZone:state.timezone||undefined,weekday:'long',hour:'2-digit',minute:'2-digit'
+    }).format(date)+' Uhr';
+  }catch(error){
+    return date.toLocaleString('de-DE',{weekday:'long',hour:'2-digit',minute:'2-digit'})+' Uhr';
+  }
+}
+function kf032ProcessingIsMatchSlot(state){
+  var plans=((((state||{}).matchdayPlan||{}).fixturePlans)||[]);
+  return plans.length>0;
+}
 function kf031ProgressMessage(state){
   if (!state) return '';
   var ready=Number(state.readyTrainerCount || ((state.readyUserIds||[]).length) || 0);
   var total=Number(state.activeTrainerCount || 0);
-  var suffix='';
-  if (state.deadlineAt) {
-    var seconds=Math.max(0,Math.ceil((new Date(state.deadlineAt).getTime()-Date.now())/1000));
-    suffix=' · '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
+  var remaining=kf032RemainingSeconds(state);
+  if (state.status==='LOCKING' || state.status==='FINALIZING') {
+    return kf032ProcessingIsMatchSlot(state) ? 'Spieltag wird verarbeitet …' : 'Nächster Kalenderslot wird verarbeitet …';
   }
-  if (state.status==='LOCKING') return 'Runde wird gesperrt ...';
-  if (state.status==='MATCHDAY') return state.matchdayPlan && state.matchdayPlan.hasLiveFixtures ? 'Live-Spieltag läuft ...' : 'Spieltag wird schnellberechnet ...';
-  if (state.status==='FINALIZING') return 'Spieltag wird abgeschlossen ...';
-  var meReady=kf032CurrentUserReady(state);
+  if (state.status==='MATCHDAY') {
+    if(state.matchdayPlan && state.matchdayPlan.hasLiveFixtures)return 'Live-Spieltag läuft …';
+    return kf032ProcessingIsMatchSlot(state) ? 'Spieltag wird verarbeitet …' : 'Nächster Kalenderslot wird verarbeitet …';
+  }
   if (state.timeModel==='FIXED_SCHEDULE') {
-    return (meReady?'Bereit · ':'')+String(ready)+'/'+String(total||'?')+' Trainer bereit · fester Termin'+suffix;
+    var fixed='Nächster Rundenwechsel · '+kf032FixedDeadlineLabel(state);
+    if(remaining!=null && remaining<=300)fixed+=' · '+kf032FormatCountdown(remaining);
+    return fixed;
   }
-  return (meReady?'Bereit · ':'')+String(ready)+'/'+String(total||'?')+' Trainer bereit'+suffix;
+  var text=String(ready)+'/'+String(total||'?')+' Trainer bereit';
+  if(state.deadlineAt && remaining!=null)text+=' · '+kf032FormatCountdown(remaining)+' verbleibend';
+  return text;
 }
 function kf032CurrentUserReady(state){
   var userId=String(((KF029Remote||{}).user||{}).userId||'');
@@ -25199,40 +25250,14 @@ async function kf031ReleaseProgressLease(worldId, expectedRevision, leaseId){
 }
 
 async function kf032AdvanceClaimedRound(state,actionEl){
-  if (!state || !state.shouldAdvance || !state.leaseId || !AppState.worldRecord) return state;
-  KF029Remote.progressLeaseId=state.leaseId;
+  // KF_0.32.0: Der Browser ist nur Anzeige. Die fachliche Progression läuft serverseitig.
+  if (!state || !AppState.worldRecord) return state;
   KF029Remote.progression=state;
   KF029Remote.roundGeneration=Number(state.roundGeneration || KF029Remote.roundGeneration || 1);
-  KF029Remote.message='Spieltag wird verarbeitet ...';
+  KF029Remote.progressLeaseId=null;
+  KF029Remote.message=kf031ProgressMessage(state);
   renderApp();
-  var record=AppState.worldRecord;
-  var expectedRevision=KF029Remote.revision;
-  var beforeSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
-  var beforeSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
-  AppState.ui.deferCupDrawPresentation=true;
-  try {
-    kf029BaseHandleAction('office-advance',actionEl);
-  } finally {
-    AppState.ui.deferCupDrawPresentation=false;
-  }
-  var afterSlot=((((AppState.world||{}).calendar||{}).currentSlotKey)||null);
-  var afterSeason=Number((((AppState.world||{}).meta||{}).seasonNumber)||1);
-  var postAdvanceDelta=kf031BuildWorldDelta(record);
-  var requiresProgressCheckpoint=kf031DeltaTouchesProgression(postAdvanceDelta);
-  if(afterSlot!==beforeSlot || afterSeason!==beforeSeason || requiresProgressCheckpoint){
-    await kf029CommitHardCheckpoint('calendar-slot');
-    KF029Remote.progression=null;
-    KF029Remote.progressLeaseId=null;
-    KF029Remote.scopeRevisions={};
-    KF029Remote.roundGeneration=Number(KF029Remote.roundGeneration||1)+1;
-    KF029Remote.message=KF029Remote.managementDirty ? 'Spielstand bestätigt · neue Änderungen werden gespeichert.' : 'Spielstand gespeichert.';
-    if (!presentNextQueuedCupDraw()) renderApp();
-  } else {
-    await kf031ReleaseProgressLease(record.id,expectedRevision,state.leaseId);
-    KF029Remote.progressLeaseId=null;
-    KF029Remote.progression=null;
-    if (kf031DeltaHasOps(postAdvanceDelta)) kf031MarkManagementDirty('office-advance-local-management',false);
-  }
+  kf032ScheduleProgressPoll(actionEl,1000);
   return state;
 }
 function kf032ScheduleProgressPoll(actionEl,delayMs){
@@ -25254,24 +25279,21 @@ async function kf032PollProgressAndMaybeAdvance(actionEl){
     KF029Remote.roundGeneration=Number(state.roundGeneration || KF029Remote.roundGeneration || 1);
     KF029Remote.scopeRevisions=Object.assign({},state.scopeRevisions || KF029Remote.scopeRevisions || {});
     if (Number(state.revision)!==Number(KF029Remote.revision)) {
-      KF029Remote.message='Die Runde wurde fortgesetzt. Neuer Stand wird geladen ...';
+      KF029Remote.message='Die Runde wurde fortgesetzt. Neuer Stand wird geladen …';
       renderApp();
       await kf029LoadWorld(record.id);
       return state;
     }
     KF029Remote.message=kf031ProgressMessage(state);
     renderApp();
-    if (state.shouldAdvance && state.leaseId) {
-      return await kf032AdvanceClaimedRound(state,actionEl);
-    }
-    if (state.status!=='OPEN' || state.deadlineAt || kf032CurrentUserReady(state)) {
-      kf032ScheduleProgressPoll(actionEl,1000);
-    }
+    var active=state.status!=='OPEN' || !!state.deadlineAt || kf032CurrentUserReady(state);
+    kf032ScheduleProgressPoll(actionEl,active?1000:4500);
     return state;
   } catch(error) {
     KF029Remote.error='Rundenstatus konnte nicht aktualisiert werden: '+(error.message||'Unbekannter Fehler');
     renderApp();
-    throw error;
+    kf032ScheduleProgressPoll(actionEl,5000);
+    return null;
   } finally {
     KF029Remote.progressRequestPending=false;
   }
@@ -25305,7 +25327,12 @@ async function kf031RequestReadyAndMaybeAdvance(actionEl){
     KF029Remote.roundGeneration=Number((state&&state.roundGeneration)||KF029Remote.roundGeneration||1);
     KF029Remote.message=kf031ProgressMessage(state);
     renderApp();
-    if (state && state.shouldAdvance && state.leaseId) return await kf032AdvanceClaimedRound(state,actionEl);
+    if (state && Number(state.revision)!==Number(KF029Remote.revision)) {
+      KF029Remote.message='Die Runde wurde fortgesetzt. Neuer Stand wird geladen …';
+      renderApp();
+      await kf029LoadWorld(record.id);
+      return state;
+    }
     kf032ScheduleProgressPoll(actionEl,1000);
     return state;
   } catch(error) {
@@ -25407,21 +25434,24 @@ function kf029WorldPolicyLabel(world){
 }
 function kf029OpenWorldCreateModal(){
   KF029Remote.error='';
+  var detectedTimezone='UTC';
+  try{detectedTimezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch(error){}
   openModal({
     title:'Neue Spielwelt',
     bodyHtml:
       '<div class="kf-world-create-form">' +
       '<label class="kf-world-create-label">Name der Spielwelt<input id="kf-world-name" class="kf-auth-input" maxlength="40" placeholder="z. B. Nordlicht Karriere"></label>' +
       '<label class="kf-world-create-label">Beschreibung<textarea id="kf-world-description" class="kf-auth-input" maxlength="200" rows="3" placeholder="z. B. Langzeitwelt für aktive Manager"></textarea></label>' +
-      '<label class="kf-world-create-label">Beitritt zur Spielwelt<select id="kf-world-access" class="kf-auth-input">' +
-      '<option value="PRIVATE:INVITE_ONLY">Private Welt · nur Einladungen</option>' +
-      '<option value="PUBLIC:APPLICATION">Bewerbungswelt · Beitritt nach Freigabe</option>' +
-      '<option value="PUBLIC:OPEN">Offene Welt · freie Vereine direkt wählbar</option>' +
-      '</select></label>' +
+      '<label class="kf-world-create-label">Beitritt zur Spielwelt<select id="kf-world-access" class="kf-auth-input"><option value="PRIVATE:INVITE_ONLY">Private Welt · nur Einladungen</option><option value="PUBLIC:APPLICATION">Bewerbungswelt · Beitritt nach Freigabe</option><option value="PUBLIC:OPEN">Offene Welt · freie Vereine direkt wählbar</option></select></label>' +
+      '<label class="kf-world-create-label">Rundentakt<select id="kf-world-time-model" class="kf-auth-input"><option value="COUNTDOWN">Countdown · früher weiter, sobald alle fertig sind</option><option value="FIXED_SCHEDULE">Fester Spielplan · nur zu festen Terminen</option></select></label>' +
+      '<label class="kf-world-create-label">Countdown-Dauer<select id="kf-world-countdown" class="kf-auth-input"><option value="600">10 Minuten</option><option value="1800">30 Minuten</option><option value="3600">1 Stunde</option><option value="7200">2 Stunden</option><option value="14400">4 Stunden</option><option value="28800">8 Stunden</option><option value="43200">12 Stunden</option><option value="86400" selected>24 Stunden</option><option value="172800">48 Stunden</option><option value="259200">72 Stunden</option></select></label>' +
+      '<div class="kf-world-create-label">Feste Wochentage<div class="kf-auth-hint"><label><input id="kf-world-fixed-day-1" type="checkbox" checked> Mo</label> · <label><input id="kf-world-fixed-day-2" type="checkbox"> Di</label> · <label><input id="kf-world-fixed-day-3" type="checkbox" checked> Mi</label> · <label><input id="kf-world-fixed-day-4" type="checkbox"> Do</label> · <label><input id="kf-world-fixed-day-5" type="checkbox" checked> Fr</label> · <label><input id="kf-world-fixed-day-6" type="checkbox"> Sa</label> · <label><input id="kf-world-fixed-day-0" type="checkbox"> So</label></div></div>' +
+      '<label class="kf-world-create-label">Feste Uhrzeit<input id="kf-world-fixed-time" class="kf-auth-input" type="time" value="20:00"></label>' +
+      '<label class="kf-world-create-label">Welt-Zeitzone<input id="kf-world-timezone" class="kf-auth-input" value="'+escapeHtml(detectedTimezone)+'" readonly></label>' +
+      '<div class="kf-auth-hint">Countdown: „Runde abschließen“ sperrt nur dich; sobald alle Trainer fertig sind, geht es sofort weiter. Fester Spielplan: kein Weiter-Button und kein vorzeitiges Weiterschalten.</div>' +
       '<div class="kf-auth-hint">Für einen Mehrspielertest wähle „Offene Welt“. Ein zweites Benutzerkonto findet die Welt unter „Alle Welten“, kann auf „Beitreten“ klicken und anschließend einen freien Verein wählen. Private Welten bleiben ohne Einladung geschlossen.</div>' +
       '<div id="kf-world-create-error" class="kf-world-create-error"></div>' +
-      '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-create-world-confirm">Spielwelt erstellen</button></div>' +
-      '</div>'
+      '<div class="action-row"><button class="primary-btn" type="button" data-action="kf-create-world-confirm">Spielwelt erstellen</button></div></div>'
   });
   renderModal();
 }
@@ -25429,6 +25459,10 @@ function kf029ConfirmWorldCreate(){
   var nameInput=document.getElementById('kf-world-name');
   var descriptionInput=document.getElementById('kf-world-description');
   var accessInput=document.getElementById('kf-world-access');
+  var timeModelInput=document.getElementById('kf-world-time-model');
+  var countdownInput=document.getElementById('kf-world-countdown');
+  var fixedTimeInput=document.getElementById('kf-world-fixed-time');
+  var timezoneInput=document.getElementById('kf-world-timezone');
   var worldName=String(nameInput&&nameInput.value||'').trim().replace(/\s+/g,' ');
   var description=String(descriptionInput&&descriptionInput.value||'').trim().replace(/\s+/g,' ').slice(0,200);
   var errorNode=document.getElementById('kf-world-create-error');
@@ -25439,7 +25473,19 @@ function kf029ConfirmWorldCreate(){
   var activeWorldCount=(KF029Remote.worlds||[]).filter(function(world){return world&&world.isMember;}).length;
   if(activeWorldCount>=5){ if(errorNode)errorNode.textContent='Du bist bereits an 5 aktiven Spielwelten beteiligt. Verlasse oder lösche zuerst eine Welt.'; return; }
   var access=kf029WorldAccessConfig(accessInput&&accessInput.value);
-  KF029Remote.pendingWorldConfig={worldName:worldName,description:description,visibility:access.visibility,joinPolicy:access.joinPolicy};
+  var timeModel=String(timeModelInput&&timeModelInput.value||'COUNTDOWN').toUpperCase()==='FIXED_SCHEDULE'?'FIXED_SCHEDULE':'COUNTDOWN';
+  var countdownSeconds=Math.max(600,Number(countdownInput&&countdownInput.value||86400));
+  var fixedWeekdays=[];
+  [0,1,2,3,4,5,6].forEach(function(day){var node=document.getElementById('kf-world-fixed-day-'+day);if(node&&node.checked)fixedWeekdays.push(day);});
+  var fixedTime=String(fixedTimeInput&&fixedTimeInput.value||'20:00');
+  var timezone=String(timezoneInput&&timezoneInput.value||'UTC');
+  if(timeModel==='FIXED_SCHEDULE'&&!fixedWeekdays.length){if(errorNode)errorNode.textContent='Wähle für den festen Spielplan mindestens einen Wochentag.';return;}
+  KF029Remote.pendingWorldConfig={
+    worldName:worldName,description:description,visibility:access.visibility,joinPolicy:access.joinPolicy,
+    runtimeSettings:timeModel==='FIXED_SCHEDULE'
+      ? {roundTimeModel:'FIXED_SCHEDULE',fixedScheduleWeekdays:fixedWeekdays,fixedScheduleTime:fixedTime,timezone:timezone}
+      : {roundTimeModel:'COUNTDOWN',roundDurationSeconds:countdownSeconds,timezone:timezone}
+  };
   closeModal();renderModal();
   KF029Remote.revision=null;
   KF029Remote.membership=null;
@@ -25458,6 +25504,9 @@ function kf029ConfirmWorldCreate(){
   KF029Remote.error='';
   KF029Remote.message='Neue Welt wird vorbereitet ...';
   startNewCareer();
+  if(AppState.worldRecord&&KF029Remote.pendingWorldConfig&&KF029Remote.pendingWorldConfig.runtimeSettings){
+    AppState.worldRecord.runtimeSettings=Object.assign({},AppState.worldRecord.runtimeSettings||{},KF029Remote.pendingWorldConfig.runtimeSettings);
+  }
   setCurrentView('start');
   renderApp();
   KF029Remote.createPromise=kf029CreateRemoteWorld().then(function(data){
