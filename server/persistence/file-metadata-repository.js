@@ -99,7 +99,8 @@ class FileMetadataRepository {
 
   async setWorldLobbyProjection({
     worldId, currentSeason = 1, maxPlayers = 0, clubNamesById = {},
-    roundTimeModel = TIME_MODEL_COUNTDOWN, roundDurationSeconds = 120, nextRoundAt = null
+    roundTimeModel = TIME_MODEL_COUNTDOWN, roundDurationSeconds = 120, nextRoundAt = null,
+    fixedScheduleWeekdays = [], fixedScheduleTime = null, timezone = 'UTC'
   }) {
     return this._mutate(data => {
       const world = data.worlds[worldId];
@@ -110,6 +111,9 @@ class FileMetadataRepository {
       world.roundTimeModel = roundTimeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
       world.roundDurationSeconds = Math.max(15, Number(roundDurationSeconds || 120));
       world.nextRoundAt = nextRoundAt || null;
+      world.fixedScheduleWeekdays = Array.isArray(fixedScheduleWeekdays) ? fixedScheduleWeekdays.map(Number).filter(Number.isInteger) : [];
+      world.fixedScheduleTime = fixedScheduleTime || null;
+      world.timezone = String(timezone || 'UTC');
       world.projectionUpdatedAt = nowIso();
       return world;
     });
