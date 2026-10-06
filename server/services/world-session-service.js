@@ -1179,6 +1179,12 @@ class WorldSessionService {
   }
 
   async assignClub({ userId, worldId, clubId, expectedRevision }) {
+    const manifest = await this.worlds.getManifest(worldId);
+    if (!manifest) throw new DomainRuleError('Active world not found');
+    const ensured = await this._ensureRound(worldId, manifest.revision);
+    if (ensured.state.roundSetupRequired) {
+      throw new DomainRuleError('World round settings require initial setup before a club can be assigned');
+    }
     const result = await this.runtime.assignClub({ userId, worldId, clubId, expectedRevision });
     await this._syncParticipationProjection(worldId, result.membership).catch(() => {});
     return result;
