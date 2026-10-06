@@ -78,6 +78,20 @@ class FileMetadataRepository {
       .map(p => p.userId);
   }
 
+  async listActiveAssignedUserIdsForWorld(worldId) {
+    const data = await this._read();
+    return Object.values(data.participationIndex)
+      .filter(p => p.worldId === worldId && p.status === STATUS_ACTIVE && p.clubId)
+      .map(p => p.userId);
+  }
+
+  async listActiveWorldIds() {
+    const data = await this._read();
+    return Object.values(data.worlds)
+      .filter(world => world && world.status === 'ACTIVE')
+      .map(world => world.worldId);
+  }
+
   async getWorld(worldId) {
     const data = await this._read();
     return data.worlds[worldId] ? clone(data.worlds[worldId]) : null;
