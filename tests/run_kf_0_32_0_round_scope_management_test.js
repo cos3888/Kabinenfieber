@@ -355,7 +355,7 @@ function makeWorldRecord(worldId,userId){
 
     const countdownWorld='world-countdown-offline';
     const countdownRecord=makeWorldRecord(countdownWorld,'cA');
-    countdownRecord.runtimeSettings={roundTimeModel:'COUNTDOWN',roundDurationSeconds:120};
+    countdownRecord.runtimeSettings={roundTimeModel:'COUNTDOWN',roundDurationSeconds:600,timezone:'Europe/Berlin'};
     const countdownCreated=await sessions.createWorld({
       userId:'cA',worldRecord:countdownRecord,worldName:'Countdown Offline',
       visibility:'PUBLIC',joinPolicy:'OPEN'
