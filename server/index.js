@@ -395,6 +395,51 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const initializeRoundSettingsWorldId = worldIdFromPath(pathname, '/round-settings/initialize');
+    if (req.method === 'POST' && initializeRoundSettingsWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const result = await persistence.worldSessions.initializeRoundSettings({
+        userId:auth.user.userId,
+        worldId:initializeRoundSettingsWorldId,
+        expectedRevision:body.expectedRevision,
+        settings:body.settings
+      });
+      await sendJson(req, res, 200, { ok:true, ...result });
+      return;
+    }
+
+    const proposeRoundSettingsWorldId = worldIdFromPath(pathname, '/round-settings/proposal');
+    if (req.method === 'POST' && proposeRoundSettingsWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const progression = await persistence.worldSessions.proposeRoundSettingsChange({
+        userId:auth.user.userId,
+        worldId:proposeRoundSettingsWorldId,
+        settings:body.settings,
+        evaluationRoundGeneration:body.evaluationRoundGeneration,
+        effectiveRoundGeneration:body.effectiveRoundGeneration
+      });
+      await sendJson(req, res, 200, { ok:true, progression });
+      return;
+    }
+
+    const voteRoundSettingsWorldId = worldIdFromPath(pathname, '/round-settings/vote');
+    if (req.method === 'POST' && voteRoundSettingsWorldId) {
+      const auth = await requireAuth(req);
+      const body = await readJsonBody(req);
+      requireClientVersion(body);
+      const progression = await persistence.worldSessions.castRoundSettingsVote({
+        userId:auth.user.userId,
+        worldId:voteRoundSettingsWorldId,
+        vote:body.vote
+      });
+      await sendJson(req, res, 200, { ok:true, progression });
+      return;
+    }
+
     const readyWorldId = worldIdFromPath(pathname, '/ready');
     if (req.method === 'POST' && readyWorldId) {
       const auth = await requireAuth(req);
