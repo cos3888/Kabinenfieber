@@ -79,6 +79,7 @@ Altwelt ohne gueltige KF_0.32.0-Rundeneinstellung:
 - `_roundConfig(record)` liefert `setupRequired:true` statt eines stillen COUNTDOWN-Defaults;
 - `roundSetupRequired` blockiert Ready, Management-Saves, Vereinsuebernahme und direkten Slotfortschritt;
 - Weltbeitritt/Lesen bleibt moeglich;
+- der gesperrte Pflichtdialog besitzt bewusst keinen X-/Backdrop-Bypass, aber einen sicheren `Zur Weltliste`-Pfad (`kf-exit-world-discard`) fuer Admin und Mitspieler;
 - nur `WORLD_ADMIN` darf `initializeRoundSettings()` ausfuehren;
 - die Ersteinrichtung schreibt direkt und autoritativ nach `WorldRecord.runtimeSettings` und erzeugt **keine** Abstimmung;
 - COUNTDOWN startet danach weiterhin erst mit dem ersten Ready;
