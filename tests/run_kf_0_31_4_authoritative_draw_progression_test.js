@@ -44,7 +44,7 @@ function country(w,id){return (w.clubs.byId[id]||{}).countryName;}
 function makeServerWorld(worldId,userId){
   return{
     id:worldId,schemaVersion:'kf-world-record-0.27.2',gameVersion:'0.31.4',createdAt:new Date().toISOString(),createdByUserId:userId,
-    creationRules:{startVariant:'classic',leagueConfiguration:'default',clubSelection:'manual'},runtimeSettings:{roundDurationHours:null},
+    creationRules:{startVariant:'classic',leagueConfiguration:'default',clubSelection:'manual'},runtimeSettings:{roundTimeModel:'COUNTDOWN',roundDurationSeconds:600,timezone:'Europe/Berlin'},
     progression:{status:'waiting',deadlineAt:null,readyTrainerIds:[],lastHumanActivityAt:new Date().toISOString()},
     memberships:{byTrainerId:{'trainer-a':{trainerId:'trainer-a',userProfileId:userId,clubId:'club-a',status:'active',joinedAt:new Date().toISOString(),lastActivityAt:new Date().toISOString(),trainerDisplayName:'A',role:'WORLD_ADMIN'}},order:['trainer-a']},
     gameState:{
