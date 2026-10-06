@@ -679,8 +679,9 @@ class WorldSessionService {
     if (state.status === ROUND_STATUS_OPEN || state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) {
       state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds, null) || state;
     }
-    if (state && state.shouldAdvance && (state.status === ROUND_STATUS_MATCHDAY || state.status === ROUND_STATUS_FINALIZING)) {
-      return this._executeClaimedProgression(worldId, manifest.revision, state);
+    if (state && (state.status === ROUND_STATUS_FINALIZING ||
+        (state.shouldAdvance && state.status === ROUND_STATUS_MATCHDAY))) {
+      return this._executeClaimedProgression(worldId, manifest.revision, { ...state, shouldAdvance:true });
     }
     if (state && state.status === ROUND_STATUS_MATCHDAY) {
       const plan = state.matchdayPlan || {};
