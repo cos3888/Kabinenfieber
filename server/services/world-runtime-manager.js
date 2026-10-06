@@ -343,7 +343,8 @@ class WorldRuntimeManager {
         revision:runtime.revision,
         currentSeason:runtime.currentSeason,
         committedAt:manifest.committedAt,
-        advanceResult:clone(executed.advanceResult)
+        advanceResult:clone(executed.advanceResult),
+        worldRecord:clone(nextRecord)
       };
     });
   }
