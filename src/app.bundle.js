@@ -25119,6 +25119,7 @@ function kf029RestoreCurrentDetails(world, matches, financeEvents){
   if (typeof kf0261ResetBonusRuntimeIndex === 'function') kf0261ResetBonusRuntimeIndex(world);
 }
 function kf029InstallLoadedWorld(data){
+  var roundSetupWasRequired=!!(KF029Remote.progression&&KF029Remote.progression.roundSetupRequired);
   var record = data.worldRecord;
   if (!record || !record.id || !record.gameState) throw new Error('Serverwelt ist unvollstaendig.');
   kf031ResetManagementSaveState();
@@ -25173,9 +25174,17 @@ function kf029InstallLoadedWorld(data){
     setSelectedLeagueKey(leagues[0] || null);
     setCurrentView('club-selection');
   }
+  var roundSetupResolved=roundSetupWasRequired&&!(KF029Remote.progression&&KF029Remote.progression.roundSetupRequired);
+  if(roundSetupResolved){
+    AppState.ui.modalStack=[];
+    AppState.ui.modal=null;
+    KF029Remote.message='Spielrhythmus festgelegt: '+kf032RoundSettingsText(record.runtimeSettings||{});
+  }
   renderApp(); renderModal();
   if (KF029Remote.progression && KF029Remote.progression.roundSetupRequired) {
     kf032OpenRoundSettingsModal(true);
+  }else if(roundSetupResolved){
+    kf032OpenRoundSettingsModal(false);
   }
   if (KF029Remote.user && AppState.worldRecord) {
     kf032ScheduleProgressPoll(null,250);
