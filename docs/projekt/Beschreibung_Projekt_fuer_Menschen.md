@@ -1,4 +1,4 @@
-# Kabinenfieber - Stand KF_0.31.4
+# Kabinenfieber - Stand KF_0.32.0
 
 ## 1. Was ist Kabinenfieber?
 
@@ -8,7 +8,7 @@ Grundsatz der Entwicklung: vorhandene Systeme zuerst sauber abschliessen und tec
 
 ## 2. Aktueller Versionsstand
 
-App-Version: `KF_0.31.4`
+App-Version: `KF_0.32.0`
 
 Persistierte Schemas:
 
@@ -18,6 +18,92 @@ Persistierte Schemas:
 KF_0.26.0 begann den Historien-/Ressourcenumbau, KF_0.26.1 entfernte die redundante BonusEvent-Historie und KF_0.26.2 schloss Spielerlebenszyklus, Staerkehistorie und Ruhestaendler ab. KF_0.27.0 startete den Server-/Persistenzumbau mit ausgelagerten Vollmatches. KF_0.27.1 lagert nun auch die FinanceEvents der laufenden Saison aus dem monolithischen WorldRecord aus.
 
 
+
+## KF_0.32.0 – Multiplayer Round Progression
+
+KF_0.32.0 fuehrt den gemeinsamen Rundentakt fuer Mehrspielerwelten ein und verlagert den autoritativen Kalenderfortschritt vom Browser auf den Server.
+
+### Rundenmodelle
+
+**COUNTDOWN**
+- Im Buero gibt es „Runde abschliessen“.
+- Vor Ready werden offene Managementaenderungen serverseitig bestaetigt.
+- Das erste Ready startet den gemeinsamen, serverseitigen `deadlineAt`.
+- Der fertige Trainer ist fuer den aktuellen Slot sofort read-only, darf aber weiter navigieren und Informationen ansehen.
+- Direkte Nebenpfade wie Aufstellungs-Drag&Drop sind ebenfalls gesperrt.
+- Nur aktive Trainer mit zugewiesenem Verein zaehlen.
+- Sobald alle aktiven Trainer Ready sind, wird sofort fortgeschritten.
+- Andernfalls ist der Countdown die maximale Wartezeit.
+- Unterstuetzte Stufen: 10/30 Minuten, 1/2/4/8/12/24/48/72 Stunden.
+
+**FIXED_SCHEDULE**
+- Feste Wochentage und Uhrzeit werden als Weltregel gespeichert.
+- Die Welt speichert eine eindeutige Zeitzone.
+- Es gibt keinen Ready-/Weiter-Button und kein vorzeitiges Fortschreiten.
+- Bis zum Termin bleibt Management moeglich.
+- In den letzten fuenf Minuten wird zusaetzlich ein Countdown angezeigt.
+- Zum Termin wird der Slot serverseitig geschlossen und verarbeitet.
+
+### Serverautoritativer Fortschritt
+
+Der Browser ist nur Client und Anzeige. Er pollt den Progression-State moderat und berechnet sichtbare Countdowns lokal aus dem serverseitigen `deadlineAt`.
+
+Der eigentliche Fortschritt laeuft ueber:
+- stabilen `roundGeneration`;
+- `progressionRunId` und Lease;
+- Statusfolge `OPEN -> LOCKING -> MATCHDAY -> FINALIZING -> OPEN`;
+- `HeadlessProgressionEngine`, die den vorhandenen Kalender-/Simulationskern serverseitig ausfuehrt;
+- `runDueProgression()` / `sweepDueProgressions()`;
+- geschuetzten Recovery-/Wake-Endpunkt `POST /api/v1/internal/progression/sweep`.
+
+`MATCHDAY` bleibt vorerst als interne historische Statusbezeichnung bestehen, wird aber nicht pauschal in die UI uebersetzt. Ohne nachgewiesenen Match-Slot zeigt die UI neutral „Naechster Kalenderslot wird verarbeitet …“.
+
+Exactly-once wird fachlich ueber stabile Run-ID, Lease, World-Revision und FINALIZING-Recovery abgesichert. Ein Crash nach World-Commit, aber vor Metadata-Finalisierung, wird repariert, ohne Match, Finanzen, Auslosung oder Kalenderfortschritt erneut anzuwenden.
+
+### Multiplayer-Regeln
+
+- Mehrere Kalenderslots duerfen in Multiplayerwelten nicht per „bis Datum X simulieren“ uebersprungen werden.
+- Die Schnellberechnung eines einzelnen Matches bleibt bestehen.
+- Bei Schnellberechnung uebernimmt der Co-Trainer das gesamte Match; ein spaeterer Live-Einstieg ist ausgeschlossen.
+- Bei Mensch-gegen-Mensch reicht spaeter ein Live-Wunsch eines Beteiligten fuer ein Live-Match.
+- Ein bereits als QUICK bestaetigter Spieler kann seinen Wunsch fuer dieses Match nicht nachtraeglich auf LIVE aendern.
+
+### Zentrale Datenquellen
+
+Keine doppelte fachliche Wahrheit:
+- aktuelle Spieler: `world.players.byId`
+- Kader/Aufstellung/Taktik: `world.squads`
+- Kalender/Fixture-Status: `world.calendar.fixtures`
+- historische Matchwahrheit: `world.history.matches` plus bestehende ausgelagerte Matchdetails
+- Mailbox: `world.clubMailboxes.byClub[clubId]`
+- Membership/Ownership: serverseitiges `WorldRecord.memberships`
+- Welt-Rundenkonfiguration: `WorldRecord.runtimeSettings`
+- Texte/Regeln: `StaticData`
+
+Der Progression-State mit `roundGeneration`, Status, Ready-Usern, `deadlineAt`, `progressionRunId` und Scope-Revisions ist operativer Laufzustand/Projektion, keine zweite Konfigurationswahrheit.
+
+### Regressionen
+
+Neue/erweiterte Tests:
+- `tests/run_kf_0_32_0_round_scope_management_test.js`
+- `tests/run_kf_0_32_0_browser_round_coordination_test.js`
+- `tests/run_kf_0_32_0_server_progression_runner_test.js`
+
+Abgedeckt sind unter anderem:
+- zwei und 18 menschliche Manager;
+- Ready-Lock und weiterhin moegliche Navigation;
+- Countdown-Synchronisation ohne F5;
+- Benutzer ohne Verein blockieren nicht;
+- Fixed Schedule ohne Early-Advance;
+- Offline-/Wake-Progression;
+- parallele/doppelte Wakes;
+- Retry und Crash-Recovery nach World-Commit;
+- keine doppelten Matches, Finanzen oder Kalenderfortschritte;
+- serverseitige Ownership/Scope-Isolation;
+- direkte Aufstellungs-Drag&Drop-Sperre nach Ready;
+- Regressionen KF_0.31.2 bis KF_0.31.4 und aktuelle Core-Suite.
+
+Der Testdienst bleibt bei 1 GiB. Das Produktivbackend wird im Rahmen dieses Arbeits-PRs nicht veraendert. PR #11 bleibt bis zur ausdruecklichen Freigabe ungemergt.
 
 ## KF_0.31.4 – Save Object Isolation & Existing World Integrity
 
