@@ -7,6 +7,7 @@ const {
   TIME_MODEL_COUNTDOWN, TIME_MODEL_FIXED_SCHEDULE,
   mergeWorldDeltas, findConflictingDeltaPath
 } = require('../domain/round-management');
+const { voteSummary } = require('../domain/round-settings');
 const { STATUS_ACTIVE, STATUS_LEFT, MAX_WORLD_SLOTS, MAX_ACTIVE_WORLDS_PER_USER } = require('./file-metadata-repository');
 
 function nowIso() { return new Date().toISOString(); }
@@ -67,7 +68,8 @@ class FirestoreMetadataRepository {
   async setWorldLobbyProjection({
     worldId, currentSeason = 1, maxPlayers = 0, clubNamesById = {},
     roundTimeModel = TIME_MODEL_COUNTDOWN, roundDurationSeconds = 120, nextRoundAt = null,
-    fixedScheduleWeekdays = [], fixedScheduleTime = null, timezone = 'UTC'
+    fixedScheduleWeekdays = [], fixedScheduleTime = null, timezone = 'UTC',
+    roundConfigured = true, roundSetupRequired = false
   }) {
     const ref = this._world(worldId);
     const doc = await ref.get();
@@ -76,12 +78,20 @@ class FirestoreMetadataRepository {
       currentSeason: Number(currentSeason || 1),
       maxPlayers: Number(maxPlayers || 0),
       clubNamesById: clubNamesById || {},
-      roundTimeModel:roundTimeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN,
-      roundDurationSeconds:Math.max(15, Number(roundDurationSeconds || 120)),
-      nextRoundAt:nextRoundAt || null,
-      fixedScheduleWeekdays:Array.isArray(fixedScheduleWeekdays) ? fixedScheduleWeekdays.map(Number).filter(Number.isInteger) : [],
-      fixedScheduleTime:fixedScheduleTime || null,
-      timezone:String(timezone || 'UTC'),
+      roundConfigured:Boolean(roundConfigured),
+      roundSetupRequired:Boolean(roundSetupRequired),
+      roundTimeModel:roundConfigured
+        ? (roundTimeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN)
+        : null,
+      roundDurationSeconds:roundConfigured && roundTimeModel !== TIME_MODEL_FIXED_SCHEDULE
+        ? Math.max(15, Number(roundDurationSeconds || 120))
+        : null,
+      nextRoundAt:roundConfigured ? (nextRoundAt || null) : null,
+      fixedScheduleWeekdays:roundConfigured && Array.isArray(fixedScheduleWeekdays)
+        ? fixedScheduleWeekdays.map(Number).filter(Number.isInteger)
+        : [],
+      fixedScheduleTime:roundConfigured ? (fixedScheduleTime || null) : null,
+      timezone:roundConfigured ? String(timezone || 'UTC') : null,
       projectionUpdatedAt: nowIso()
     };
     await ref.set(patch, { merge:true });
@@ -247,7 +257,9 @@ class FirestoreMetadataRepository {
     return doc.exists ? doc.data() : null;
   }
 
-  async ensureWorldRound({ worldId, revision, timeModel = TIME_MODEL_COUNTDOWN, fixedDeadlineAt = null }) {
+  async ensureWorldRound({
+    worldId, revision, timeModel = TIME_MODEL_COUNTDOWN, fixedDeadlineAt = null, setupRequired = false
+  }) {
     const ref = this._progression(worldId);
     return this.db.runTransaction(async tx => {
       const doc = await tx.get(ref);
@@ -258,28 +270,148 @@ class FirestoreMetadataRepository {
           revision:Number(revision),
           roundGeneration:1,
           status:ROUND_STATUS_OPEN,
-          timeModel:timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN,
+          roundSetupRequired:Boolean(setupRequired),
+          timeModel:setupRequired ? null : (timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN),
           readyUserIds:[],
-          deadlineAt:fixedDeadlineAt || null,
+          deadlineAt:setupRequired ? null : (timeModel === TIME_MODEL_FIXED_SCHEDULE ? (fixedDeadlineAt || null) : null),
           progressionRunId:null,
           leaseId:null,
           leaseExpiresAt:null,
           lastCompletedProgressionRunId:null,
           matchIntentByUserId:{},
-          matchdayPlan:null
+          matchdayPlan:null,
+          pendingRoundSettingsChange:null,
+          lastRoundSettingsDecision:null
         };
       } else {
         if (!state.roundGeneration) state.roundGeneration = 1;
         if (state.status === 'WAITING') state.status = ROUND_STATUS_OPEN;
         if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
-      state.matchIntentByUserId = state.matchIntentByUserId || {};
-      if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
-        if (!state.timeModel) state.timeModel = TIME_MODEL_COUNTDOWN;
+        state.matchIntentByUserId = state.matchIntentByUserId || {};
+        if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
+        if (!Object.prototype.hasOwnProperty.call(state,'pendingRoundSettingsChange')) state.pendingRoundSettingsChange = null;
+        if (!Object.prototype.hasOwnProperty.call(state,'lastRoundSettingsDecision')) state.lastRoundSettingsDecision = null;
+        if (!Object.prototype.hasOwnProperty.call(state,'roundSetupRequired')) state.roundSetupRequired = false;
         if (state.status === ROUND_STATUS_OPEN) {
           state.revision = Number(revision);
-          state.timeModel = timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
-          if (state.timeModel === TIME_MODEL_FIXED_SCHEDULE && fixedDeadlineAt) state.deadlineAt = fixedDeadlineAt;
+          const wasSetupRequired = Boolean(state.roundSetupRequired);
+          state.roundSetupRequired = Boolean(setupRequired);
+          if (state.roundSetupRequired) {
+            state.timeModel = null;
+            state.readyUserIds = [];
+            state.deadlineAt = null;
+            state.matchIntentByUserId = {};
+          } else {
+            const nextModel = timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN;
+            if (wasSetupRequired || state.timeModel !== nextModel) {
+              state.timeModel = nextModel;
+              state.readyUserIds = [];
+              state.matchIntentByUserId = {};
+              state.deadlineAt = nextModel === TIME_MODEL_FIXED_SCHEDULE ? (fixedDeadlineAt || null) : null;
+            } else if (nextModel === TIME_MODEL_FIXED_SCHEDULE && !state.deadlineAt && fixedDeadlineAt) {
+              state.deadlineAt = fixedDeadlineAt;
+            }
+          }
         }
+      }
+      tx.set(ref, state);
+      return state;
+    });
+  }
+
+  async proposeRoundSettingsChange({
+    worldId, userId, roundGeneration, proposedSettings,
+    evaluationRoundGeneration, effectiveRoundGeneration
+  }) {
+    const ref = this._progression(worldId);
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) throw new DomainRuleError('Round state not found');
+      const state = doc.data();
+      if (state.roundSetupRequired) throw new DomainRuleError('Initial round settings must be completed before proposing changes');
+      if (state.status !== ROUND_STATUS_OPEN) throw new DomainRuleError('Round settings can only be proposed while the round is open');
+      if (Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Round generation mismatch');
+      if (state.pendingRoundSettingsChange) throw new DomainRuleError('A round settings proposal is already active');
+
+      const current = Number(state.roundGeneration);
+      const evaluation = Number(evaluationRoundGeneration);
+      const effective = Number(effectiveRoundGeneration);
+      if (!Number.isInteger(evaluation) || evaluation < current + 1) {
+        throw new DomainRuleError('Round settings vote cannot be evaluated before the next full slot has passed', {
+          earliestEvaluationRoundGeneration:current + 1
+        });
+      }
+      if (!Number.isInteger(effective) || effective < evaluation + 1) {
+        throw new DomainRuleError('Round settings cannot become effective before the vote has ended', {
+          earliestEffectiveRoundGeneration:evaluation + 1
+        });
+      }
+
+      const proposal = {
+        id:crypto.randomUUID(),
+        status:'VOTING',
+        proposedSettings,
+        proposedAtRoundGeneration:current,
+        earliestEvaluationRoundGeneration:current + 1,
+        evaluationRoundGeneration:evaluation,
+        effectiveRoundGeneration:effective,
+        proposedByUserId:String(userId),
+        votesByUserId:{ [String(userId)]:'YES' },
+        createdAt:nowIso(),
+        decidedAt:null,
+        decisionSummary:null
+      };
+      state.pendingRoundSettingsChange = proposal;
+      tx.set(ref, state);
+      return proposal;
+    });
+  }
+
+  async castRoundSettingsVote({ worldId, userId, vote }) {
+    const ref = this._progression(worldId);
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) throw new DomainRuleError('Round state not found');
+      const state = doc.data();
+      const proposal = state.pendingRoundSettingsChange;
+      if (!proposal || proposal.status !== 'VOTING') throw new DomainRuleError('No active round settings vote');
+      const normalizedVote = String(vote || '').toUpperCase();
+      if (normalizedVote !== 'YES' && normalizedVote !== 'NO') throw new DomainRuleError('Vote must be YES or NO');
+      proposal.votesByUserId = proposal.votesByUserId || {};
+      proposal.votesByUserId[String(userId)] = normalizedVote;
+      state.pendingRoundSettingsChange = proposal;
+      tx.set(ref, state);
+      return proposal;
+    });
+  }
+
+  async evaluateRoundSettingsChangeForProgression({ worldId, roundGeneration, activeUserIds }) {
+    const ref = this._progression(worldId);
+    return this.db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) throw new DomainRuleError('Round state not found');
+      const state = doc.data();
+      if (Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Round generation mismatch');
+      const proposal = state.pendingRoundSettingsChange;
+      if (!proposal || proposal.status !== 'VOTING' ||
+          Number(roundGeneration) < Number(proposal.evaluationRoundGeneration)) {
+        return state;
+      }
+      const summary = voteSummary(proposal, activeUserIds);
+      if (summary.passed) {
+        proposal.status = 'APPROVED';
+        proposal.decidedAt = nowIso();
+        proposal.decisionSummary = summary;
+        state.pendingRoundSettingsChange = proposal;
+      } else {
+        const rejected = {
+          ...proposal,
+          status:'REJECTED',
+          decidedAt:nowIso(),
+          decisionSummary:summary
+        };
+        state.lastRoundSettingsDecision = rejected;
+        state.pendingRoundSettingsChange = null;
       }
       tx.set(ref, state);
       return state;
@@ -395,6 +527,15 @@ class FirestoreMetadataRepository {
       const ready = (state.readyUserIds || []).map(String);
       const allReady = active.length > 0 && active.every(id => ready.includes(id));
       const expired = Boolean(state.deadlineAt && new Date(state.deadlineAt).getTime() <= now);
+      if (state.roundSetupRequired) {
+        tx.set(ref, state);
+        return {
+          ...state,
+          activeTrainerCount:active.length,
+          readyTrainerCount:ready.filter(id => active.includes(id)).length,
+          shouldAdvance:false
+        };
+      }
       const due = state.timeModel === TIME_MODEL_FIXED_SCHEDULE ? expired : (allReady || expired);
       let shouldAdvance = reclaimedLease;
       if (state.status === ROUND_STATUS_OPEN && due) {
@@ -430,6 +571,7 @@ class FirestoreMetadataRepository {
           revision:Number(expectedRevision),
           roundGeneration:1,
           status:ROUND_STATUS_OPEN,
+          roundSetupRequired:false,
           timeModel:timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN,
           readyUserIds:[],
           deadlineAt:null,
@@ -438,7 +580,9 @@ class FirestoreMetadataRepository {
           leaseExpiresAt:null,
           lastCompletedProgressionRunId:null,
           matchIntentByUserId:{},
-          matchdayPlan:null
+          matchdayPlan:null,
+          pendingRoundSettingsChange:null,
+          lastRoundSettingsDecision:null
         };
       }
       if (!state.roundGeneration) state.roundGeneration = 1;
@@ -446,6 +590,9 @@ class FirestoreMetadataRepository {
       if (state.status === 'PROCESSING') state.status = ROUND_STATUS_MATCHDAY;
       state.matchIntentByUserId = state.matchIntentByUserId || {};
       if (!Object.prototype.hasOwnProperty.call(state,'matchdayPlan')) state.matchdayPlan = null;
+      if (!Object.prototype.hasOwnProperty.call(state,'pendingRoundSettingsChange')) state.pendingRoundSettingsChange = null;
+      if (!Object.prototype.hasOwnProperty.call(state,'lastRoundSettingsDecision')) state.lastRoundSettingsDecision = null;
+      if (state.roundSetupRequired) throw new DomainRuleError('World round settings require initial setup');
       if (roundGeneration != null && Number(state.roundGeneration) !== Number(roundGeneration)) throw new DomainRuleError('Round generation mismatch');
       if (state.status === ROUND_STATUS_OPEN) state.revision = Number(expectedRevision);
       if (Number(state.revision) !== Number(expectedRevision)) throw new DomainRuleError('Progression revision mismatch');
@@ -584,11 +731,25 @@ class FirestoreMetadataRepository {
       }
 
       const completedRunId = progressionRunId || state.progressionRunId || null;
+      const nextGeneration = Number(state.roundGeneration || 1) + 1;
+      let pendingRoundSettingsChange = state.pendingRoundSettingsChange || null;
+      let lastRoundSettingsDecision = state.lastRoundSettingsDecision || null;
+      if (pendingRoundSettingsChange && pendingRoundSettingsChange.status === 'APPROVED' &&
+          Number(pendingRoundSettingsChange.effectiveRoundGeneration) <= nextGeneration) {
+        lastRoundSettingsDecision = {
+          ...pendingRoundSettingsChange,
+          status:'APPLIED',
+          appliedRoundGeneration:nextGeneration,
+          appliedAt:nowIso()
+        };
+        pendingRoundSettingsChange = null;
+      }
       const next = {
         worldId,
         revision:Number(nextRevision),
-        roundGeneration:Number(state.roundGeneration || 1) + 1,
+        roundGeneration:nextGeneration,
         status:ROUND_STATUS_OPEN,
+        roundSetupRequired:false,
         timeModel:state.timeModel || TIME_MODEL_COUNTDOWN,
         readyUserIds:[],
         deadlineAt:null,
@@ -597,7 +758,9 @@ class FirestoreMetadataRepository {
         leaseExpiresAt:null,
         lastCompletedProgressionRunId:completedRunId,
         matchIntentByUserId:{},
-        matchdayPlan:null
+        matchdayPlan:null,
+        pendingRoundSettingsChange,
+        lastRoundSettingsDecision
       };
       tx.set(ref, next);
       return { next, completedGeneration:Number(state.roundGeneration || 1), alreadyCompleted:false };
