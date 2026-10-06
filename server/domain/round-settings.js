@@ -24,17 +24,12 @@ function validTimezone(timezone) {
 }
 
 function hasConfiguredRoundSettings(settings) {
-  if (!settings || typeof settings !== 'object') return false;
-  const mode = String(settings.roundTimeModel || '').toUpperCase();
-  if (mode === TIME_MODEL_COUNTDOWN) {
-    return COUNTDOWN_SECONDS.includes(Number(settings.roundDurationSeconds));
+  try {
+    normalizeRoundSettings(settings);
+    return true;
+  } catch (_) {
+    return false;
   }
-  if (mode === TIME_MODEL_FIXED_SCHEDULE) {
-    return normalizeWeekdays(settings.fixedScheduleWeekdays).length > 0 &&
-      /^\d{2}:\d{2}$/.test(String(settings.fixedScheduleTime || '')) &&
-      validTimezone(settings.timezone || 'UTC');
-  }
-  return false;
 }
 
 function normalizeRoundSettings(settings) {
@@ -72,6 +67,15 @@ function normalizeRoundSettings(settings) {
   }
 
   throw new DomainRuleError('Round settings mode is required');
+}
+
+function applyRoundSettings(runtimeSettings, nextSettings) {
+  const base = { ...(runtimeSettings && typeof runtimeSettings === 'object' ? runtimeSettings : {}) };
+  [
+    'roundTimeModel', 'roundDurationSeconds', 'roundDurationMinutes', 'roundDurationHours',
+    'fixedScheduleWeekdays', 'fixedScheduleTime', 'nextRoundAt', 'timezone'
+  ].forEach(key => { delete base[key]; });
+  return { ...base, ...normalizeRoundSettings(nextSettings) };
 }
 
 function sameRoundSettings(a, b) {
@@ -121,6 +125,7 @@ module.exports = {
   validTimezone,
   hasConfiguredRoundSettings,
   normalizeRoundSettings,
+  applyRoundSettings,
   sameRoundSettings,
   voteSummary,
   proposalPublicView
