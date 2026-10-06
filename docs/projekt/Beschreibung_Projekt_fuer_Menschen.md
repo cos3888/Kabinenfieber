@@ -55,6 +55,7 @@ Alte Spielstaende ohne gueltige KF_0.32.0-Rundeneinstellung werden nicht stillsc
 - nur der `WORLD_ADMIN` darf die Ersteinrichtung vornehmen;
 - dabei gibt es bewusst keine Abstimmung;
 - andere Trainer koennen die Welt betreten und ansehen, aber weder einen Verein uebernehmen noch Management/Ready/Slotfortschritt ausloesen;
+- der Pflichtdialog kann nicht per X oder Hintergrund umgangen werden, bietet aber fuer Admin und Mitspieler einen sicheren Weg „Zur Weltliste“, damit niemand in einer Altwelt festhaengt;
 - nach der Einrichtung wird der gewaehlte Rhythmus automatisch geladen und angezeigt;
 - ein neu eingerichteter COUNTDOWN startet erst mit dem ersten „Runde abschliessen“, nicht durch die Einrichtung selbst.
 
