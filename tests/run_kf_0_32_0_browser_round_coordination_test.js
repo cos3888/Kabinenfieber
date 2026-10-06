@@ -22,6 +22,9 @@ const claimedSource=app.slice(claimedStart,claimedEnd);
 const pollStart=app.indexOf('async function kf032PollProgressAndMaybeAdvance(');
 const pollEnd=app.indexOf('async function kf031RequestReadyAndMaybeAdvance(',pollStart);
 const pollSource=app.slice(pollStart,pollEnd);
+const lineupDropStart=app.indexOf('function handleLineupDrop(');
+const lineupDropEnd=app.indexOf('function positionDisplayOrder(',lineupDropStart);
+const lineupDropSource=app.slice(lineupDropStart,lineupDropEnd);
 
 check('Browser persists roundGeneration and resource scope revisions with management saves',
   app.includes('roundGeneration:KF029Remote.roundGeneration')&&
@@ -41,6 +44,10 @@ check('Ready makes the trainer visibly read-only while navigation can continue',
   app.includes('Du wartest auf die anderen Trainer.')&&
   app.includes('Änderungen sind erst im nächsten Slot wieder möglich.')&&
   app.includes('Runde abgeschlossen ✓'));
+
+check('Read-only also blocks direct lineup drag/drop before it mutates the squad',
+  lineupDropSource.includes('kf032RoundReadOnlyForMe()')&&
+  lineupDropSource.indexOf('kf032RoundReadOnlyForMe()')<lineupDropSource.indexOf('ensureLineupMaskState'));
 
 check('Every open multiplayer world polls server progression without F5',
   pollSource.includes("kf029Request('/api/v1/worlds/'+encodeURIComponent(record.id)+'/progression')")&&
