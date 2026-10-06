@@ -21219,7 +21219,8 @@ function ensureKF021CoreContainers(world){
   world.negotiations.playerContracts=world.negotiations.playerContracts||{byId:{},order:[],activeByPlayerId:{},activeByProcessKey:{},currentByThreadId:{}};
   world.scouting=world.scouting||{byClub:{}};
   world.squadPlanning=world.squadPlanning||{byClub:{}};
-  world.clubMailboxes=world.clubMailboxes||{byClub:{}};\n  world.clubMailboxes.byClub=world.clubMailboxes.byClub||{};
+  world.clubMailboxes=world.clubMailboxes||{byClub:{}};
+  world.clubMailboxes.byClub=world.clubMailboxes.byClub||{};
   world.seasonLifecycle=world.seasonLifecycle||{processedOptionDeadlineSeasons:{},transitions:[],pendingInsolvencies:{}};
   world.seasonLifecycle.processedOptionDeadlineSeasons=world.seasonLifecycle.processedOptionDeadlineSeasons||{};
   world.seasonLifecycle.transitions=world.seasonLifecycle.transitions||[];
