@@ -1,3 +1,20 @@
+# KF_0.32.1 – Spielbarkeit und automatische Solo-/Mehrspielerkoordination (Entwicklungsstand, 09.10.2026)
+
+**Status:** Code in `feature/kf-0.32.0-multiplayer-round-progression`; PR #11 bleibt Draft. **Nicht produktiv freigegeben.** Testbackend auf 1 GiB bleibt bei dem zuvor geprüften Stand 0.32.0, bis neue Tests und ein gesicherter Test-Rollout möglich sind. Der Browser kann über GitHub Pages bereits einen neueren Branchstand anzeigen; dies garantiert keine Übereinstimmung mit der Test-API.
+
+**Fachliche Entscheidung:** Es gibt keine getrennten Solo- und Multiplayer-Welten. Alle Welten bleiben einladungsfähig. Die aktuelle koordinierte Mehrspieler-Runde wird aus den *aktiven Mitgliedschaften mit zugewiesenem Verein* in `WorldRecord.memberships` hergeleitet. Bei weniger als zwei zugewiesenen aktiven Menschen hat das Zeitmodell keine Wirkung: `Weiter` löst sofort serverseitig die nächste Kalenderrunde aus. Ein zweiter Beitritt ohne Vereinszuordnung hält Solo nicht auf; bei Beitritt kann der Weltadmin die anfängliche Konfiguration vorbereiten. Sind zwei Vereine vergeben, wird sie verpflichtend. Hinterlegte Rundeneinstellungen bleiben bei Rückkehr zum Solo erhalten und gelten beim erneuten Eintritt eines zugewiesenen zweiten Trainers.
+
+**Codepfade:** `server/services/world-session-service.js` führt aus aktiver Vereinsbelegung `coordinationEnabled`, `roundSetupPending` und `roundSetupRequired` ab und synchronisiert die Firestore-Projektion; die Browsersteuerung und Büroanzeige in `src/app.bundle.js` verwendet dieselben serverseitig gelieferten Flags. `server/services/headless-progression-engine.js` und `server/services/world-runtime-manager.js` reduzieren mehrfache vollständige JSON-Kopien der Arbeitswelt, bevor der VM-Kalenderfortschritt startet. Laufzeit-Simulationseffekte gehören ausschließlich zum einen verifizierten GCS-Commit. Der Prozess bleibt durch Progressionsleases und Generationen vor konkurrierenden Fortschritten geschützt.
+
+**Integrität und Recovery:** `server/persistence/world-persistence-service.js` schreibt `lastProgressionCommit` ins GCS-Manifest, einschließlich `progressionRunId`, `roundGeneration`, `fromRevision` und `toRevision`. Auch die manuelle Snapshot-/Slot-Speicherung über `world-session-service.js` übergibt nun die Identität. Für die Wiederherstellung einer `FINALIZING`-Runde mit geänderter Revision werden diese Werte geprüft; ein bloßes Revisionsdelta ist kein Beweis und entsperrt keine Runde. Bei abgelaufenen `FINALIZING`-Leases begrenzen File- und Firestore-Metadaten Wiederholungsversuche. Eine fehlgeschlagene Progression bleibt als `FAILED` für die manuelle Prüfung sichtbar, statt blind auf `OPEN` gesetzt zu werden.
+
+**Datenquellen:** Aktuelle Mitgliedschaft und Weltzustand: GCS-WorldRecord (`world.memberships`, `runtimeSettings`, `gameState`). Aufstellung/Taktik/Kader: `world.squads`; Spieler: `world.players.byId`; Spielplan: `world.calendar.fixtures`; historische Matchwahrheit: `world.history.matches` und persistente Matchsegmente. Firestore-Rundenstatus verwaltet nur zeitliche Koordination/Leases/Abstimmungen und darf keine konkurrierende Mannschafts- oder Ergebniswahrheit bilden. Vergangene Matchzustände als historische Snapshots bleiben erlaubt. Keine neuen getrennten Solo- oder Multiplayer-Weltdaten und keine neue Datenmigration.
+
+**Tests und Einschränkungen:** GitHub Actions führen bestehende KF_0.31.4- und KF_0.32.0-Regressionen aus; neue Regression für ältere Solowelten, den nicht zugewiesenen zweiten Teilnehmer und verpflichtenden Setup-Übergang wurde ergänzt. Die erste CI-Ausführung ergab Fehler in bisherigen Erwartungen und offenbarte eine fehlende Manifest-Progressionsidentität bei Snapshot-/Slot-Commits; diese Punkte wurden im Branch nachgebessert. Endgültige CI-Ergebnisse, echte große GCS-Testwelten unter 1 GiB, Cloud-Run-Lauf und Saisonübergänge müssen vor Freigabe noch bestätigt werden. Das Originalbackend und `kf_dev`/Produktivbucket bleiben unangetastet. Die Testdatenmigration darf nicht wiederholt werden.
+
+
+---
+
 # Kabinenfieber - Stand KF_0.32.0
 
 ## 1. Was ist Kabinenfieber?
