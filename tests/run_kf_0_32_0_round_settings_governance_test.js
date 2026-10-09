@@ -111,7 +111,7 @@ async function createHarness(root){
   try{
     const {metadata,worlds,sessions,counter}=await createHarness(root);
 
-    // Legacy world: no implicit COUNTDOWN fallback.
+    // A legacy world is always playable alone, even without rhythm settings.
     const legacyId='world-legacy-rhythm';
     const legacyCreated=await sessions.createWorld({
       userId:'admin-legacy',
@@ -121,34 +121,51 @@ async function createHarness(root){
       joinPolicy:'OPEN'
     });
     const legacyOpen=await sessions.openWorld({userId:'admin-legacy',worldId:legacyId});
-    check('Legacy world without KF_0.32.0 settings requires explicit setup',
-      legacyOpen.roundState.roundSetupRequired===true&&legacyOpen.roundState.timeModel===null,
+    check('Legacy solo world never requires rhythm setup',
+      legacyOpen.roundState.roundSetupRequired===false&&legacyOpen.roundState.coordinationEnabled===false&&legacyOpen.roundState.timeModel===null,
       {roundState:legacyOpen.roundState});
+    const soloReady=await sessions.markReady({
+      userId:'admin-legacy',worldId:legacyId,expectedRevision:legacyCreated.revision,roundGeneration:1
+    });
+    const soloAdvanced=await sessions.openWorld({userId:'admin-legacy',worldId:legacyId});
+    check('Legacy solo Weiter advances immediately without a time model',
+      soloReady.status==='OPEN'&&soloAdvanced.worldRecord.gameState.calendar.currentSlotKey==='s1'&&soloAdvanced.roundGeneration===2,
+      {roundState:soloAdvanced.roundState});
 
     const legacyJoined=await sessions.joinWorld({userId:'legacy-player',displayName:'Player',worldId:legacyId});
+    const unassigned=await sessions.openWorld({userId:'admin-legacy',worldId:legacyId});
+    check('Joined but unassigned human leaves solo progress available',
+      unassigned.roundState.coordinationEnabled===false&&unassigned.roundState.roundSetupPending===true&&
+      unassigned.roundState.roundSetupRequired===false,
+      {roundState:unassigned.roundState});
+    const assignedLegacy=await sessions.assignClub({
+      userId:'legacy-player',worldId:legacyId,clubId:'club-b',expectedRevision:legacyJoined.revision
+    });
+    const multiplayerNeedsSetup=await sessions.openWorld({userId:'admin-legacy',worldId:legacyId});
+    check('Second assigned manager activates mandatory initial rhythm setup',
+      multiplayerNeedsSetup.roundState.coordinationEnabled===true&&multiplayerNeedsSetup.roundState.roundSetupRequired===true,
+      {roundState:multiplayerNeedsSetup.roundState});
     let nonAdminSetupError=null;
     try{
       await sessions.initializeRoundSettings({
-        userId:'legacy-player',worldId:legacyId,expectedRevision:legacyJoined.revision,
+        userId:'legacy-player',worldId:legacyId,expectedRevision:assignedLegacy.revision,
         settings:{roundTimeModel:'COUNTDOWN',roundDurationSeconds:86400,timezone:'Europe/Berlin'}
       });
     }catch(error){nonAdminSetupError=error;}
     check('Non-admin cannot perform initial rhythm setup',
       !!nonAdminSetupError&&/world admin/i.test(String(nonAdminSetupError.message||'')),
       {error:nonAdminSetupError&&nonAdminSetupError.message});
-
     let readyBeforeSetupError=null;
     try{
       await sessions.markReady({
-        userId:'admin-legacy',worldId:legacyId,expectedRevision:legacyJoined.revision,roundGeneration:1
+        userId:'admin-legacy',worldId:legacyId,expectedRevision:assignedLegacy.revision,roundGeneration:2
       });
     }catch(error){readyBeforeSetupError=error;}
-    check('Legacy world cannot advance before initial rhythm setup',
+    check('Coordinated world cannot advance before initial setup',
       !!readyBeforeSetupError&&/initial setup/i.test(String(readyBeforeSetupError.message||'')),
       {error:readyBeforeSetupError&&readyBeforeSetupError.message});
-
     const initialized=await sessions.initializeRoundSettings({
-      userId:'admin-legacy',worldId:legacyId,expectedRevision:legacyJoined.revision,
+      userId:'admin-legacy',worldId:legacyId,expectedRevision:assignedLegacy.revision,
       settings:{roundTimeModel:'COUNTDOWN',roundDurationSeconds:86400,timezone:'Europe/Berlin'}
     });
     const legacyAfter=await sessions.openWorld({userId:'admin-legacy',worldId:legacyId});

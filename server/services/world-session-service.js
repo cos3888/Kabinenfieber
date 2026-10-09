@@ -142,8 +142,16 @@ class WorldSessionService {
         soloMode:!config.coordinationEnabled
     });
     if (state && state.status === ROUND_STATUS_FINALIZING &&
-        Number(state.revision) !== Number(revision) &&
-        state.leaseId && state.progressionRunId) {
+        Number(state.revision) !== Number(revision)) {
+      const manifest = await this.worlds.getManifest(worldId);
+      const proof = manifest && manifest.lastProgressionCommit;
+      if (!proof || !state.progressionRunId ||
+          String(proof.progressionRunId || '') !== String(state.progressionRunId) ||
+          Number(proof.roundGeneration) !== Number(state.roundGeneration) ||
+          Number(proof.fromRevision) !== Number(state.revision) ||
+          Number(proof.toRevision) !== Number(revision)) {
+        throw new DomainRuleError('Rundenstatus widerspricht der gespeicherten Welt. Automatische Freigabe nur mit nachgewiesenem Progressions-Commit möglich.');
+      }
       state = await this.metadata.completeWorldProgress({
         worldId,
         expectedRevision:Number(state.revision),
@@ -821,22 +829,16 @@ class WorldSessionService {
     const ensured = await this._ensureRound(worldId, manifest.revision);
     let state = ensured.state;
     if (state.status === ROUND_STATUS_OPEN && (!ensured.config.coordinationEnabled || state.roundSetupRequired)) return state;
-    if (state.status === ROUND_STATUS_OPEN || state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) {
+    if (state.status === ROUND_STATUS_OPEN || state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY || state.status === ROUND_STATUS_FINALIZING) {
       state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds, null) || state;
     }
     if (!this.progressionEngine) return state;
-    if (state && (state.status === ROUND_STATUS_FINALIZING ||
-        (state.shouldAdvance && state.status === ROUND_STATUS_MATCHDAY))) {
+    if (state && state.shouldAdvance &&
+        (state.status === ROUND_STATUS_FINALIZING || state.status === ROUND_STATUS_MATCHDAY)) {
       return this._executeClaimedProgression(worldId, manifest.revision, { ...state, shouldAdvance:true });
     }
-    if (state && state.status === ROUND_STATUS_MATCHDAY) {
-      const plan = state.matchdayPlan || {};
-      const liveFixtureIds = (plan.fixturePlans || []).filter(row => row && row.mode === 'LIVE').map(row => String(row.fixtureId));
-      const completed = new Set((plan.completedLiveFixtureIds || []).map(String));
-      if (liveFixtureIds.length && liveFixtureIds.every(id => completed.has(id))) {
-        return this._executeClaimedProgression(worldId, manifest.revision, { ...state, shouldAdvance:true });
-      }
-    }
+    // An existing MATCHDAY/FINALIZING lease must expire before another instance retries.
+    // Never start a second calculation while the current lease is still valid.
     return state;
   }
 

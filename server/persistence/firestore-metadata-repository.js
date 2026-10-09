@@ -518,8 +518,18 @@ class FirestoreMetadataRepository {
 
       const now = Date.now();
       let reclaimedLease = false;
-      if ((state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) &&
+      if ((state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY ||
+           state.status === ROUND_STATUS_FINALIZING) &&
           state.leaseExpiresAt && new Date(state.leaseExpiresAt).getTime() <= now) {
+        if (state.status === ROUND_STATUS_FINALIZING) {
+          state.progressionRetries = Number(state.progressionRetries || 0) + 1;
+          if (state.progressionRetries > 2) {
+            state.status = 'FAILED';
+            state.lastProgressionError = 'Mehrfache Berechnungsfehler. Spielstand unverändert; manuelle Prüfung notwendig.';
+            tx.set(ref, state);
+            return {...state, shouldAdvance:false};
+          }
+        }
         state.leaseId = crypto.randomUUID();
         state.leaseExpiresAt = new Date(now + Math.max(30000, Number(leaseMs || 120000))).toISOString();
         reclaimedLease = true;
@@ -758,6 +768,7 @@ class FirestoreMetadataRepository {
         leaseId:null,
         leaseExpiresAt:null,
         lastCompletedProgressionRunId:completedRunId,
+        progressionRetries:0,
         matchIntentByUserId:{},
         matchdayPlan:null,
         pendingRoundSettingsChange,
