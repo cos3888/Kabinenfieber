@@ -1244,3 +1244,16 @@ Validierung KF_0.27.2: Kern-, Migrations-, UI-, Match-, Finance- und Mehrsaisont
 - Runtime-Wappen wurden auf maximal 512×512 Pixel optimiert.
 - Acht Tuerkei-3-Vereine bleiben bewusst beim bestehenden Fallback, weil die acht uebrigen Dateien im Quellordner nicht zu den aktuellen fiktiven Vereinen gehoeren.
 - Keine Gameplay-, Simulations- oder Persistenzlogik wurde veraendert. `kf-core-0.27.2` und `kf-world-record-0.27.2` bleiben deshalb unveraendert.
+
+
+## KF_0.32.0 – Testbackend-Auslieferung (09.10.2026)
+
+Die oeffentliche Testseite `https://cos3888.github.io/Kabinenfieber/` wird jetzt direkt aus dem Branch `feature/kf-0.32.0-multiplayer-round-progression`, Ordner `/(root)`, durch GitHub Pages gebaut. `main` bleibt fachlich bei KF_0.31.4; PR #11 bleibt Draft und ungemergt. Das Produktivbackend bleibt tabu.
+
+Der unabhängige Remote-Test ergab: Frontend KF_0.32.0, beide Cloud-Run-Aliasse des **Testdienstes** erreichbar, aber `/api/v1/persistence/status` meldet weiterhin Serverversion **0.31.4**, API-Vertrag `0.30.0`. Die Cloud-Run-URL ist korrekt; `/healthz` wird am Google-Proxy als 404 beantwortet und ist deshalb kein verlaesslicher oeffentlicher Healthcheck. Eine Umstellung des Testbackend-Images auf KF_0.32.0 ist noch ausstehend.
+
+Vor dem Deployment wurde ein konkreter Buildfehler beseitigt: `.dockerignore` schloss `src` aus, der neue Cloud-Run-Dockerfile und die serverseitige `HeadlessProgressionEngine` benoetigen jedoch `src/static-data.js`, `src/db1-db2-data.js`, `src/app.bundle.js`. `src` ist nun Teil des Docker-Kontexts. Die GitHub-Action `.github/workflows/kf-0.32.0-backend-image-smoke.yml` baut das echte Docker-Image, kompiliert die Headless-Simulation darin und startet die API mit ausschliesslich lokalen, isolierten Treibern.
+
+Ein abgesicherter Cloud-Shell-Rollout liegt unter `tools/deploy_kf_0_32_0_test_backend.sh`. Er prueft vorab Repository, 0.32.0-Serverversion, sauberen Arbeitsbaum, Testbackend-Speicher 1 GiB und GCS-/Firestore-Trennung vom Produktivbackend. Bei unklarer oder gemeinsamer Speicherwahrheit bricht er ab, ohne zu deployen. Anschliessend erstellt er nur fuer `kabinenfieber-backend-test` eine getaggte Canary-Revision ohne regulaeren Traffic, prueft Version und Persistenz per `/api/v1/persistence/status` und schaltet erst dann den Testdienst um. Es gibt keine Aenderungen an `kabinenfieber-backend`.
+
+Aktuelle Spielrhythmus-Wahrheit bleibt `WorldRecord.runtimeSettings`, und es entsteht durch den Deployment-Fix keine doppelte Spielcode- oder Spieldatenbasis. Nach externem Deployment stehen noch die echten Browser-/Spieletests aus: Solospiel, Altwelt mit verpflichtender Rhythmus-Ersteinrichtung, neue Welt, Countdown und feste Rundenzeiten sowie alle relevanten Regressionen. Vorher ist `Runde laeuft` kein sauber reproduzierter KF_0.32.0-Gameplayfehler.
