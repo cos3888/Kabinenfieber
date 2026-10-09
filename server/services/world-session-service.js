@@ -702,12 +702,24 @@ class WorldSessionService {
       activeUserIds:activeVotingUserIds
     });
 
+    const progressStartedAt = Date.now();
+    const progressionMemory = phase => {
+      const mem = process.memoryUsage();
+      console.info('[KF_0.32.1 progression]', JSON.stringify({
+        worldId, runId:finalizing.progressionRunId, roundGeneration:Number(finalizing.roundGeneration),
+        phase, elapsedMs:Date.now()-progressStartedAt,
+        heapUsedMiB:Math.round(mem.heapUsed / 1048576),
+        rssMiB:Math.round(mem.rss / 1048576)
+      }));
+    };
+    progressionMemory('before-effective-record');
     const effectiveRecord = await this._effectiveRoundRecord(
       worldId,
       null,
       revision,
       Number(finalizing.roundGeneration)
     );
+    progressionMemory('after-effective-record');
     const pendingRoundSettingsChange = finalizing.pendingRoundSettingsChange;
     if (pendingRoundSettingsChange && pendingRoundSettingsChange.status === 'APPROVED' &&
         Number(pendingRoundSettingsChange.effectiveRoundGeneration) <= Number(finalizing.roundGeneration) + 1) {
@@ -726,6 +738,7 @@ class WorldSessionService {
       engine:this.progressionEngine
     });
 
+    progressionMemory('after-world-commit');
     await this.metadata.completeWorldProgress({
       worldId,
       expectedRevision:Number(revision),

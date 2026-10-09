@@ -25229,6 +25229,7 @@ function kf032ProcessingIsMatchSlot(state){
 function kf031ProgressMessage(state){
   if (!state) return '';
   if (!state.coordinationEnabled && state.status==='OPEN') return '';
+  if(state.status==='FAILED') return 'Rundenberechnung konnte nicht abgeschlossen werden. Der Spielstand wurde geschützt. Bitte die Serverprüfung abwarten; nicht mehrfach auf Weiter klicken.';
   if(state.roundSetupRequired){
     return kf032IsWorldAdmin()
       ? 'Spielrhythmus muss zuerst festgelegt werden.'
