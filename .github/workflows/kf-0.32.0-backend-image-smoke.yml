@@ -19,6 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check guarded Cloud Shell deploy syntax
         run: bash -n tools/deploy_kf_0_32_0_test_backend.sh
+      - name: Validate KF 0.32.1 isolated test rollout safety script
+        run: bash -n tools/deploy_kf_0_32_1_test_backend.sh
       - name: Validate isolated data migration safeguards (without Cloud access)
         run: |
           node --check tools/migrate_kf_0_32_0_test_data.js
