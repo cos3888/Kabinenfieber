@@ -184,11 +184,39 @@ function makeWorldRecord({ worldId, userId, trainerId='trainer-a', clubId=null }
   const multiLoaded=await sessions.openWorld({userId:registered.user.userId,worldId});
   check('Runtime observes externally committed multiplayer membership after reload',
     multiLoaded.revision===multiplayerManifest.revision && multiLoaded.worldRecord.memberships.order.length===2);
-  check('Full browser-style snapshot save is blocked once a world has multiple humans',
+  // A joined but unassigned guest does not activate multiplayer round coordination.
+  const soloContinued=await sessions.saveWorld({
+    userId:registered.user.userId,worldId,
+    worldRecord:JSON.parse(JSON.stringify(multiLoaded.worldRecord)),
+    expectedRevision:multiLoaded.revision,matches:multiLoaded.matches,financeEvents:multiLoaded.financeEvents
+  });
+  const soloWithGuest=await sessions.openWorld({userId:registered.user.userId,worldId});
+  check('Unassigned guest does not block solo snapshot and retains both memberships',
+    Number(soloContinued.revision)===Number(multiLoaded.revision)+1 &&
+    Number(soloWithGuest.revision)===Number(soloContinued.revision) &&
+    soloWithGuest.worldRecord.memberships.order.length===2 &&
+    soloWithGuest.worldRecord.memberships.byTrainerId['trainer-b'].clubId===null);
+
+  // Once the guest controls a club, unrestricted snapshots must be rejected.
+  const twoAssignedRecord=JSON.parse(JSON.stringify(soloWithGuest.worldRecord));
+  twoAssignedRecord.gameState.clubs.byId['club-b']={id:'club-b',name:'Club B'};
+  twoAssignedRecord.gameState.clubs.order.push('club-b');
+  twoAssignedRecord.memberships.byTrainerId['trainer-b'].clubId='club-b';
+  const assignedManifest=await worlds.commitWorldRecord({
+    worldRecord:twoAssignedRecord,expectedRevision:soloWithGuest.revision
+  });
+  await runtime.unloadWorld(worldId);
+  const multiAssigned=await sessions.openWorld({userId:registered.user.userId,worldId});
+  check('Second club assignment is visible in committed world truth',
+    Number(multiAssigned.revision)===Number(assignedManifest.revision) &&
+    multiAssigned.worldRecord.memberships.byTrainerId['trainer-b'].clubId==='club-b');
+  check('Full browser-style snapshot is rejected once two humans control clubs',
     await expectMessage(()=>sessions.saveWorld({
-      userId:registered.user.userId,worldId,worldRecord:multiLoaded.worldRecord,
-      expectedRevision:multiLoaded.revision,matches:multiLoaded.matches,financeEvents:multiLoaded.financeEvents
-    }), /disabled for multiplayer worlds/i));
+      userId:registered.user.userId,worldId,
+      worldRecord:JSON.parse(JSON.stringify(multiAssigned.worldRecord)),
+      expectedRevision:multiAssigned.revision,
+      matches:multiAssigned.matches,financeEvents:multiAssigned.financeEvents
+    }), /requires a progress lease|disabled for multiplayer worlds/i));
 
   await auth.logout(login.token);
   check('Logout invalidates bearer session', await expectMessage(()=>auth.authenticate(login.token), /Invalid session/));

@@ -1,3 +1,5 @@
+**KF_0.32.1 Core-Regressionskorrektur (09.10.2026):** Der vorherige CI-Fehler in `tests/run_kf_0_29_0_user_world_runtime_test.js` beruhte auf einer veralteten Erwartung: ein zweiter aktiver Benutzer ohne `clubId` soll die Solo-Snapshot-Speicherung nicht sperren. Der Test prüft jetzt stattdessen beide Übergänge: vollständiger autoritativer Snapshot mit einem zugewiesenen Trainer und einem vereinslosen Mitglied (beide Mitgliedschaften erhalten) sowie Ablehnung eines nicht durch eine Progressionslease gedeckten Snapshots, sobald zwei Menschen Vereine führen. Die produktive Rundenwahrheit bleibt in `WorldRecord.memberships`; der Metadaten-Rundenstatus bleibt separate Koordinationswahrheit. Vor Testbackend-Deployment vollständige CI erneut prüfen.
+
 ## KF_0.32.1 – Ergänzende Verifikation und Sicherheitsgrenzen (09.10.2026)
 
 - Zusätzliche Status-/Speicherdiagnostik: `world-session-service.js` protokolliert pro serverseitiger Progression die Phasen `before-effective-record`, `after-effective-record`, `after-world-commit` mit Laufzeit, Heap und RSS. Damit lässt sich eine echte große Testwelt auf Cloud Run beurteilen, sobald der Testbackend-Rollout erfolgt ist.
