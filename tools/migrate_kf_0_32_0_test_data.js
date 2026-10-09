@@ -15,8 +15,7 @@
 const crypto = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const { execFileSync } = require('node:child_process');
-const { Firestore } = require('@google-cloud/firestore');
-const { Storage } = require('@google-cloud/storage');
+// Load cloud SDKs only for real cloud operations; the safety self-test is offline.
 
 const PROJECT = 'kabinenfieber-dev';
 const SOURCE_BUCKET = 'kabinenfieber-dev-saves-4821';
@@ -243,6 +242,8 @@ async function main() {
   insist(['--plan','--execute','--verify'].includes(arg) && process.argv.length===3,
     'Aufruf: --plan | --execute | --verify | --self-test');
   assertMigrationNames();
+  const { Firestore } = require('@google-cloud/firestore');
+  const { Storage } = require('@google-cloud/storage');
   const db=new Firestore({projectId:PROJECT}), storage=new Storage({projectId:PROJECT});
   const marker=db.collection(collectionName(DEST_PREFIX,'system')).doc(MARKER_ID);
   if (arg==='--verify') {
