@@ -19,7 +19,7 @@ case "$(git remote get-url origin 2>/dev/null || true)" in
 esac
 [[ -z "$(git status --porcelain)" ]] || die "Uncommittete Aenderungen"
 ACTUAL_SHA="$(git rev-parse HEAD)"
-[[ -n "\${KF_APPROVED_SHA:-}" && "$KF_APPROVED_SHA" == "$ACTUAL_SHA" ]] ||
+[[ -n "${KF_APPROVED_SHA:-}" && "$KF_APPROVED_SHA" == "$ACTUAL_SHA" ]] ||
   die "KF_APPROVED_SHA muss der explizit freigegebene und getestete HEAD sein"
 grep -q "const SERVICE_VERSION = '0.32.1';" server/index.js || die "Falsche Backend-Version"
 [[ -f src/app.bundle.js && -f Dockerfile ]] || die "Unvollstaendiger Simulations-Dockerkontext"
