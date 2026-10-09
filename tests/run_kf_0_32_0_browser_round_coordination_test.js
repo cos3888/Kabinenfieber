@@ -99,7 +99,7 @@ check('Legacy worlds force initial rhythm setup without a vote, stay read-only, 
   app.includes('Diese ältere Spielwelt hat noch keinen Spielrhythmus.')&&
   app.includes('data-action="kf-round-settings-initialize"')&&
   app.includes('data-action="kf-exit-world-discard">Zur Weltliste</button>')&&
-  app.includes('lockClose:true')&&
+  app.includes('lockClose:!!state.roundSetupRequired')&&
   server.includes('initializeRoundSettings')&&
   server.includes('Only the world admin may configure the initial round settings'));
 

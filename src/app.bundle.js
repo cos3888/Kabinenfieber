@@ -25186,6 +25186,8 @@ function kf029InstallLoadedWorld(data){
     kf032OpenRoundSettingsModal(true);
   }else if(roundSetupResolved){
     kf032OpenRoundSettingsModal(false);
+  }else if(KF029Remote.progression && KF029Remote.progression.roundSetupPending && kf032IsWorldAdmin() && !AppState.ui.modal){
+    kf032OpenRoundSettingsModal(false);
   }
   if (KF029Remote.user && AppState.worldRecord) {
     kf032ScheduleProgressPoll(null,250);
@@ -25493,7 +25495,9 @@ function kf032OpenRoundSettingsModal(forceSetup){
   }
   var admin=kf032IsWorldAdmin();
   if(setupRequired){
-    var exitSetupButton='<button class="ghost-btn" type="button" data-action="kf-exit-world-discard">Zur Weltliste</button>';
+    var exitSetupButton=state.roundSetupRequired
+      ? '<button class="ghost-btn" type="button" data-action="kf-exit-world-discard">Zur Weltliste</button>'
+      : '<button class="ghost-btn" type="button" data-action="close-modal">Später festlegen</button>';
     var setupBody=admin
       ? '<div class="notice"><strong>Diese ältere Spielwelt hat noch keinen Spielrhythmus.</strong><br>Lege ihn einmalig fest. Dafür gibt es keine Abstimmung. Erst danach kann die Welt normal weiterlaufen.</div>'+
         kf032RoundEditorHtml('kf-round-setup',null)+
@@ -25506,8 +25510,8 @@ function kf032OpenRoundSettingsModal(forceSetup){
       bodyHtml:'<div class="kf-round-settings-shell">'+setupBody+'</div>',
       popupType:'interaction',
       surfaceClass:'kf-round-settings-modal',
-      lockBackdrop:true,
-      lockClose:true
+      lockBackdrop:!!state.roundSetupRequired,
+      lockClose:!!state.roundSetupRequired
     });
     renderModal();
     return;
@@ -25649,6 +25653,8 @@ async function kf032PollProgressAndMaybeAdvance(actionEl){
     var data=await kf029Request('/api/v1/worlds/'+encodeURIComponent(record.id)+'/progression');
     var state=data&&data.progression||null;
     if (!state) return null;
+    var setupWasRequired=!!(KF029Remote.progression&&KF029Remote.progression.roundSetupRequired);
+    var setupWasPending=!!(KF029Remote.progression&&KF029Remote.progression.roundSetupPending);
     KF029Remote.progression=state;
     KF029Remote.roundGeneration=Number(state.roundGeneration || KF029Remote.roundGeneration || 1);
     KF029Remote.scopeRevisions=Object.assign({},state.scopeRevisions || KF029Remote.scopeRevisions || {});
@@ -25660,6 +25666,11 @@ async function kf032PollProgressAndMaybeAdvance(actionEl){
     }
     KF029Remote.message=kf031ProgressMessage(state);
     renderApp();
+    if(state.roundSetupRequired && !setupWasRequired){
+      kf032OpenRoundSettingsModal(true);
+    }else if(state.roundSetupPending && !setupWasPending && kf032IsWorldAdmin() && !AppState.ui.modal){
+      kf032OpenRoundSettingsModal(false);
+    }
     var active=!!state.roundSetupRequired || state.status!=='OPEN' || !!state.deadlineAt || kf032CurrentUserReady(state);
     kf032ScheduleProgressPoll(actionEl,active?1000:4500);
     return state;
