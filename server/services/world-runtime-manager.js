@@ -123,6 +123,11 @@ class WorldRuntimeManager {
     return runtime;
   }
 
+  peekWorldRecord(worldId, revision) {
+    const runtime = this.runtimes.get(String(worldId));
+    return runtime && Number(runtime.revision) === Number(revision) ? runtime.worldRecord : null;
+  }
+
   async openWorld({ worldId, userId }) {
     return this._enqueue(worldId, async () => {
       const runtime = await this._load(worldId);
@@ -153,19 +158,21 @@ class WorldRuntimeManager {
   _canonicalizeSingleUserSnapshot(runtime, userId, incoming) {
     if (!incoming || String(incoming.id) !== String(runtime.worldRecord.id)) throw new DomainRuleError('World snapshot does not match worldId');
     const active = activeMemberships(runtime.worldRecord);
-    if (active.length !== 1 || String(active[0].userProfileId) !== String(userId)) {
+    const assigned = active.filter(member => Boolean(member.clubId));
+    const controller = assigned.length === 1 ? assigned[0] : (active.length === 1 ? active[0] : null);
+    if (!controller || String(controller.userProfileId) !== String(userId)) {
       throw new DomainRuleError('Full snapshot save is disabled for multiplayer worlds');
     }
     const incomingMembership = membershipForUser(incoming, userId);
     if (!incomingMembership ||
-        String(incomingMembership.trainerId) !== String(active[0].trainerId) ||
-        String(incomingMembership.userProfileId) !== String(active[0].userProfileId)) {
+        String(incomingMembership.trainerId) !== String(controller.trainerId) ||
+        String(incomingMembership.userProfileId) !== String(controller.userProfileId)) {
       throw new DomainRuleError('World membership identity cannot be changed by a snapshot');
     }
     const next = incoming;
     next.createdByUserId = runtime.worldRecord.createdByUserId;
     next.memberships = clone(runtime.worldRecord.memberships);
-    const serverMembership = next.memberships.byTrainerId[active[0].trainerId];
+    const serverMembership = next.memberships.byTrainerId[controller.trainerId];
     serverMembership.clubId = incomingMembership.clubId || null;
     serverMembership.lastActivityAt = incomingMembership.lastActivityAt || new Date(this.now()).toISOString();
     if (incomingMembership.trainerDisplayName) serverMembership.trainerDisplayName = incomingMembership.trainerDisplayName;
@@ -340,7 +347,7 @@ class WorldRuntimeManager {
           worldId, expectedRevision, actualRevision:runtime.revision
         });
       }
-      const record = clone(effectiveWorldRecord || runtime.worldRecord);
+      const record = effectiveWorldRecord || clone(runtime.worldRecord);
       if (!record || String(record.id || '') !== String(worldId)) {
         throw new DomainRuleError('Server progression record does not match worldId');
       }
@@ -379,7 +386,7 @@ class WorldRuntimeManager {
         currentSeason:runtime.currentSeason,
         committedAt:manifest.committedAt,
         advanceResult:clone(executed.advanceResult),
-        worldRecord:clone(nextRecord)
+        worldRecord:nextRecord
       };
     });
   }

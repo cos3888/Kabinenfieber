@@ -258,7 +258,7 @@ class FirestoreMetadataRepository {
   }
 
   async ensureWorldRound({
-    worldId, revision, timeModel = TIME_MODEL_COUNTDOWN, fixedDeadlineAt = null, setupRequired = false
+    worldId, revision, timeModel = TIME_MODEL_COUNTDOWN, fixedDeadlineAt = null, setupRequired = false, soloMode = false
   }) {
     const ref = this._progression(worldId);
     return this.db.runTransaction(async tx => {
@@ -271,9 +271,9 @@ class FirestoreMetadataRepository {
           roundGeneration:1,
           status:ROUND_STATUS_OPEN,
           roundSetupRequired:Boolean(setupRequired),
-          timeModel:setupRequired ? null : (timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN),
+          timeModel:(setupRequired || soloMode) ? null : (timeModel === TIME_MODEL_FIXED_SCHEDULE ? TIME_MODEL_FIXED_SCHEDULE : TIME_MODEL_COUNTDOWN),
           readyUserIds:[],
-          deadlineAt:setupRequired ? null : (timeModel === TIME_MODEL_FIXED_SCHEDULE ? (fixedDeadlineAt || null) : null),
+          deadlineAt:(setupRequired || soloMode) ? null : (timeModel === TIME_MODEL_FIXED_SCHEDULE ? (fixedDeadlineAt || null) : null),
           progressionRunId:null,
           leaseId:null,
           leaseExpiresAt:null,
@@ -296,7 +296,7 @@ class FirestoreMetadataRepository {
           state.revision = Number(revision);
           const wasSetupRequired = Boolean(state.roundSetupRequired);
           state.roundSetupRequired = Boolean(setupRequired);
-          if (state.roundSetupRequired) {
+          if (state.roundSetupRequired || soloMode) {
             state.timeModel = null;
             state.readyUserIds = [];
             state.deadlineAt = null;

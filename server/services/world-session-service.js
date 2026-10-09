@@ -96,27 +96,24 @@ class WorldSessionService {
   }
 
   _roundConfig(record) {
-    const runtimeSettings = record && record.runtimeSettings || null;
-    if (!hasConfiguredRoundSettings(runtimeSettings)) {
+    const members = activeMemberships(record);
+    const coordinationEnabled = members.filter(row => Boolean(row.clubId)).length >= 2;
+    const configured = hasConfiguredRoundSettings(record && record.runtimeSettings);
+    const setupPending = members.length >= 2 && !configured;
+    const setupRequired = coordinationEnabled && !configured;
+    const settings = configured ? normalizeRoundSettings(record.runtimeSettings) : null;
+    if (!coordinationEnabled || !configured) {
       return {
-        configured:false,
-        setupRequired:true,
-        settings:null,
-        timeModel:null,
-        durationSeconds:null,
-        fixedDeadlineAt:null,
-        fixedScheduleWeekdays:[],
-        fixedScheduleTime:null,
-        timezone:null
+        configured, setupPending, setupRequired, coordinationEnabled,
+        settings, timeModel:null, durationSeconds:null, fixedDeadlineAt:null,
+        fixedScheduleWeekdays:[], fixedScheduleTime:null,
+        timezone:settings ? settings.timezone : null
       };
     }
-    const settings = normalizeRoundSettings(runtimeSettings);
     const timeModel = settings.roundTimeModel;
     return {
-      configured:true,
-      setupRequired:false,
-      settings,
-      timeModel,
+      configured:true, setupPending:false, setupRequired:false, coordinationEnabled:true,
+      settings, timeModel,
       durationSeconds:timeModel === TIME_MODEL_COUNTDOWN ? Number(settings.roundDurationSeconds) : null,
       fixedDeadlineAt:timeModel === TIME_MODEL_FIXED_SCHEDULE ? nextFixedScheduleAt(settings) : null,
       fixedScheduleWeekdays:timeModel === TIME_MODEL_FIXED_SCHEDULE ? normalizeScheduleWeekdays(settings.fixedScheduleWeekdays) : [],
@@ -134,14 +131,15 @@ class WorldSessionService {
   }
 
   async _ensureRound(worldId, revision, authoritativeRecord = null) {
-    const record = authoritativeRecord || await this.worlds.loadWorldRecord(worldId);
+    const record = authoritativeRecord || this.runtime.peekWorldRecord(worldId, revision) || await this.worlds.loadWorldRecord(worldId);
     const config = this._roundConfig(record);
     let state = await this.metadata.ensureWorldRound({
       worldId,
       revision:Number(revision),
       timeModel:config.timeModel,
       fixedDeadlineAt:config.fixedDeadlineAt,
-      setupRequired:config.setupRequired
+      setupRequired:config.setupRequired,
+        soloMode:!config.coordinationEnabled
     });
     if (state && state.status === ROUND_STATUS_FINALIZING &&
         Number(state.revision) !== Number(revision) &&
@@ -160,7 +158,8 @@ class WorldSessionService {
         revision:Number(revision),
         timeModel:config.timeModel,
         fixedDeadlineAt:config.fixedDeadlineAt,
-        setupRequired:config.setupRequired
+        setupRequired:config.setupRequired,
+        soloMode:!config.coordinationEnabled
       });
     }
     return {
@@ -170,7 +169,9 @@ class WorldSessionService {
         timezone:config.timezone,
         fixedScheduleWeekdays:config.fixedScheduleWeekdays,
         fixedScheduleTime:config.fixedScheduleTime,
-        roundSetupRequired:config.setupRequired
+        roundSetupRequired:config.setupRequired,
+        roundSetupPending:config.setupPending,
+        coordinationEnabled:config.coordinationEnabled
       },
       config,
       record
@@ -269,7 +270,7 @@ class WorldSessionService {
   async _effectiveRoundRecord(worldId, userId, revision, roundGeneration) {
     const baseRecord = userId
       ? (await this.runtime.openWorld({ userId, worldId })).worldRecord
-      : await this.worlds.loadWorldRecord(worldId);
+      : this.runtime.peekWorldRecord(worldId, revision) || await this.worlds.loadWorldRecord(worldId);
     const rows = await this.metadata.getManagementScopes({ worldId, roundGeneration });
     return this._applyManagementOverlays(baseRecord, rows);
   }
@@ -736,7 +737,7 @@ class WorldSessionService {
     }
     const normalized = normalizeRoundSettings(settings);
     const ensured = await this._ensureRound(worldId, opened.revision, record);
-    if (!ensured.state.roundSetupRequired) throw new DomainRuleError('World round settings do not require initial setup');
+    if (!ensured.state.roundSetupPending) throw new DomainRuleError('World round settings do not require initial setup');
     if (ensured.state.status !== ROUND_STATUS_OPEN) throw new DomainRuleError('Initial round settings can only be configured while the world is open');
 
     const committed = await this.runtime.updateRoundSettings({
@@ -819,7 +820,7 @@ class WorldSessionService {
     const activeUserIds = await this.metadata.listActiveAssignedUserIdsForWorld(worldId);
     const ensured = await this._ensureRound(worldId, manifest.revision);
     let state = ensured.state;
-    if (state.roundSetupRequired) return state;
+    if (state.status === ROUND_STATUS_OPEN && (!ensured.config.coordinationEnabled || state.roundSetupRequired)) return state;
     if (state.status === ROUND_STATUS_OPEN || state.status === ROUND_STATUS_LOCKING || state.status === ROUND_STATUS_MATCHDAY) {
       state = await this._claimProgressIfDue(worldId, manifest.revision, activeUserIds, null) || state;
     }
@@ -890,7 +891,7 @@ class WorldSessionService {
     const ensured = await this._ensureRound(worldId, manifest.revision);
     const config = ensured.config;
     if (config.setupRequired) throw new DomainRuleError('World round settings require initial setup');
-    if (config.timeModel === TIME_MODEL_FIXED_SCHEDULE) {
+    if (config.coordinationEnabled && config.timeModel === TIME_MODEL_FIXED_SCHEDULE) {
       throw new DomainRuleError('Fixed-schedule worlds do not use a Ready action');
     }
     if (roundGeneration != null && Number(roundGeneration) !== Number(ensured.state.roundGeneration)) {
@@ -899,7 +900,7 @@ class WorldSessionService {
       error.details = { worldId, expectedRoundGeneration:roundGeneration, actualRoundGeneration:ensured.state.roundGeneration };
       throw error;
     }
-    const deadlineAt = new Date(Date.now() + config.durationSeconds * 1000).toISOString();
+    const deadlineAt = config.coordinationEnabled ? new Date(Date.now() + config.durationSeconds * 1000).toISOString() : null;
     let result = await this.metadata.markTrainerReady({
       worldId,
       userId,
@@ -907,7 +908,7 @@ class WorldSessionService {
       roundGeneration:Number(ensured.state.roundGeneration),
       activeUserIds,
       deadlineAt,
-      timeModel:config.timeModel,
+      timeModel:config.coordinationEnabled ? config.timeModel : TIME_MODEL_COUNTDOWN,
       matchIntent,
       leaseMs:120000
     });
@@ -982,7 +983,8 @@ class WorldSessionService {
   }
 
   async saveWorld({ userId, worldId, worldRecord, expectedRevision, matches, financeEvents, progressLeaseId = null }) {
-    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
+    const current = await this.runtime.openWorld({ userId, worldId });
+    const multiplayer = activeMemberships(current.worldRecord).filter(row => Boolean(row.clubId)).length >= 2;
     let allowMultiplayerProgress = false;
     let progressState = null;
     if (progressLeaseId) {
@@ -995,7 +997,7 @@ class WorldSessionService {
         throw new DomainRuleError('Progression lease mismatch');
       }
       allowMultiplayerProgress = true;
-    } else if (activeUserIds.length > 1) {
+    } else if (multiplayer) {
       throw new DomainRuleError('Multiplayer snapshot progress requires a progress lease');
     }
     if (progressLeaseId && progressState) this._assertLiveFixturesComplete(progressState);
@@ -1051,8 +1053,9 @@ class WorldSessionService {
     userId, worldId, worldDelta, expectedRevision,
     roundGeneration = null, expectedScopeRevisions = {}
   }) {
-    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
-    if (activeUserIds.length <= 1) {
+    const current = await this.runtime.openWorld({ userId, worldId });
+    const assignedCount = activeMemberships(current.worldRecord).filter(row => Boolean(row.clubId)).length;
+    if (assignedCount < 2) {
       return this.runtime.saveManagementDelta({
         userId,
         worldId,
@@ -1118,8 +1121,8 @@ class WorldSessionService {
     if (setupRound.state.roundSetupRequired) {
       throw new DomainRuleError('World round settings require initial setup before slot progress');
     }
-    const activeUserIds = await this.metadata.listActiveUserIdsForWorld(worldId);
-    if (activeUserIds.length > 1 && !progressLeaseId) throw new DomainRuleError('Multiplayer slot progress requires a progress lease');
+    const multiplayer = activeMemberships(setupRound.record).filter(row => Boolean(row.clubId)).length >= 2;
+    if (multiplayer && !progressLeaseId) throw new DomainRuleError('Multiplayer slot progress requires a progress lease');
     let progressState = null;
     if (progressLeaseId) {
       progressState = await this.metadata.getWorldProgression(worldId);
@@ -1188,8 +1191,8 @@ class WorldSessionService {
     const manifest = await this.worlds.getManifest(worldId);
     if (!manifest) throw new DomainRuleError('Active world not found');
     const ensured = await this._ensureRound(worldId, manifest.revision);
-    if (ensured.state.roundSetupRequired) {
-      throw new DomainRuleError('World round settings require initial setup before a club can be assigned');
+    if (ensured.state.status !== ROUND_STATUS_OPEN) {
+      throw new DomainRuleError('Club takeover paused during active round calculation');
     }
     const result = await this.runtime.assignClub({ userId, worldId, clubId, expectedRevision });
     await this._syncParticipationProjection(worldId, result.membership).catch(() => {});

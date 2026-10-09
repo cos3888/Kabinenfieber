@@ -4,10 +4,6 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-function clone(value) {
-  return value == null ? value : JSON.parse(JSON.stringify(value));
-}
-
 class FakeElement {
   constructor() {
     this.innerHTML = '';
@@ -103,7 +99,7 @@ class HeadlessProgressionEngine {
   window.KFServerProgressionEngine = {
     run:function(payload){
       resetState();
-      var record = JSON.parse(JSON.stringify(payload.worldRecord));
+      var record = payload.worldRecord;
       registerWorldRecord(record);
       setWorldRecord(record);
       setSession({
@@ -115,12 +111,12 @@ class HeadlessProgressionEngine {
       });
       kf029RestoreCurrentDetails(record.gameState, payload.matches || [], payload.financeEvents || []);
       var result = advanceCareerRound(record.gameState);
-      return JSON.parse(JSON.stringify({
+      return {
         worldRecord:record,
         matches:kf029CurrentMatches(),
         financeEvents:kf029CurrentFinanceEvents(),
         advanceResult:result
-      }));
+      };
     }
   };
 `;
@@ -141,15 +137,15 @@ class HeadlessProgressionEngine {
     const engine = context.window && context.window.KFServerProgressionEngine;
     if (!engine || typeof engine.run !== 'function') throw new Error('Headless progression engine was not initialized');
     const result = engine.run({
-      worldRecord:clone(payload.worldRecord),
-      matches:clone(payload.matches || []),
-      financeEvents:clone(payload.financeEvents || []),
+      worldRecord:payload.worldRecord,
+      matches:payload.matches || [],
+      financeEvents:payload.financeEvents || [],
       progressionRunId:String(payload.progressionRunId || '')
     });
     if (!result || !result.worldRecord || !result.advanceResult) {
       throw new Error('Headless progression returned an incomplete result');
     }
-    return clone(result);
+    return result;
   }
 }
 
