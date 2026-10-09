@@ -23,6 +23,8 @@ jobs:
         run: npm run test:0320-rhythm
       - name: KF 0.32.0 server progression exactly-once regression
         run: npm run test:0320-server
+      - name: KF 0.32.1 synthetic large world headless memory regression
+        run: node tests/run_kf_0_32_1_large_world_progression_memory_test.js
       - name: KF 0.31.4 save object isolation regression
         run: npm run test:0314
       - name: Current core regression suite
