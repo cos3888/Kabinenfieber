@@ -11,9 +11,12 @@ BRANCH="feature/kf-0.32.0-multiplayer-round-progression"
 VERIFIED_BASE="a68ae9ff71ea8928900549d9fe6b70d93d5912b5"
 TAG="kf0320verify"
 SERVICE_URL="https://kabinenfieber-backend-test-458781449503.us-central1.run.app"
+OLD_BUCKET="kabinenfieber-dev-saves-4821"
+TEST_BUCKET="kabinenfieber-dev-test-saves-458781449503"
+NEW_PREFIX="kf_test"
 
 die() { echo "ABBRUCH: $*" >&2; exit 1; }
-for bin in gcloud git python3 curl; do
+for bin in gcloud git python3 curl node; do
   command -v "$bin" >/dev/null 2>&1 || die "Fehlendes Werkzeug: $bin"
 done
 [[ "$(git branch --show-current)" == "$BRANCH" ]] || die "Falscher Git-Branch"
@@ -30,6 +33,8 @@ for path in Dockerfile src/static-data.js src/db1-db2-data.js src/app.bundle.js;
   [[ -f "$path" ]] || die "Fehlende Paketdatei: $path"
 done
 
+echo "Verifiziere zuerst die separat kopierten Testdaten ..."
+node tools/migrate_kf_0_32_0_test_data.js --verify || die "Noch keine verifizierte Testdatenkopie vorhanden"
 echo "Bereit fuer Testdeployment: $(git rev-parse HEAD)"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
@@ -57,18 +62,21 @@ def env(d):
 te,pe=env(test),env(prod)
 if te.get("KF_OBJECT_STORE","local")!="gcs" or te.get("KF_METADATA_STORE","file")!="firestore":
     raise SystemExit("ABBRUCH: Testdienst verwendet nicht GCS + Firestore")
-if not te.get("KF_GCS_BUCKET"):
-    raise SystemExit("ABBRUCH: Test-GCS-Bucket ist nicht als Umgebungsvariable erkennbar")
-if pe.get("KF_OBJECT_STORE","local")=="gcs" and te["KF_GCS_BUCKET"]==pe.get("KF_GCS_BUCKET"):
-    raise SystemExit("ABBRUCH: Test und Produktivdienst verwenden denselben GCS-Bucket")
-if pe.get("KF_METADATA_STORE","file")=="firestore" and te.get("KF_FIRESTORE_PREFIX","kf_dev")==pe.get("KF_FIRESTORE_PREFIX","kf_dev"):
-    raise SystemExit("ABBRUCH: Test und Produktivdienst verwenden denselben Firestore-Praefix")
+if pe.get("KF_OBJECT_STORE","local")!="gcs" or pe.get("KF_METADATA_STORE","file")!="firestore":
+    raise SystemExit("ABBRUCH: Produktiv-Treiber anders als erwartet")
+if pe.get("KF_GCS_BUCKET")!="kabinenfieber-dev-saves-4821" or pe.get("KF_FIRESTORE_PREFIX")!="kf_dev":
+    raise SystemExit("ABBRUCH: Produktivdatenspeicher nicht mehr der verifizierte Quellstand")
+if te.get("KF_GCS_BUCKET")!=pe.get("KF_GCS_BUCKET") or te.get("KF_FIRESTORE_PREFIX")!=pe.get("KF_FIRESTORE_PREFIX"):
+    raise SystemExit("ABBRUCH: Testdienst hat nicht mehr die erwartete Ausgangskonfiguration")
+if te.get("KF_GCS_BUCKET")=="kabinenfieber-dev-test-saves-458781449503":
+    raise SystemExit("ABBRUCH: Testdienst wurde bereits getrennt")
 t=spec(test)
 containers=t.get("containers") or [{}]
 mem=containers[0].get("resources",{}).get("limits",{}).get("memory")
 if mem not in ("1Gi","1024Mi","1073741824"):
     raise SystemExit("ABBRUCH: Testbackend ist nicht bei 1 GiB RAM (gefunden: %r)" % mem)
-print("Vorpruefung bestanden: Test-/Produktivdaten getrennt, Testbackend 1 GiB.")
+print("Vorpruefung: alte gemeinsame Konfiguration erkannt, neue Datenkopie existiert getrennt.")
+print("Testbackend 1 GiB; NUR eine neue Test-Canary erhaelt die zwei neuen Variablen.")
 traffic=test.get("status",{}).get("traffic",[])
 active=[x.get("revisionName") for x in traffic if x.get("percent")==100 and x.get("revisionName")]
 if len(active)!=1:
@@ -76,9 +84,28 @@ if len(active)!=1:
 print("Alte aktive Testrevision:",active[0])
 PY
 
-echo "Baue neue TESTREVISION ohne regulären Trafficwechsel ..."
+# Only the TEST bucket gets a new access binding; no production service or source IAM is changed.
+test_sa="$(python3 - "$tmpdir/test-before.json" <<'PY'
+import json,sys
+s=json.load(open(sys.argv[1],encoding="utf-8"))
+print(s.get("spec",{}).get("template",{}).get("spec",{}).get("serviceAccountName",""))
+PY
+)"
+if [[ -z "$test_sa" ]]; then
+  project_number="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
+  [[ "$project_number" =~ ^[0-9]+$ ]] || die "Default-Dienstkonto nicht bestimmbar"
+  test_sa="${project_number}-compute@developer.gserviceaccount.com"
+fi
+[[ "$test_sa" == *@*.gserviceaccount.com ]] || die "Ungueltige Cloud-Run-Dienstkonto-Adresse"
+echo "Gebe bestehendem Testdienstkonto Zugriff nur auf den NEUEN TEST-Bucket ..."
+gcloud storage buckets add-iam-policy-binding "gs://$TEST_BUCKET" \
+  --member="serviceAccount:$test_sa" --role="roles/storage.objectAdmin" \
+  --project="$PROJECT" --quiet >/dev/null
+
+echo "Baue neue KF_0.32.0-TESTREVISION mit ISOLIERTEN Umgebungswerten ohne regulären Trafficwechsel ..."
 gcloud run deploy "$TEST_SERVICE" \
   --project="$PROJECT" --region="$REGION" --source=. \
+  --update-env-vars="KF_GCS_BUCKET=$TEST_BUCKET,KF_FIRESTORE_PREFIX=$NEW_PREFIX" \
   --memory=1Gi --tag="$TAG" --no-traffic --quiet
 
 gcloud run services describe "$TEST_SERVICE" --project="$PROJECT" --region="$REGION" --format=json > "$tmpdir/test-staged.json"
@@ -91,8 +118,11 @@ def template(d):
 def env(d):
     containers=template(d).get("containers") or []
     return {e.get("name"): (e.get("value"),e.get("valueFrom"),e.get("valueSource")) for e in (containers[0].get("env",[]) if containers else [])}
-if env(before)!=env(after):
-    raise SystemExit("ABBRUCH: Umgebungsvariablen haben sich beim Deployment veraendert")
+expected=env(before).copy()
+expected["KF_GCS_BUCKET"]=("kabinenfieber-dev-test-saves-458781449503",None,None)
+expected["KF_FIRESTORE_PREFIX"]=("kf_test",None,None)
+if expected!=env(after):
+    raise SystemExit("ABBRUCH: Mehr als die zwei freigegebenen Test-Umgebungsvariablen veraendert")
 if template(before).get("serviceAccountName") != template(after).get("serviceAccountName"):
     raise SystemExit("ABBRUCH: Dienstkonto wurde veraendert")
 matches=[x.get("url") for x in after.get("status",{}).get("traffic",[]) if x.get("tag")==tag and x.get("url")]
@@ -132,4 +162,7 @@ if data.get("version")!="0.32.0" or data.get("ok") is not True:
     raise SystemExit("ACHTUNG: Traffic umgeschaltet, aber Live-API nicht gesund")
 print("TESTBACKEND erfolgreich aktualisiert: Version",data["version"],"API",data["apiVersion"])
 PY
-echo "Produktivdienst nicht veraendert. Jetzt praktische Altwelt-/Solo-/Countdown-Tests durchfuehren."
+echo "Produktivdienst, Produktiv-Cloud-Storage und Produktiv-Firestore wurden nicht veraendert."
+echo "ACHTUNG: Nicht auf die ALTE Testrevision zurueckrollen: sie verweist noch auf Produktivspeicher!"
+echo "Browser: neu anmelden (alte Sessions wurden bewusst nicht uebernommen)."
+echo "Jetzt praktische Altwelt-/Solo-/Countdown-Tests durchfuehren."
