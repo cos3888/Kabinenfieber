@@ -542,6 +542,10 @@ class WorldSessionService {
     };
     record.memberships.order.push(trainerId);
     const manifest = await this.worlds.getManifest(worldId);
+    const round = await this.metadata.getWorldProgression(worldId);
+    if (round && round.status !== ROUND_STATUS_OPEN) {
+      throw new DomainRuleError('Joining is temporarily unavailable during a running calendar progression');
+    }
     await this.metadata.addParticipationIndex({ worldId, userId, joinedAt });
     try {
       const next = await this.worlds.commitWorldRecord({ worldRecord:record, expectedRevision:manifest.revision });
@@ -593,6 +597,10 @@ class WorldSessionService {
     };
     record.memberships.order.push(trainerId);
     const manifest=await this.worlds.getManifest(worldId);
+    const round=await this.metadata.getWorldProgression(worldId);
+    if(round&&round.status!==ROUND_STATUS_OPEN){
+      throw new DomainRuleError('Joining is temporarily unavailable during a running calendar progression');
+    }
     await this.metadata.addParticipationIndex({ worldId, userId:applicantUserId, joinedAt });
     try {
       const next=await this.worlds.commitWorldRecord({ worldRecord:record, expectedRevision:manifest.revision });
@@ -607,6 +615,10 @@ class WorldSessionService {
   }
 
   async leaveWorld({ userId, worldId, transferAdminToUserId = null }) {
+    const round = await this.metadata.getWorldProgression(worldId);
+    if (round && round.status !== ROUND_STATUS_OPEN) {
+      throw new DomainRuleError('Leaving is temporarily unavailable during a running calendar progression');
+    }
     const record = await this.worlds.loadWorldRecord(worldId);
     ensureWorldMembershipRoles(record);
     const membership = membershipForUser(record, userId);
