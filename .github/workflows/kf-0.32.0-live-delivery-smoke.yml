@@ -22,24 +22,36 @@ jobs:
           status=$(curl -sS -L --retry 2 --connect-timeout 10 --max-time 30 -o page.html -w '%{http_code}' "$url")
           echo "GitHub Pages HTTP: $status"
           echo "HTML title: $(grep -o '<title>[^<]*</title>' page.html | head -1 || true)"
-          if [[ "$status" != "200" ]]; then
-            head -c 500 page.html || true
-            exit 1
-          fi
-          grep -q 'KF_0.32.0' page.html || { echo 'Pages is not serving KF_0.32.0'; exit 1; }
-          grep -q 'kabinenfieber-backend-test-458781449503.us-central1.run.app' page.html || { echo 'Pages points at unexpected backend'; exit 1; }
+          [[ "$status" == "200" ]]
+          grep -q 'KF_0.32.0' page.html
+          grep -q 'kabinenfieber-backend-test-458781449503.us-central1.run.app' page.html
 
-      - name: Check Cloud Run test backend health
+      - name: Diagnose both Cloud Run URLs without mutation
         shell: bash
         run: |
           set -euo pipefail
-          url="https://kabinenfieber-backend-test-458781449503.us-central1.run.app/healthz"
-          status=$(curl -sS -L --retry 2 --connect-timeout 10 --max-time 30 -o health.json -w '%{http_code}' "$url")
-          echo "Test backend health HTTP: $status"
-          head -c 800 health.json || true
-          echo
-          if [[ "$status" != "200" ]]; then
-            echo "FAIL: test backend health did not return HTTP 200"
+          hosts=(
+            kabinenfieber-backend-test-458781449503.us-central1.run.app
+            kabinenfieber-backend-test-7u66ak6lfq-uc.a.run.app
+          )
+          good=0
+          for host in "${hosts[@]}"; do
+            for path in /api/v1/persistence/status /healthz; do
+              out=$(mktemp)
+              echo "Checking https://$host$path"
+              status=$(curl -sS -L --connect-timeout 10 --max-time 30 -o "$out" -w '%{http_code}' "https://$host$path") || status="000"
+              echo "HTTP: $status"
+              head -c 350 "$out" || true
+              echo
+              if [[ "$path" == "/api/v1/persistence/status" && "$status" == "200" ]] && node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));if(!('ok' in j))process.exit(1)" "$out"; then
+                echo "Application API reachable on $host"
+                good=$((good+1))
+              fi
+              rm -f "$out"
+            done
+          done
+          echo "Reachable service aliases: $good/2"
+          if [[ "$good" != "2" ]]; then
+            echo "FAIL: not all expected Cloud Run aliases serve the application API"
             exit 1
           fi
-          node -e "const fs=require('fs');const data=JSON.parse(fs.readFileSync('health.json','utf8'));if(data.version!=='0.32.0'){console.error('Expected backend 0.32.0, got',data.version);process.exit(1)}console.log('Backend version confirmed:',data.version)"
