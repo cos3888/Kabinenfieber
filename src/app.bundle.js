@@ -63,8 +63,8 @@
 
   var StaticData = window.KFStaticData || { clubs: [], coachTypes: {}, formations: [] };
 
-  var KF_VERSION = '0.32.0';
-  var KF_BUILD_LABEL = 'KF_0.32.0 - Multiplayer Round Progression';
+  var KF_VERSION = '0.32.1';
+  var KF_BUILD_LABEL = 'KF_0.32.1 - Solo Multiplayer Coordination and Stability';
   var KF0252_SIM_TICK_BUDGET_MS = 12;
   var KF0252_PROGRESS_PAINT_INTERVAL_MS = 120;
   StaticData.scoutingRules = StaticData.scoutingRules || { maxActiveOrdersWithoutStaff:1, absoluteOrderLimit:5, fixedDurationOptions:[4,8,12,24], fixedDurationMin:4, fixedDurationMax:52, fixedDurationStep:4 };
@@ -17978,9 +17978,10 @@ function renderOfficeView(){
         (officeSaveState === 'confirmed' ? 'Gespeichert' : '')));
   var officeSaveStatusHtml = '';
   var officeRoundSetupRequired=!!(officeRoundState&&officeRoundState.roundSetupRequired);
+  var officeSoloMode=!!(officeRoundState&&!officeRoundState.coordinationEnabled);
   var officeFixedSchedule=!!(officeRoundState&&officeRoundState.timeModel==='FIXED_SCHEDULE');
   var officeRoundStatusHtml='';
-  if(officeRoundState){
+  if(officeRoundState && !officeSoloMode){
     if(officeRoundSetupRequired){
       officeRoundStatusHtml='<div class="office-save-status is-pending" role="status"><strong>Spielrhythmus noch nicht festgelegt</strong><br>'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>';
     }else if(officeFixedSchedule){
@@ -17992,7 +17993,7 @@ function renderOfficeView(){
       officeRoundStatusHtml='<div class="office-save-status is-pending" role="status">'+escapeHtml(kf031ProgressMessage(officeRoundState))+'</div>';
     }
   }
-  var officeQuickSimHintHtml = (KF029Remote && KF029Remote.user && !officeRoundSetupRequired && !officeFixedSchedule && officeAdvanceStartsMatch && !officeRoundReadOnly)
+  var officeQuickSimHintHtml = (KF029Remote && KF029Remote.user && !officeSoloMode && !officeRoundSetupRequired && !officeFixedSchedule && officeAdvanceStartsMatch && !officeRoundReadOnly)
     ? '<div class="office-save-status" role="note">Schnellberechnung: Der Co-Trainer übernimmt dein gesamtes Spiel. Ein späterer Live-Einstieg ist für dieses Match nicht möglich.</div>'
     : '';
   if (officeSaveState === 'failed') {
@@ -18012,7 +18013,7 @@ function renderOfficeView(){
   }else if(requiredMail){
     officeRoundControlHtml='<button class="primary-btn office-advance-btn is-mail-required" type="button" data-action="office-advance"><span class="office-advance-label">Mail</span></button>';
   }else if(!officeFixedSchedule){
-    officeRoundControlHtml='<button class="primary-btn office-advance-btn'+(officeAdvanceStartsMatch?' is-start-match':'')+officeSaveButtonClass+'" type="button" data-action="office-advance"'+officeSaveButtonAttrs+'><span class="office-advance-label">'+(officeRoundReadOnly?((officeRoundState&&officeRoundState.status==='OPEN')?'Runde abgeschlossen ✓':'Runde läuft'):'Runde abschließen')+'</span>'+(officeSavePhaseLabel?'<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>':'')+'</button>';
+    officeRoundControlHtml='<button class="primary-btn office-advance-btn'+(officeAdvanceStartsMatch?' is-start-match':'')+officeSaveButtonClass+'" type="button" data-action="office-advance"'+officeSaveButtonAttrs+'><span class="office-advance-label">'+(officeRoundReadOnly?((officeRoundState&&officeRoundState.status==='OPEN')?'Runde abgeschlossen ✓':'Runde läuft'):(officeSoloMode?'Weiter':'Runde abschließen'))+'</span>'+(officeSavePhaseLabel?'<span class="office-save-phase-label">'+escapeHtml(officeSavePhaseLabel)+'</span>':'')+'</button>';
   }
   var officeShowTableTab = officeHasStandingsTabForContext(officeNextCtxForTabs);
   var officeActiveInfoTab = AppState.ui.officeInfoTab || 'next-match';
@@ -25225,6 +25226,7 @@ function kf032ProcessingIsMatchSlot(state){
 }
 function kf031ProgressMessage(state){
   if (!state) return '';
+  if (!state.coordinationEnabled && state.status==='OPEN') return '';
   if(state.roundSetupRequired){
     return kf032IsWorldAdmin()
       ? 'Spielrhythmus muss zuerst festgelegt werden.'
@@ -25258,6 +25260,7 @@ function kf032RoundReadOnlyForMe(){
   if (!state) return false;
   if (state.roundSetupRequired) return true;
   if (state.status && state.status!=='OPEN') return true;
+  if (!state.coordinationEnabled) return false;
   return kf032CurrentUserReady(state);
 }
 
@@ -25483,7 +25486,11 @@ function kf032OpenWorldDetailsModal(){
 function kf032OpenRoundSettingsModal(forceSetup){
   var record=AppState.worldRecord||{};
   var state=(KF029Remote||{}).progression||{};
-  var setupRequired=!!(forceSetup||state.roundSetupRequired||!kf032RoundSettingsConfigured(record.runtimeSettings));
+  var setupRequired=!!(forceSetup||state.roundSetupRequired||state.roundSetupPending);
+  if(!setupRequired && !state.coordinationEnabled){
+    openModal({title:'Spielrhythmus',bodyHtml:'<div class="kf-round-settings-shell"><div class="notice">Du spielst derzeit allein und kannst jeden Kalenderslot direkt mit Weiter starten. Erst wenn mindestens zwei menschliche Trainer einen Verein haben, gilt die Mehrspielerkoordination.</div>'+kf032RoundSettingsCard('Gespeicherte Mehrspieler-Einstellung',record.runtimeSettings||{})+'</div>'});
+    renderModal();return;
+  }
   var admin=kf032IsWorldAdmin();
   if(setupRequired){
     var exitSetupButton='<button class="ghost-btn" type="button" data-action="kf-exit-world-discard">Zur Weltliste</button>';

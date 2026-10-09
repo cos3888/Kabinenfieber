@@ -42,4 +42,4 @@ jobs:
             sleep 1
           done
           [[ "$ready" == "1" ]] || { echo "Backend did not start"; exit 1; }
-          node -e "const s=require('./status.json');if(s.version!=='0.32.0'||s.apiVersion!=='0.30.0'||s.objectStore!=='local'||s.metadataStore!=='file'){console.error(s);process.exit(1)}console.log('Backend image API verified:',s.version,s.apiVersion)"
+          node -e "const s=require('./status.json');if(s.version!=='0.32.1'||s.apiVersion!=='0.30.0'||s.objectStore!=='local'||s.metadataStore!=='file'){console.error(s);process.exit(1)}console.log('Backend image API verified:',s.version,s.apiVersion)"
