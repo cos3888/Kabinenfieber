@@ -278,7 +278,7 @@ async function createHarness(root){
       opened.roundState.lastRoundSettingsDecision.status==='APPLIED',
       {runtimeSettings:opened.worldRecord.runtimeSettings,roundState:opened.roundState});
     check('Three coordinated transitions plus one solo advance produced four authoritative progression effects',
-      counter.calls===3,
+      counter.calls===4,
       {engineCalls:counter.calls});
 
     const metadataWorld=await metadata.getWorld(worldId);
