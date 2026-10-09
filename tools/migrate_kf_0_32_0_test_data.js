@@ -269,6 +269,9 @@ async function main() {
   const sourceFiles=await inspectFiles(storage.bucket(SOURCE_BUCKET));
   assertTargetClean(destExists,targetDocs);
   validateWorldReferences(sourceFiles,sourceDocs);
+  console.log('Pruefe Quell-Manifeste und alle referenzierten Weltdateien ...');
+  const checkedWorlds=await validateManifests(storage.bucket(SOURCE_BUCKET),sourceFiles,sourceDocs);
+  console.log(`  Manifeste geprueft: ${checkedWorlds} aktive Welten`);
   const objectCount=sourceFiles.size;
   const activeWorlds=[...sourceDocs.get('worlds').values()].filter(x=>x.data.status==='ACTIVE').length;
   const bytes=sum([...sourceFiles.values()].map(x=>x.size));
