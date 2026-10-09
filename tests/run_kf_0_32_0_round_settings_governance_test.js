@@ -277,7 +277,7 @@ async function createHarness(root){
       opened.roundState.lastRoundSettingsDecision&&
       opened.roundState.lastRoundSettingsDecision.status==='APPLIED',
       {runtimeSettings:opened.worldRecord.runtimeSettings,roundState:opened.roundState});
-    check('Three slot transitions produced exactly three authoritative progression effects',
+    check('Three coordinated transitions plus one solo advance produced four authoritative progression effects',
       counter.calls===3,
       {engineCalls:counter.calls});
 

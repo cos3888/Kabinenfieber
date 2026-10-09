@@ -23,7 +23,7 @@ jobs:
           echo "GitHub Pages HTTP: $status"
           echo "HTML title: $(grep -o '<title>[^<]*</title>' page.html | head -1 || true)"
           [[ "$status" == "200" ]]
-          grep -q 'KF_0.32.0' page.html
+          grep -q 'KF_0.32.1' page.html
           grep -q 'kabinenfieber-backend-test-458781449503.us-central1.run.app' page.html
 
       - name: Diagnose both Cloud Run URLs without mutation
