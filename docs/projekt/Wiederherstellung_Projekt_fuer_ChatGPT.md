@@ -1,3 +1,16 @@
+## KF_0.32.1 – Ergänzende Verifikation und Sicherheitsgrenzen (09.10.2026)
+
+- Zusätzliche Status-/Speicherdiagnostik: `world-session-service.js` protokolliert pro serverseitiger Progression die Phasen `before-effective-record`, `after-effective-record`, `after-world-commit` mit Laufzeit, Heap und RSS. Damit lässt sich eine echte große Testwelt auf Cloud Run beurteilen, sobald der Testbackend-Rollout erfolgt ist.
+- Firestore- und lokale Rundenmetadaten erkennen abgelaufene `FINALIZING`-Leases, begrenzen wiederholte Versuche und belassen nach mehrfachen Fehlschlägen den Status `FAILED`. Die UI informiert über gesicherte, aber nicht fertig berechnete Runden.
+- Weltbeitritt (direkt und Antrag) und Weltenaustritt werden während laufender/gesperrter Runden zurückgewiesen, statt gleichzeitig die Mitgliedschaften eines laufenden Spieltags umzuschreiben. Unter einem zweiten beigetretenen, aber noch nicht zugewiesenen Trainer kann der Weltadmin die Ersteinrichtung frühzeitig vornehmen oder zunächst schließen; die Solo-Fortsetzung bleibt bis zur zweiten Vereinszuordnung möglich.
+- Die GitHub-Pages-Testadresse im HTML wurde auf den nachweislich antwortenden kanonischen Cloud-Run-Testalias `https://kabinenfieber-backend-test-7u66ak6lfq-uc.a.run.app` gestellt. Der andere Hostalias war im Delivery-Smoke teils HTTP 503; die Workflow-Diagnostik protokolliert ihn, macht ihn aber nicht mehr zur Freigabevoraussetzung für den kanonischen Alias.
+- Zusätzliches synthetisches Lastszenario: `tests/run_kf_0_32_1_large_world_progression_memory_test.js` (12.000 Spieler, 32 MiB Archivpayload, V8-Heaplimit 640 MiB). Der zugehörige GitHub-Actions-Testschritt wurde erfolgreich beendet. Dies beweist **nicht** die reale 1-GiB-Stabilität aller migrierten GCS-Spielstände; praktische Laufzeit- und Speichermessungen gegen autorisierte Testwelten bleiben Pflicht.
+- Am jüngsten beobachteten CI-Lauf waren Rundenscope-, Browser-, Rhythmus-, Server-exactly-once-, synthetischer Speicher- und KF_0.31.4-Regressionsschritt erfolgreich; die vollständige `test:current`-Suite lief noch. Backend-Image-Smoke und Pages-Deployment waren bei vorangegangenen Commits erfolgreich; das Testbackend wurde in dieser Bearbeitung **nicht** aktualisiert.
+- Bis zu realem 1-GiB-Test, allen grünen CI-Schritten und kontrolliertem Test-Cloud-Run-Rollout: PR #11 Draft halten, nicht nach main mergen, Produktivdaten unverändert lassen und keine Datenmigration wiederholen.
+
+
+---
+
 # KF_0.32.1 – Spielbarkeit und automatische Solo-/Mehrspielerkoordination (Entwicklungsstand, 09.10.2026)
 
 **Status:** Code in `feature/kf-0.32.0-multiplayer-round-progression`; PR #11 bleibt Draft. **Nicht produktiv freigegeben.** Testbackend auf 1 GiB bleibt bei dem zuvor geprüften Stand 0.32.0, bis neue Tests und ein gesicherter Test-Rollout möglich sind. Der Browser kann über GitHub Pages bereits einen neueren Branchstand anzeigen; dies garantiert keine Übereinstimmung mit der Test-API.
