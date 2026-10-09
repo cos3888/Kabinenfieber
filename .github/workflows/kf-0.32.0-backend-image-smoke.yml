@@ -19,6 +19,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check guarded Cloud Shell deploy syntax
         run: bash -n tools/deploy_kf_0_32_0_test_backend.sh
+      - name: Validate isolated data migration safeguards (without Cloud access)
+        run: |
+          node --check tools/migrate_kf_0_32_0_test_data.js
+          node tools/migrate_kf_0_32_0_test_data.js --self-test
       - name: Build exact Cloud Run Docker image
         run: docker build --tag kf0320-backend-smoke .
       - name: Ensure image contains executable headless simulation sources
