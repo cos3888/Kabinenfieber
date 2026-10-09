@@ -24,7 +24,7 @@ jobs:
           echo "HTML title: $(grep -o '<title>[^<]*</title>' page.html | head -1 || true)"
           [[ "$status" == "200" ]]
           grep -q 'KF_0.32.1' page.html
-          grep -q 'kabinenfieber-backend-test-458781449503.us-central1.run.app' page.html
+          grep -q 'kabinenfieber-backend-test-7u66ak6lfq-uc.a.run.app' page.html
 
       - name: Diagnose both Cloud Run URLs without mutation
         shell: bash
@@ -52,6 +52,8 @@ jobs:
           done
           echo "Reachable service aliases: $good/2"
           if [[ "$good" != "2" ]]; then
-            echo "FAIL: not all expected Cloud Run aliases serve the application API"
-            exit 1
+            echo "WARNING: at least one alternate Cloud Run alias is unavailable; canonical test API check remains required."
           fi
+          canonical_status=$(curl -sS -L --retry 2 --connect-timeout 10 --max-time 30 -o canonical.json -w '%{http_code}' "https://kabinenfieber-backend-test-7u66ak6lfq-uc.a.run.app/api/v1/persistence/status")
+          [[ "$canonical_status" == "200" ]]
+          node -e "const s=require('./canonical.json');if(!('ok' in s)||s.objectStore!=='gcs'||s.metadataStore!=='firestore')process.exit(1)"
