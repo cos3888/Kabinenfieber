@@ -1024,7 +1024,10 @@ class WorldSessionService {
         snapshotRecord = this._applyManagementOverlays(worldRecord, rows);
       }
       const result = await this.runtime.saveSnapshot({
-        userId, worldId, worldRecord:snapshotRecord, expectedRevision, matches, financeEvents, allowMultiplayerProgress
+        userId, worldId, worldRecord:snapshotRecord, expectedRevision, matches, financeEvents, allowMultiplayerProgress,
+        progressionRunId:progressState && progressState.progressionRunId,
+        roundGeneration:progressState && progressState.roundGeneration,
+        progressionLeaseId:progressLeaseId
       });
       worldCommitted = true;
       await this._syncLobbyProjection(snapshotRecord).catch(() => {});
@@ -1163,7 +1166,10 @@ class WorldSessionService {
       }
       const result = await this.runtime.saveSlot({
         userId, worldId, worldRecord:progressWorldRecord, worldDelta:progressWorldDelta,
-        expectedRevision, season, slotKey, matches, financeEvents
+        expectedRevision, season, slotKey, matches, financeEvents,
+        progressionRunId:progressState && progressState.progressionRunId,
+        roundGeneration:progressState && progressState.roundGeneration,
+        progressionLeaseId:progressLeaseId
       });
       worldCommitted = true;
       if (progressLeaseId) {
