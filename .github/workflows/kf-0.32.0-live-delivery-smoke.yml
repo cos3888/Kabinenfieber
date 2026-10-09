@@ -1,0 +1,45 @@
+name: KF 0.32.0 Live Delivery Smoke
+
+on:
+  push:
+    branches:
+      - feature/kf-0.32.0-multiplayer-round-progression
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  delivery-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check GitHub Pages test root
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://cos3888.github.io/Kabinenfieber/"
+          status=$(curl -sS -L --retry 2 --connect-timeout 10 --max-time 30 -o page.html -w '%{http_code}' "$url")
+          echo "GitHub Pages HTTP: $status"
+          echo "HTML title: $(grep -o '<title>[^<]*</title>' page.html | head -1 || true)"
+          if [[ "$status" != "200" ]]; then
+            head -c 500 page.html || true
+            exit 1
+          fi
+          grep -q 'KF_0.32.0' page.html || { echo 'Pages is not serving KF_0.32.0'; exit 1; }
+          grep -q 'kabinenfieber-backend-test-458781449503.us-central1.run.app' page.html || { echo 'Pages points at unexpected backend'; exit 1; }
+
+      - name: Check Cloud Run test backend health
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://kabinenfieber-backend-test-458781449503.us-central1.run.app/healthz"
+          status=$(curl -sS -L --retry 2 --connect-timeout 10 --max-time 30 -o health.json -w '%{http_code}' "$url")
+          echo "Test backend health HTTP: $status"
+          head -c 800 health.json || true
+          echo
+          if [[ "$status" != "200" ]]; then
+            echo "FAIL: test backend health did not return HTTP 200"
+            exit 1
+          fi
+          node -e "const fs=require('fs');const data=JSON.parse(fs.readFileSync('health.json','utf8'));if(data.version!=='0.32.0'){console.error('Expected backend 0.32.0, got',data.version);process.exit(1)}console.log('Backend version confirmed:',data.version)"
