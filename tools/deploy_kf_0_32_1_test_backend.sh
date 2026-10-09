@@ -25,9 +25,35 @@ grep -q "const SERVICE_VERSION = '0.32.1';" server/index.js || die "Falsche Back
 [[ -f src/app.bundle.js && -f Dockerfile ]] || die "Unvollstaendiger Simulations-Dockerkontext"
 ! grep -qx 'src' .dockerignore || die "src fehlt im Docker-Image"
 
-# Only read the existing isolated copy; never run --execute.
-node tools/migrate_kf_0_32_0_test_data.js --verify ||
-  die "Isolierte Testdatenkopie ist nicht verifiziert"
+# The initial migration snapshot is not immutable after ordinary test saves.
+# Verify the original marker and isolated storage exist, without comparing the
+# current active test world against the stale source-copy digest.
+# This code is READ ONLY and never invokes --execute or the source bucket.
+node <<'NODE'
+'use strict';
+const {Firestore}=require('@google-cloud/firestore');
+const {Storage}=require('@google-cloud/storage');
+(async()=>{
+  const projectId='kabinenfieber-dev';
+  const testBucket='kabinenfieber-dev-test-saves-458781449503';
+  const db=new Firestore({projectId});
+  const storage=new Storage({projectId});
+  const marker=await db.collection('kf_test_system').doc('kf0320-copy-from-kf-dev').get();
+  const m=marker.exists ? marker.data() : null;
+  if(!m||m.ready!==true||
+      m.sourceBucket!=='kabinenfieber-dev-saves-4821'||
+      m.destinationBucket!==testBucket||
+      m.sourcePrefix!=='kf_dev'||m.destinationPrefix!=='kf_test'||
+      m.authSessionsTransferred!==false){
+    throw new Error('Isolierte Testkopie besitzt keinen verifizierten Migrationsmarker');
+  }
+  const [exists]=await storage.bucket(testBucket).exists();
+  if(!exists)throw new Error('Isolierter Testbucket fehlt');
+  const worldDocs=await db.collection('kf_test_worlds').limit(1).get();
+  if(worldDocs.empty)throw new Error('Testnamespace enthaelt keine Spielwelten');
+  console.log('Testdaten-Isolation anhand Marker, Bucket und kf_test-Welten bestaetigt.');
+})().catch(error=>{console.error('ABBRUCH:',error.message);process.exitCode=1;});
+NODE
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
