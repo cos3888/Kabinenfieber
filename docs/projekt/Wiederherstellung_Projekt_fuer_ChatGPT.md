@@ -1516,3 +1516,14 @@ Offene Tuerkei-3-IDs:
 - `tur3_sc_erzincan_yayla`
 
 Drive-Dateinamen sind niemals Runtime-Wahrheit. Die Zuordnung erfolgt nur beim Import; danach ist `clubId`/`crestAsset` kanonisch. Masterdateien bleiben in Drive, Runtime-PNGs sind maximal 512×512. Das World-Schema bleibt 0.27.2, da diese Version nur Assets ergaenzt.
+
+
+## Übergabe: Pages-Root-Testlauncher KF_0.32.0 (2026-10-09)
+
+- main-Spielcode, package.json und Servercode bleiben KF_0.31.4. PR #11 bleibt Draft/unmerged. Produktivbackend nicht anfassen; Testbackend 1 GiB.
+- Am 9. Oktober 2026 wurde ausschließlich main/index.html (Loader-Commit `515dd004d329fa0d9f6efda3641bacaeea1c9147`) geändert. Browser-URL: `https://cos3888.github.io/Kabinenfieber/`.
+- Alle vier Assets werden konsistent auf dem gepinnten Commit `a68ae9ff71ea8928900549d9fe6b70d93d5912b5` geladen: `src/styles/app.css`, `src/static-data.js`, `src/db1-db2-data.js`, `src/app.bundle.js`. CDN: `cdn.jsdelivr.net/gh/cos3888/Kabinenfieber@<SHA>/...`.
+- Testbanner: `KF_0.32.0 · TESTBUILD · TESTBACKEND · a68ae9ff`; `KF_BACKEND_BASE_URL` zeigt ausschließlich auf `kabinenfieber-backend-test-458781449503.us-central1.run.app`.
+- Keine aktive Spielrhythmus-Datenwahrheit im Loader; hierfür bleibt `WorldRecord.runtimeSettings` autoritativ. Keine zusätzliche Runtime-Codebasis.
+- Wichtig: Der letzte zuvor gefundene Pages-Build (29.09.2026) verwendete main und Repository-Root. Neue Pages-Auslieferung und aktives Testbackend müssen noch unabhängig am Live-Endpunkt geprüft werden. GitHub-Dateistand allein beweist keinen Pages-Deploy.
+- Nach Auslieferung: /healthz auf Version 0.32.0 prüfen, Endpunkte initialize/proposal/vote, Solospiel, Altwelt-Ersteinrichtung, neue Welt, Countdown, FIXED_SCHEDULE, regressions 0.31.2–0.32.0. „Runde läuft“ erst nach tatsächlicher Versionenangleichung analysieren.
