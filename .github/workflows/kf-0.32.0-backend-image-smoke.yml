@@ -1,0 +1,39 @@
+name: KF 0.32.0 Backend Image Smoke
+
+on:
+  push:
+    branches:
+      - feature/kf-0.32.0-multiplayer-round-progression
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  package-and-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build exact Cloud Run Docker image
+        run: docker build --tag kf0320-backend-smoke .
+      - name: Ensure image contains executable headless simulation sources
+        run: |
+          docker run --rm --entrypoint node kf0320-backend-smoke -e "const {HeadlessProgressionEngine}=require('./server/services/headless-progression-engine');new HeadlessProgressionEngine();console.log('Headless engine sources compiled successfully')"
+      - name: Start image with isolated local persistence and check API contract
+        run: |
+          set -euo pipefail
+          container=$(docker run --rm -d -p 127.0.0.1:18080:8080 -e KF_OBJECT_STORE=local -e KF_METADATA_STORE=file kf0320-backend-smoke)
+          trap 'docker logs "$container" || true; docker stop "$container" >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 3 http://127.0.0.1:18080/api/v1/persistence/status -o status.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          [[ "$ready" == "1" ]] || { echo "Backend did not start"; exit 1; }
+          node -e "const s=require('./status.json');if(s.version!=='0.32.0'||s.apiVersion!=='0.30.0'||s.objectStore!=='local'||s.metadataStore!=='file'){console.error(s);process.exit(1)}console.log('Backend image API verified:',s.version,s.apiVersion)"
