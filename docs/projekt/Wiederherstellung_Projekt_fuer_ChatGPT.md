@@ -1656,3 +1656,21 @@ Offene Tuerkei-3-IDs:
 - `tur3_sc_erzincan_yayla`
 
 Drive-Dateinamen sind niemals Runtime-Wahrheit. Die Zuordnung erfolgt nur beim Import; danach ist `clubId`/`crestAsset` kanonisch. Masterdateien bleiben in Drive, Runtime-PNGs sind maximal 512×512. Das World-Schema bleibt 0.27.2, da diese Version nur Assets ergaenzt.
+
+
+## Uebergabe Testbackend-Rollout KF_0.32.0 (09.10.2026)
+
+Achtung: Oeffentliche GitHub-Pages-Quelle ist jetzt **feature/kf-0.32.0-multiplayer-round-progression / (root)**, nicht mehr der alte 0.31.4-Fixbranch und nicht main. Der gewohnte URL `https://cos3888.github.io/Kabinenfieber/` liefert KF_0.32.0. `main` bleibt KF_0.31.4. Auf main wurde zuvor versuchsweise ein gepinnter Test-Launcher eingecheckt, er ist inzwischen fuer Pages irrelevant und darf nicht als aktuelle Auslieferungswahrheit verwendet werden.
+
+Beide Cloud-Run-URLs `https://kabinenfieber-backend-test-458781449503.us-central1.run.app` und `https://kabinenfieber-backend-test-7u66ak6lfq-uc.a.run.app` sind erreichbar. Am 09.10.2026 lieferte `GET /api/v1/persistence/status` jeweils HTTP 200 mit **version 0.31.4**, `apiVersion 0.30.0`, `verification.status ok`. `/healthz` lieferte vom Google-Proxy 404, darf nicht als einziges Erreichbarkeitskriterium dienen.
+
+Deploy-Verpackung im Feature gefixt: In `.dockerignore` wurde die Zeile `src` entfernt, weil `Dockerfile` `COPY src ./src` ausfuehrt und `HeadlessProgressionEngine` zur Laufzeit die drei `src/*.js`-Dateien benoetigt. Fuer GitHub Actions ist `.github/workflows/kf-0.32.0-backend-image-smoke.yml` hinzugekommen: `docker build`, Headless-Engine-Smoke, lokale API-Version 0.32.0 und Bash-Syntax des Rollout-Skripts. Die bestehende Regression bleibt eigenstaendig.
+
+Kontrollierter manueller Cloud-Run-Deploy: 
+1. Cloud Shell (Projekt `kabinenfieber-dev`), frischen Feature-Branch aus `https://github.com/cos3888/Kabinenfieber.git` auschecken.
+2. `bash tools/deploy_kf_0_32_0_test_backend.sh` aus dem Repo-Root ausfuehren.
+3. Das Skript benutzt ausschliesslich `kabinenfieber-backend-test` in `us-central1`. Es **liest** die Konfiguration von `kabinenfieber-backend` nur fuer eine zwingende Speicherisolationspruefung (GCS-Bucket und Firestore-Praefix muessen unterschiedlich sein). Wenn diese Bedingung nicht bewiesen werden kann, KEIN DEPLOY, erst klaeren.
+4. Canary aus `gcloud run deploy ... --source=. --no-traffic --tag=kf0320verify --memory=1Gi`; danach Canary-URL `/api/v1/persistence/status` auf `version 0.32.0`, `apiVersion 0.30.0` und `verification.status ok` pruefen; Traffic ausschliesslich des Testdiensts mittels `gcloud run services update-traffic ... --to-tags=kf0320verify=100` aktivieren.
+5. Nach aktualisiertem Live-Testbackend Benutzerfluss und alte Welt im Browser ausprobieren. Keine Ergebnisse vorab, keinen stillen Countdown-Default. Keine Produktion deployen, kein PR-Merge.
+
+Zentrale Datenquelle fuer aktiven Spielrhythmus: `WorldRecord.runtimeSettings`; der Deployment-Code fuehrt keinerlei neue aktive Spieldatenwahrheit ein. Dokumentierte CI-Erfolge reichen nicht als Beleg fuer ein tatsaechlich ausgerolltes Cloud-Run-Testbackend.
