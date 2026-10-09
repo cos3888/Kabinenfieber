@@ -1125,3 +1125,10 @@ Validierung KF_0.27.2: Kern-, Migrations-, UI-, Match-, Finance- und Mehrsaisont
 - Runtime-Wappen wurden auf maximal 512×512 Pixel optimiert.
 - Acht Tuerkei-3-Vereine bleiben bewusst beim bestehenden Fallback, weil die acht uebrigen Dateien im Quellordner nicht zu den aktuellen fiktiven Vereinen gehoeren.
 - Keine Gameplay-, Simulations- oder Persistenzlogik wurde veraendert. `kf-core-0.27.2` und `kf-world-record-0.27.2` bleiben deshalb unveraendert.
+
+
+## Testauslieferung KF_0.32.0 (9. Oktober 2026)
+
+Der stabile Spielcode auf main bleibt KF_0.31.4. Nur das Root-index.html auf main ist ein Test-Launcher. Dieser lädt CSS, StaticData, DB-Daten und das Frontend-Bundle gemeinsam aus dem unveränderlichen Feature-Commit `a68ae9ff71ea8928900549d9fe6b70d93d5912b5` über jsDelivr. Es gibt damit keine zweite 0.32-Codebasis auf main. Der öffentliche Testlink bleibt `https://cos3888.github.io/Kabinenfieber/`. Das Banner zeigt KF_0.32.0 / TESTBUILD / TESTBACKEND plus die Kurz-SHA. Backend-Ziel ausschließlich: `https://kabinenfieber-backend-test-458781449503.us-central1.run.app`.
+
+Der Loader-Commit lautet `515dd004d329fa0d9f6efda3641bacaeea1c9147`. Der Pages-Deploymentstand und die aktuell laufende Testbackend-Version sind noch live zu verifizieren. Der PR #11 bleibt Draft und ungemergt, das Produktivbackend unangetastet, und das Testbackend bei 1 GiB. Keine Aussage zur Behebung von „Runde läuft“ vor erfolgreich nachgewiesenem Frontend-/Backend-Gleichstand. Nachfolgetests: Root-Seite und Ressourcen, Healthz 0.32.0, Auth-/Round-Endpunkte, Solospiel, Altwelt, neue Welt, Countdown, fester Zeitplan, Regressionen 0.31.2–0.32.0 und Spielerperspektive.
